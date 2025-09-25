@@ -513,13 +513,14 @@
 \NewDocumentCommand{\cii}{O{} v}{%
   \lstinline[
     language=C++,
+    breaklines,
     basicstyle=\ttfamily\small\color{wineRed},
     keywordstyle=\bfseries\color{blue},
     identifierstyle=\color{wineRed},
     stringstyle=\color{wineRed},
     commentstyle=\color{wineRed},
     #1
-  ]|#2|%
+  ]{#2}%
 }
 
 \newcommand{\cppsign}{$C^{++}$}
