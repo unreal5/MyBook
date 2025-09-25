@@ -3,4 +3,7 @@
 *.out
 *.toc
 *.swp
+*.pdf
+*.gz
+*.synctex.gz
 .DS_Store
