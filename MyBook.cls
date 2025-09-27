@@ -1,7 +1,59 @@
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{MyBook}[2025/09/25， v 0.0.1]
 \newcommand{\BaseBook}{ctexbook}
-\LoadClass[10pt,onecolumn,titlepage,twoside,openany]{\BaseBook}
+% --- 动态传递用户在 \documentclass[...] 中给出的选项到基础类 (ctexbook) ---
+% 目标：用户可在 cmain.tex 中写 \documentclass[12pt,twocolumn,openright]{MyBook}
+% 本类将这些选项透传给 ctexbook；未显式给出的主要互斥类选项使用默认：
+%   字号 10pt / 排版 onecolumn / 页式 titlepage /单双面 twoside / 章节起始 openany
+% 可覆盖：10pt|11pt|12pt, onecolumn|twocolumn, titlepage|notitlepage,
+%         oneside|twoside, openany|openright
+% 其它任意 ctexbook 支持的选项（或字体/编码类）通过通配 * 直接透传。
+
+% 标记用户是否提供了相关类别的选项，用以判定是否需要补默认值
+\newif\ifMyBook@size      \MyBook@sizetrue % 先假设有，后面置 false 再检测更直观
+\newif\ifMyBook@col       \MyBook@coltrue
+\newif\ifMyBook@titlepage \MyBook@titlepagetrue
+\newif\ifMyBook@side      \MyBook@sidetrue
+\newif\ifMyBook@openstyle \MyBook@openstyletrue
+% 初始化为 false（未提供）
+\MyBook@sizefalse
+\MyBook@colfalse
+\MyBook@titlepagefalse
+\MyBook@sidefalse
+\MyBook@openstylefalse
+
+% 字号选项
+\DeclareOption{10pt}{\PassOptionsToClass{10pt}{\BaseBook}\MyBook@sizetrue}
+\DeclareOption{11pt}{\PassOptionsToClass{11pt}{\BaseBook}\MyBook@sizetrue}
+\DeclareOption{12pt}{\PassOptionsToClass{12pt}{\BaseBook}\MyBook@sizetrue}
+% 单/双栏
+\DeclareOption{onecolumn}{\PassOptionsToClass{onecolumn}{\BaseBook}\MyBook@coltrue}
+\DeclareOption{twocolumn}{\PassOptionsToClass{twocolumn}{\BaseBook}\MyBook@coltrue}
+% 标题页
+\DeclareOption{titlepage}{\PassOptionsToClass{titlepage}{\BaseBook}\MyBook@titlepagetrue}
+\DeclareOption{notitlepage}{\PassOptionsToClass{notitlepage}{\BaseBook}\MyBook@titlepagetrue}
+% 单/双面
+\DeclareOption{oneside}{\PassOptionsToClass{oneside}{\BaseBook}\MyBook@sidetrue}
+\DeclareOption{twoside}{\PassOptionsToClass{twoside}{\BaseBook}\MyBook@sidetrue}
+% 章节起始方式
+\DeclareOption{openany}{\PassOptionsToClass{openany}{\BaseBook}\MyBook@openstyletrue}
+\DeclareOption{openright}{\PassOptionsToClass{openright}{\BaseBook}\MyBook@openstyletrue}
+
+% 其它未显式声明的选项直接传给基础类
+\DeclareOption*{\PassOptionsToClass{\CurrentOption}{\BaseBook}}
+
+% 处理本类选项
+\ProcessOptions\relax
+
+% 补齐未指定的默认值（避免与用户冲突：只在该类别未出现时添加）
+\ifMyBook@size\else      \PassOptionsToClass{10pt}{\BaseBook}\fi
+\ifMyBook@col\else       \PassOptionsToClass{onecolumn}{\BaseBook}\fi
+\ifMyBook@titlepage\else \PassOptionsToClass{titlepage}{\BaseBook}\fi
+\ifMyBook@side\else      \PassOptionsToClass{twoside}{\BaseBook}\fi
+\ifMyBook@openstyle\else \PassOptionsToClass{openany}{\BaseBook}\fi
+
+% 现在加载基础类并应用累积的选项
+\LoadClassWithOptions{\BaseBook}
 % 页面设置
 \RequirePackage{geometry}
 \geometry{
@@ -488,6 +540,7 @@
     tabsize=2,
 		numbers=none,
 		%escapeinside=``,
+    escapeinside={(*@}{@*)},
 		frame=none,
 		backgroundcolor=\color{gray!5},
 		captionpos=t,%标题的位置

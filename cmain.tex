@@ -1,18 +1,26 @@
-\documentclass{MyBook}
+\documentclass[9pt,openright,oneside]{MyBook}
 \usepackage{layout}
+\usepackage{annotate-equations}
+
+\tikzset{annotate equations/arrow/.style={color=ForestGreen, >=latex', very thick, dashed}}
+\renewcommand{\eqnannotationfont}{\sffamily\large}
 \begin{document}
 \frontmatter
 
 
 \mainmatter
-\setchapterimage{j20}
+
+ 
+
+\setchapterimage{j-20}
 %\setchapterimage{background}
 \chapter{Boost.Parser by Example}
 
 
 \section{meta指示符}
 \begin{code}
-UPROPERTY(BlueprintReadWrite, VisibleAnywhere, meta=(ExposeOnSpawn = "true"))
+UPROPERTY(BlueprintReadWrite, VisibleAnywhere, (*@\tikzmarknode{n1}{}@*)meta=(ExposeOnSpawn = "true"))
 \end{code}
+\annotate[yshift=3em]{above,left}{n1}{元指示符}
 \cii{ExposeOnSpawn}可以在蓝图中赋值。
 \end{document}
