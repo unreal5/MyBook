@@ -1,26 +1,880 @@
-\documentclass[9pt,openright,oneside]{MyBook}
+\documentclass[10pt,openright,oneside,CJKmath]{MyBook}
 \usepackage{layout}
 \usepackage{annotate-equations}
 
 \tikzset{annotate equations/arrow/.style={color=ForestGreen, >=latex', very thick, dashed}}
 \renewcommand{\eqnannotationfont}{\sffamily\large}
+\usepackage{amsmath, amssymb}
+\usepackage{longtable,booktabs,calc}
 \begin{document}
-\frontmatter
-
 
 \mainmatter
 
- 
-
 \setchapterimage{j-20}
-%\setchapterimage{background}
-\chapter{Boost.Parser by Example}
 
 
-\section{meta指示符}
-\begin{code}
-UPROPERTY(BlueprintReadWrite, VisibleAnywhere, (*@\tikzmarknode{n1}{}@*)meta=(ExposeOnSpawn = "true"))
+\lstdefinestyle{cpp}{
+  language=C++,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  stringstyle=\color{teal},
+  commentstyle=\color{gray},
+  tabsize=4,
+  showstringspaces=false,
+  breaklines=true,
+  frame=single
+}
+\chapter{动画基础}
+\section{UAnimInstance 派生类的并行更新实现思路}
+
+\subsection{核心结论摘要 (TL;DR)}
+\begin{itemize}
+  \item 你无法也不需要手动把 \texttt{NativeUpdateAnimation} 挪到线程池；并行是引擎的“\emph{动画评估} (Evaluation) / 更新 (Update)”阶段自动调度。
+  \item Game Thread 负责：收集角色/移动等状态 $\rightarrow$ 拷贝到 \texttt{FAnimInstanceProxy}。
+  \item Worker 线程负责：运行动画图节点更新 + 姿势计算（使用 Proxy 中的只读数据副本）。
+  \item 关键是：自定义 \texttt{FAnimInstanceProxy}，并保证线程安全的数据传递（值复制，不在工作线程访问 Actor/World）。
+\end{itemize}
+
+\subsection{引擎并行动画流程概览}
+典型一帧相关调用链（简化）：
+
+\ci{SkeletalMeshComponent Tick (GT)} $\rightarrow$ \ci{UAnimInstance::UpdateAnimation (GT)} $\rightarrow$
+\ci{复制状态进 Proxy (GT)} $\rightarrow$ \ci{排任务} $\rightarrow$ \ci{Proxy::Update / Evaluate (Worker)} $\rightarrow$
+\ci{姿势回写 (GT/Render)}
+
+\subsection{触发并行的前提}
+\begin{enumerate}
+  \item 组件层标志（不同版本命名略有差异）：
+  \begin{itemize}
+    \item \ci{USkeletalMeshComponent::bAllowParallelUpdateAnimation = true}
+    \item \ci{USkeletalMeshComponent::bParallelAnimationEvaluation = true}（或旧字段 \ci{bUseParallelEvaluation}）
+  \end{itemize}
+  \item 项目设置里未关闭并行动画（Project Settings $\rightarrow$ Engine $\rightarrow$ Animation）。
+  \item 没有在动画实例里做阻塞/非线程安全操作（例如蓝图里直接做 LineTrace）。
+  \item 足够的动画实例数量或开销，调度器才会分派任务到线程池（单个很轻的实例可能仍在主线程）。
+\end{enumerate}
+
+\subsection{Proxy 的作用}
+\textbf{目的}：隔离 Game Thread（收集来源数据）和 Worker Thread（计算姿势）之间的线程安全数据边界。  
+
+\textbf{特点}：
+\begin{itemize}
+  \item 只保存 POD \footnote{POD = “Plain Old Data”，即没有复杂构造/析构、无虚函数、标准布局、可按字节安全拷贝的老式纯数据类型；在多线程和性能敏感路径用来保证简单、可预测、低成本的数据传递。}/ 线程安全结构（\texttt{float}, \texttt{bool}, \texttt{FVector}, \texttt{FRotator}, 简单数组等）。
+  \item 不持有或访问 \texttt{AActor*}, \texttt{UObject*} 等非线程安全对象（除非只是初始化时一次性缓存且不在 Worker 中解引用——一般仍不推荐）。
+  \item 可重写 \texttt{Update()}（对数据做纯数学运算）、可选 \texttt{Evaluate()}（自定义姿势混合，需要熟悉 Pose Pipeline）。
+\end{itemize}
+
+\subsection{示例：自定义 Proxy}
+\begin{code}[caption={FAuraAnimInstanceProxy}]
+#pragma once
+#include "Animation/AnimInstanceProxy.h"
+
+struct FAuraAnimInstanceProxy : public FAnimInstanceProxy
+{
+    FAuraAnimInstanceProxy(UAnimInstance* Instance)
+        : FAnimInstanceProxy(Instance)
+    {}
+
+    // 线程安全副本
+    float GroundSpeed = 0.f;
+    bool  bShouldMove = false;
+
+    void SetMovementData(float InSpeed, bool bInMove)
+    {
+        GroundSpeed = InSpeed;
+        bShouldMove = bInMove;
+    }
+
+    virtual void Update(float DeltaSeconds) override
+    {
+        // 可在此基于已复制数据做一些派生计算（勿访问世界/Actor）。
+        FAnimInstanceProxy::Update(DeltaSeconds);
+    }
+
+    // 如需自定义姿势求值：
+    // virtual void Evaluate(FPoseContext& Output) override { ... }
+};
 \end{code}
-\annotate[yshift=3em]{above,left}{n1}{元指示符}
-\cii{ExposeOnSpawn}可以在蓝图中赋值。
+
+\subsection{修改 UAnimInstance 派生类}
+在你的 \texttt{UAnimInstBase}（见现有的 \texttt{AnimInstBase.h}）添加 Proxy 支持：
+
+\subsection*{头文件补充}
+\begin{code}[caption={AnimInstBase.h 关键补充}]
+#include "AuraAnimInstanceProxy.h"
+
+UCLASS()
+class AURA_API UAnimInstBase : public UAnimInstance
+{
+    GENERATED_BODY()
+public:
+    virtual void NativeInitializeAnimation() override;
+    virtual void NativeUpdateAnimation(float DeltaSeconds) override;
+
+protected:
+    // ...existing code...
+    // 创建与销毁 Proxy
+    virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override
+    {
+        return new FAuraAnimInstanceProxy(this);
+    }
+    virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy) override
+    {
+        delete InProxy;
+    }
+
+    FAuraAnimInstanceProxy& GetAuraProxy()
+    {
+        return *static_cast<FAuraAnimInstanceProxy*>(GetProxyOnGameThread());
+    }
+};
+\end{code}
+
+\subsection*{CPP 实现示例}
+\begin{code}[caption={AnimInstBase.cpp 示例}]
+void UAnimInstBase::NativeInitializeAnimation()
+{
+    Super::NativeInitializeAnimation();
+    AuraCharacter = Cast<AAuraCharacterBase>(TryGetPawnOwner());
+    if (AuraCharacter)
+    {
+        CharacterMovement = AuraCharacter->GetCharacterMovement();
+    }
+}
+
+void UAnimInstBase::NativeUpdateAnimation(float DeltaSeconds)
+{
+    Super::NativeUpdateAnimation(DeltaSeconds);
+
+    if (!AuraCharacter)
+        AuraCharacter = Cast<AAuraCharacterBase>(TryGetPawnOwner());
+    if (!CharacterMovement && AuraCharacter)
+        CharacterMovement = AuraCharacter->GetCharacterMovement();
+    if (!CharacterMovement)
+        return;
+
+    GroundSpeed = CharacterMovement->Velocity.Size2D();
+    bShouldMove = GroundSpeed > 2.f &&
+                  !CharacterMovement->GetCurrentAcceleration().IsNearlyZero();
+
+    // 线程安全复制
+    GetAuraProxy().SetMovementData(GroundSpeed, bShouldMove);
+}
+\end{code}
+
+\subsection{线程安全守则}
+\begin{itemize}
+  \item \textbf{允许（放 Proxy）}：数值缓存、状态标志、已解算出的 Blend 权重、数学预计算结果。
+  \item \textbf{禁止（Worker 中做）}：访问 \texttt{GetWorld()}, 执行 Trace、修改 Gameplay Ability、广播动态多播委托、访问非线程安全容器。
+  \item \textbf{不要} 在 Proxy 中 \cii{new/delete UObject} 或修改全局单例。
+\end{itemize}
+
+\subsection{可覆盖的并行策略函数（可选）}
+\begin{itemize}
+  \item \texttt{bool UAnimInstance::ShouldUseParallelUpdateAnimation() const}：强制允许/禁止并行 Update。
+  \item \texttt{bool USkeletalMeshComponent::CanUseParallelEvaluation() const}：组件层逻辑判定。
+\end{itemize}
+
+\subsection{验证并行是否生效}
+\begin{enumerate}
+  \item 运行 \texttt{stat anim}，观察 “Parallel Evaluation” 任务。
+  \item 用 \texttt{stat taskgraph} 检查是否出现动画任务分派。
+  \item 多放几个角色实例，确保有足够工作量促使并行。
+  \item 在 Proxy::Update 加轻量日志（注意：过多日志会反向影响并行）。
+\end{enumerate}
+
+\subsection{常见问题与排查}
+\begin{tabular}{p{4.2cm} p{10cm}}
+\textbf{现象} & \textbf{可能原因/解决} \\
+未见并行任务 & 规模太小；未启用组件标志；引擎判定内联执行 \\
+Worker 崩溃 & 在 Proxy::Update/Evaluate 访问了 Actor/World/ASC \\
+姿势不同步 & 数据未在同一帧复制（Game Thread 修改但没 Set 到 Proxy） \\
+性能无提升 & 动画复杂度低；线程调度开销抵消收益 \\
+\end{tabular}
+
+\subsection{与 GameplayAbility 协同注意}
+\begin{itemize}
+  \item 能力触发（GAS）仍在 Game Thread：不要在 Proxy 里直接调用 ASC。
+  \item 如果动画蓝图需要显示 GA 状态：在 Game Thread 读取 ASC Tag/Attribute $\rightarrow$ 映射成简单 bool/float $\rightarrow$ 复制进 Proxy。
+  \item 避免在蓝图动画节点图内部直接访问大量 GAS 数据（会放大锁与同步成本）。
+\end{itemize}
+
+\subsection{优化建议（根据需求择用）}
+\begin{enumerate}
+  \item 将复杂的“基于速度状态机决策”留在图节点；仅把最原始原始输入（速度、是否欲移动）复制给 Proxy。
+  \item 大量（百+）角色时：确保动画蓝图中没有每帧动态创建对象或高分支复杂蓝图逻辑。
+  \item 如需自定义 Evaluate：谨慎操作 Pose（拷贝/Blend）避免额外内存分配。
+\end{enumerate}
+
+\subsection{最小工作清单 (Checklist)}
+\begin{enumerate}
+  \item 创建 \texttt{FAuraAnimInstanceProxy}。
+  \item 在 \texttt{UAnimInstBase} 覆盖 \texttt{CreateAnimInstanceProxy / DestroyAnimInstanceProxy}。
+  \item 在 \texttt{NativeUpdateAnimation} 读取 Movement $\rightarrow$ 同步到 Proxy。
+  \item 启用组件并行动画相关标志。
+  \item 使用 \texttt{stat anim} 验证。
+\end{enumerate}
+
+\subsection{可扩展方向}
+\begin{itemize}
+  \item \textbf{预测性运算}：在 \cii{Proxy::Update} 中做曲线或 Blend 参数预计算，减少 Game Thread 蓝图节点开销。
+  \item \textbf{分层数据}：对多种姿势条件（Combat/Idle/Cast）压缩为 bit mask 再放 Proxy。
+  \item \textbf{共享数据缓存}：对全局静态（只读）表格/曲线放到线程安全共享结构（例如 \texttt{TSharedPtr<const FData>}），Worker 线程只读访问。
+\end{itemize}
+
+\subsection{总结语句便于记忆}
+\[
+{“GT 收集  \rightarrow Proxy 拷贝  \rightarrow Worker 评估  \rightarrow GT 提交”}
+\]
+\[
+{核心：数据下沉为值；避免跨线程指针访问；让引擎自己并行。}
+\]
+\section{问题重述}
+已经实现了自定义 \cii{AnimInstanceProxy}，希望把在 Proxy 中维护或计算的数据提供给动画蓝图（Anim Blueprint）的图节点（状态机、过渡条件、Blend 等）使用。应如何设计数据流？
+
+\subsection{核心结论}
+\begin{itemize}
+  \item 动画蓝图直接读取的是 \textbf{AnimInstance（UAnimInstance 派生类）上的 UPROPERTY 变量}，而不是 Proxy 的内部成员。
+  \item 典型的数据方向是：Game Thread 在 \cii{NativeUpdateAnimation()} 更新实例变量；引擎把这些简单值复制到并行任务使用的结构中。
+  \item 如果某个值只在 Proxy 的并行阶段（\cii{Proxy::Update / Evaluate}）里计算，则只能在 \textbf{本帧结束后（回到 Game Thread）} 再拷回 AnimInstance，供下一帧蓝图使用（存在一帧延迟）。
+\end{itemize}
+
+\subsection{数据流类型区分}
+\subsubsection{单向（最常见）}
+Game Thread：
+\[
+\text{NativeUpdateAnimation()} \Rightarrow \text{更新 AnimInstance UPROPERTY}
+\]
+Worker 线程：
+\[
+\text{并行评估读取“冻结”快照（引擎内部复制）}
+\]
+无需从 Proxy 回拷。
+
+\subsubsection{双向（较少，需要回拷）}
+Worker 线程里计算出的派生值（昂贵或需多线程）：
+\[
+\text{Proxy::Update/Evaluate} \Longrightarrow \text{(存放 Proxy 成员)}
+\]
+帧末 Game Thread：
+\[
+\text{PostUpdateAnimation()} \Longrightarrow \text{拷贝到 AnimInstance 变量}
+\]
+下帧蓝图使用。
+
+\subsection{为何不是实时回写}
+并行评估任务在 Worker 线程运行时，Anim Graph 的本帧求值已经在进行中；不能在同一帧插入“回写后再重新评估”。因此 Proxy 结果只影响下一帧。
+
+\subsection{推荐模式}
+\begin{enumerate}
+  \item \textbf{能在 \ci{NativeUpdateAnimation} 计算的就不要放 Proxy}: 比如速度、是否移动、是否在空中。
+  \item \textbf{Proxy 只保存多线程只读副本或昂贵派生值}。
+  \item \textbf{需要蓝图使用的派生值}: 在 \cii{PostUpdateAnimation()} 回拷（或合适的后置钩子）。
+\end{enumerate}
+
+\subsection{示例：Proxy 内计算 \(\rightarrow\) 下一帧蓝图读取}
+\subsubsection*{Proxy 定义}
+\begin{lstlisting}[style=cpp]
+struct FAuraAnimInstanceProxy : public FAnimInstanceProxy
+{
+    FAuraAnimInstanceProxy(UAnimInstance* InInstance)
+        : FAnimInstanceProxy(InInstance) {}
+
+    float GroundSpeed = 0.f;
+    bool  bShouldMove = false;
+
+    float ComputedLeanAngle = 0.f; // 派生值示例
+
+    void SetMovementData(float InSpeed, bool bInShouldMove)
+    {
+        GroundSpeed = InSpeed;
+        bShouldMove = bInShouldMove;
+    }
+
+    virtual void Update(float DeltaSeconds) override
+    {
+        FAnimInstanceProxy::Update(DeltaSeconds);
+        // 纯数学运算（线程安全）
+        ComputedLeanAngle = /* 例如基于速度/方向的倾斜角 */;
+    }
+
+    float GetComputedLeanAngle() const { return ComputedLeanAngle; }
+};
+\end{lstlisting}
+
+\subsubsection*{AnimInstance 中声明可供蓝图读取的变量}
+\begin{lstlisting}[style=cpp]
+UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Anim|Runtime")
+float LeanAngle = 0.f;
+\end{lstlisting}
+
+\subsubsection*{Game Thread 更新基础数据并写入 Proxy}
+\begin{lstlisting}[style=cpp]
+void UAnimInstBase::NativeUpdateAnimation(float DeltaSeconds)
+{
+    Super::NativeUpdateAnimation(DeltaSeconds);
+    // 收集移动组件信息 ...
+    GroundSpeed = CharacterMovement->Velocity.Size2D();
+    bShouldMove = GroundSpeed > 2.f &&
+                  !CharacterMovement->GetCurrentAcceleration().IsNearlyZero();
+
+    // 写入 Proxy 副本（线程安全数据）
+    GetAuraProxy().SetMovementData(GroundSpeed, bShouldMove);
+}
+\end{lstlisting}
+
+\subsubsection*{帧末回拷派生值}
+\begin{lstlisting}[style=cpp]
+void UAnimInstBase::PostUpdateAnimation()
+{
+    Super::PostUpdateAnimation();
+    const FAuraAnimInstanceProxy& P =
+        static_cast<const FAuraAnimInstanceProxy&>(GetProxyOnGameThread());
+    LeanAngle = P.GetComputedLeanAngle(); // 下一帧 Anim Graph 可用
+}
+\end{lstlisting}
+
+\subsection{可选：蓝图函数直接访问 Proxy（一般不推荐用于状态机）}
+\begin{lstlisting}[style=cpp]
+UFUNCTION(BlueprintCallable, Category="Anim|Proxy")
+float GetProxyLeanAngle() const
+{
+    const FAuraAnimInstanceProxy& P =
+        static_cast<const FAuraAnimInstanceProxy&>(GetProxyOnGameThread());
+    return P.GetComputedLeanAngle();
+}
+\end{lstlisting}
+注意：不要在并行评估路径（图节点内部）依赖这种函数；只适用于事件图（Event Graph）或通知回调中临时获取。
+
+\subsection{数据流时序图}
+\[
+\begin{array}{lcl}
+\text{Frame N (GT)} &: & \text{NativeUpdateAnimation() 写入 UPROPERTY 与 Proxy} \\
+\text{Parallel (Workers)} &: & \text{Proxy::Update/Evaluate 使用副本并计算派生值} \\
+\text{Frame N End (GT)} &: & \text{PostUpdateAnimation() 回拷派生值} \\
+\text{Frame N+1 (GT)} &: & \text{Anim Graph/状态机读取 LeanAngle 等新值}
+\end{array}
+\]
+
+\subsection{常见坑与对策}
+\begin{tabular}{p{4cm} p{9.5cm}}
+\textbf{现象} & \textbf{原因 / 解决} \\
+蓝图读到旧值 & Proxy 结果未回拷或一帧延迟本就预期；检查 PostUpdateAnimation 是否执行 \\
+崩溃访问 Actor & 在 Proxy::Update 中访问了 Actor/UObject；改为 GT 收集 + 值复制 \\
+本帧想立即生效却失败 & 并行任务本帧后段才完成；只能接受一帧延迟或挪回 NativeUpdateAnimation \\
+值来回跳 & 在多个位置（GT 与 Proxy）重复写同一状态；统一写入源头 + 单向复制 \\
+\end{tabular}
+
+\subsection{何时无需回拷}
+\begin{itemize}
+  \item 仅在 Proxy 内部临时使用的过渡辅助量。
+  \item 计算成本低，直接放 \cii{NativeUpdateAnimation} 更简单。
+\end{itemize}
+
+\subsection{设计准则}
+\[
+\text{“蓝图需要实时”} \Rightarrow \text{GT 计算} \quad|\quad
+\text{“可下一帧使用且昂贵”} \Rightarrow \text{Proxy 计算 + 帧末回拷}
+\]
+
+\subsection{调试建议}
+\begin{enumerate}
+  \item 打开 \cii{stat anim} 确认并行是否生效。
+  \item 在调试阶段对回拷数据加断言或范围检查（例如 \(-90^\circ \le LeanAngle \le 90^\circ\)）。
+  \item 避免在回拷函数中做复杂逻辑（保持只做赋值）。
+\end{enumerate}
+
+\subsection{极简模版汇总}
+\begin{lstlisting}[style=cpp]
+// 1. Proxy 里计算
+ComputedLeanAngle = ...;
+
+// 2. PostUpdateAnimation 回拷
+LeanAngle = Proxy.GetComputedLeanAngle();
+
+// 3. 动画蓝图状态机用 LeanAngle
+\end{lstlisting}
+
+\subsection{一行总结}
+\[
+\boxed{\text{AnimBlueprint 只读 AnimInstance 变量；Proxy 结果若需蓝图使用，帧末回拷再生效。}}
+\]
+
+\section{问题概述}
+已经使用自定义 \cii{FAnimInstanceProxy::Update + PostUpdate} 方式实现并行更新并成功测试。问题：与直接重写 \cii{UAnimInstance::NativeThreadSafeUpdateAnimation()} 相比，有哪些本质区别与利弊？
+
+\subsection{一帧执行时间线 (简化)}
+\begin{enumerate}[label=\arabic*.]
+  \item Game Thread:
+    \begin{itemize}
+      \item \cii{NativeUpdateAnimation()}（非线程安全区，访问 Actor/World OK）
+      \item 构建并行任务（收集 AnimInstance/Proxy）
+    \end{itemize}
+  \item Any Thread (Worker):
+    \begin{itemize}
+      \item （可选）\cii{NativeThreadSafeUpdateAnimation()}（若你重写）
+      \item \cii{FAnimInstanceProxy::Update()}
+      \item \cii{FAnimInstanceProxy::Evaluate()}
+    \end{itemize}
+  \item 回到 Game Thread:
+    \begin{itemize}
+      \item \cii{FAnimInstanceProxy::PostUpdate()}（你的回传点）
+      \item 将姿势/曲线提交到组件 / 渲染
+    \end{itemize}
+\end{enumerate}
+
+\subsection{设计理念差异}
+\begin{center}
+\begin{tabular}{p{4cm} p{5.2cm} p{5.2cm}}
+\hline
+维度 & \texttt{NativeThreadSafeUpdateAnimation} & Proxy (\texttt{Update + PostUpdate}) \\
+\hline
+接口归属 & AnimInstance 本体 & 独立轻量 Proxy 容器 \\
+数据边界 & 直接操作实例成员（需自律） & 线程阶段只触碰已复制的 POD 数据 \\
+线程安全策略 & 依赖开发者避免访问 UObject & 结构化隔离，降低误用 \\
+并行演进方向 & UE5 中逐步弱化 & 官方推荐主线模式 \\
+本帧可见性 & 可直接改实例变量（危险） & 下一帧才可见（通过 PostUpdate 回写） \\
+误用风险 & 高：易访问 ASC/World & 低：Proxy 不含 Actor 指针（或弱引用只读） \\
+维护成本 & 大项目易混杂逻辑 & 数据流更清晰（GT 收集 → 并行计算 → 回写） \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{线程安全与数据回写}
+\subsection*{ThreadSafe 方式}
+\begin{itemize}
+  \item 同一对象（AnimInstance）在 Worker 线程被直接修改。
+  \item 任何不慎访问或写入非线程安全成员（如指向 Actor 成员）都可能产生竞态。
+\end{itemize}
+
+\subsection*{Proxy 方式}
+\begin{itemize}
+  \item 并行阶段对 Proxy 内部的值运算，避免共享可变状态。
+  \item \cii{PostUpdate} 回到 Game Thread 再写回实例变量，清晰一帧延迟。
+\end{itemize}
+
+\subsection{本帧生效 vs. 下一帧生效}
+\begin{itemize}
+  \item 如果 “必须本帧” 被状态机或 AnimGraph 使用：\textbf{应在 \texttt{NativeUpdateAnimation} 完成计算}。
+  \item 如果可以接受一帧延迟（如平滑滤波结果、倾斜角、呼吸幅度等）：\textbf{Proxy 并行计算 + PostUpdate 回写}。
+\end{itemize}
+
+\subsection{何时使用各自方式}
+\subsection*{适合 \ci{NativeUpdateAnimation}}
+\begin{itemize}
+  \item 访问 Actor/Component/World/GAS Tag。
+  \item 本帧动画过渡条件要立刻用的字段。
+\end{itemize}
+
+\subsection*{适合 Proxy::Update}
+\begin{itemize}
+  \item 纯数学、向量插值、噪声、曲线采样。
+  \item 与 Gameplay 无直接耦合的派生动画数据。
+\end{itemize}
+
+\subsection{性能视角}
+\begin{itemize}
+  \item 两者基础调用成本近似。
+  \item Proxy 法借由结构化隔离降低未来 “误共享 + 缓存抖动” 风险。
+  \item 大量角色（群演/AI）场景下 Proxy 法更容易统一调优与检测。
+\end{itemize}
+
+\subsection{Root Motion / Montage 交互}
+\begin{itemize}
+  \item Root Motion/Montage 核心仍由图节点与内部系统处理。
+  \item 不建议在 \cii{NativeThreadSafeUpdateAnimation} 里直接 Play/Stop Montage（潜在竞态）。
+  \item 使用 Proxy 法时，这类控制留在 Game Thread（\cii{NativeUpdateAnimation} 或其他安全钩子）更自然。
+\end{itemize}
+
+\subsection{典型分层模式（推荐）}
+\begin{marker}
+\ci{GT: NativeUpdateAnimation} (采集原始状态) $\rightarrow$
+\ci{AnyThread: Proxy::Update} (派生计算) $\rightarrow $
+\ci{GT: Proxy::PostUpdate} (回写) $\rightarrow$
+\ci{下帧 AnimGraph 使用}
+\end{marker}
+\subsection{坑点对照}
+\begin{center}
+\begin{tabular}{p{4cm} p{4.5cm} p{5.5cm}}
+\hline
+问题 & ThreadSafeUpdate & Proxy 模式 \\
+\hline
+误访问 World/ASC & 常见 & 自然规避（无直接指针） \\
+数据竞争调试困难 & 是 & 较少 \\
+升级维护负担 & 较高 & 低 \\
+同帧可见性需求 & 支持（但危险） & 不支持（设计如此） \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{选择策略总结}
+\begin{itemize}
+  \item “实时 + 依赖世界” → GT 计算。
+  \item “昂贵 + 可延迟一帧” → Proxy。
+  \item “临时遗留代码” → 可保留 ThreadSafeUpdate 但加醒目标注（AnyThread 只做纯数据）。
+  \item “团队协作/长线项目” → 统一 Proxy 流程，降低隐性障碍。
+\end{itemize}
+
+\subsection{迁移/共存建议}
+\begin{enumerate}
+  \item 把 ThreadSafeUpdate 中访问 Actor/Component 的逻辑上移到 \cii{NativeUpdateAnimation}。
+  \item 只留下必须多线程的纯数学部分，逐步转入 Proxy。
+  \item 为 AnimInstance 顶部添加注释：说明并行策略与禁止事项。
+\end{enumerate}
+
+\subsection{一行总结}
+\[
+\boxed{\text{Proxy 模式 = 明确的数据边界 + 安全并行；ThreadSafeUpdate = 旧接口，灵活但易踩坑。}}
+\]
+
+\subsection{附注（何时仍可保留 ThreadSafeUpdate）}
+\begin{itemize}
+  \item 重构成本过高的旧项目。
+  \item 快速实验验证并行路径调度。
+  \item 临时性能剖析原位插桩（之后迁回 Proxy）。
+\end{itemize}
+
+
+\section{问题重述}
+\textbf{问题：} 在 Unreal Engine 5 官方示例项目 Lyra 中，动画蓝图（Anim Blueprint）使用蓝图事件的方式重写（实现） \cii{ThreadSafeUpdateAnimation}，并在其中执行“线程安全动画更新”逻辑。为什么不直接采用 C++ 自定义 \cii{FAnimInstanceProxy}（如你当前项目的做法）？这是否是因为蓝图层“无法”实现 C++ 代理的功能，还是另有更深层的设计与权衡？
+
+\subsection{简明结论（TL;DR）}
+\begin{itemize}
+  \item 不是因为 C++ Proxy 更差，而是\textbf{蓝图无法自行声明和替换 Proxy 类型}；要用 Proxy 必须写 C++。
+  \item Lyra 的核心目标是：\textbf{教学友好 + 快速调参 + 降低上手门槛}。
+  \item 蓝图 \cii{ThreadSafeUpdateAnimation} 事件被用作“受限的 AnyThread 数学运算钩子”，仅进行纯数据插值/平滑，不访问非线程安全对象。
+  \item 你的做法（C++ Proxy + PostUpdate 回写）是更工程化、更安全、更适合扩展的长期方案。
+\end{itemize}
+
+\subsection{两种路径的结构差异}
+\subsubsection{执行序（简化时间线）}
+\cii{Game Thread: NativeUpdateAnimation};$\Rightarrow$; \emph{(并行任务构建)} 
+;$\Rightarrow$; \cii{AnyThread: ThreadSafeUpdate / Proxy::Update / Proxy::Evaluate}
+;$\Rightarrow$; \cii{Game Thread: Proxy::PostUpdate}
+
+\subsubsection{核心定位对比表}
+\begin{center}
+\begin{tabular}{p{3.2cm} | p{5.2cm} | p{5.5cm}}
+\toprule
+维度 & 蓝图 ThreadSafeUpdate & C++ Proxy (\texttt{Update + PostUpdate}) \\
+\midrule
+创建/接入门槛 & 纯蓝图即可 & 必须 C++ 代码派生 \\
+线程安全保障方式 & 依赖团队自律（不要访问 Actor/World） & 结构隔离（只复制 POD） \\
+实例变量写入时机 & 可“本帧”直接改（潜在风险） & 通常在 PostUpdate 回写（下一帧生效） \\
+调参/热更效率 & 极高 & 需编译 \\
+误用风险 & 高：易误用非线程安全节点 & 低：无 Actor 直接引用 \\
+教学可视化 & 直观（蓝图事件） & 隐藏于 C++ 底层 \\
+适合规模 & 小～中 & 中～大（可长期维护） \\
+后期性能聚合 & 分散，难集中优化 & 集中（Proxy 统一入口） \\
+行为显式性 & 逻辑混在 AnimInstance 内 & 数据流阶段明确 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Lyra 的具体考量}
+\subsubsection{1. 教学/示例属性}
+Lyra 面向“想要学习官方结构”的广泛人群：
+\begin{itemize}
+  \item 展示并行动画的“概念”，不强迫初学者立刻理解 Proxy 内存边界。
+  \item 通过蓝图事件名字直接传达“这是线程安全更新区”。
+\end{itemize}
+
+\subsubsection{2. 蓝图层能力边界}
+\begin{itemize}
+  \item 蓝图无法自定义 \cii{FAnimInstanceProxy} 类型，也不能替换引擎内部对 AnimInstance 的 Proxy 绑定。
+  \item 若要接入 Proxy 必须 C++：\cii{CreateAnimInstanceProxy / DestroyAnimInstanceProxy}。
+  \item 因此，为了让动画师也能“参与”并行阶段处理，只好开放 ThreadSafe 蓝图事件。
+\end{itemize}
+
+\subsubsection{3. 快速迭代优先}
+\begin{itemize}
+  \item 调整插值系数、偏移、速度平滑参数——蓝图热重载更高效。
+  \item 示例项目侧重体验与学习，不强求严苛工程归一。
+\end{itemize}
+
+\subsubsection{4. 受控的“最小安全区”策略}
+Lyra 在蓝图 ThreadSafeUpdate 中“自我约束”：
+\begin{itemize}
+  \item 只处理上一帧/GT 缓存的纯值（速度、方向、加速度、姿态偏差）。
+  \item 禁止访问：\cii{GetWorld()}, Actor Components, AbilitySystem, Montage Play。
+  \item 即便有本帧生效的变量写入，也限制其对 Gameplay 状态的副作用。
+\end{itemize}
+
+\subsection{为什么不是直接全部 Proxy 化？}
+\begin{enumerate}[leftmargin=1.4em]
+  \item \textbf{教学曲线：} Proxy 对初学者不直观。
+  \item \textbf{动画师工作流：} 他们需要立即调参，不依赖程序改 C++。
+  \item \textbf{示例定位：} 不要求覆盖所有工业级最佳实践。
+  \item \textbf{复杂度控制：} 折中降低项目初期理解门槛。
+\end{enumerate}
+
+\subsection{Proxy 模式的工程增益}
+\begin{itemize}
+  \item \textbf{数据边界清晰：} GT（收集）/ AnyThread（纯运算）/ GT（回写）阶段确定。
+  \item \textbf{防止竞态：} 不会意外在并行中修改 Actor/ASC。
+  \item \textbf{集中优化：} 批量角色可统一做 SIMD/Cache 友好策略。
+  \item \textbf{代码审查友好：} 线程敏感区域语义性更强。
+\end{itemize}
+
+\subsection{何时需要从 Lyra 式 ThreadSafeUpdate 迁移到 Proxy}
+\begin{itemize}
+  \item 多个 AnimBP 需要共享复杂派生逻辑（如 LeanAngle、AimOffset、Procedural 数学）。
+  \item 角色数量激增（>50）并出现性能瓶颈。
+  \item 偶发线程崩溃、数据撕裂、未定义行为。
+  \item 需要引入自动性能分析与可预测优化点。
+\end{itemize}
+
+\subsection{折中混合建议}
+\begin{enumerate}[leftmargin=1.4em]
+  \item 使用 Proxy 处理“昂贵 + 可延迟一帧”的数据：运动平滑、姿态偏差、方向加速度积分。
+  \item 蓝图只保留“最终微调”乘法系数或 UI 可视控制参数。
+  \item 增加一个调试开关变量（如 \cii{bEnableBlueprintThreadSafeTweaks}）便于 A/B 性能对比。
+  \item 为蓝图 ThreadSafeUpdate 加注释（Warning Banner）列出允许操作白名单。
+\end{enumerate}
+
+\subsection{常见误解澄清}
+\begin{itemize}
+  \item \textbf{误解：} “Lyra 用蓝图，说明这是官方推荐最终模式。”  
+  \textbf{更正：} Lyra 是教学示例，不等于大型生产最佳实践。
+  \item \textbf{误解：} “蓝图事件假并行，其实仍在 GT。”  
+  \textbf{更正：} 该事件确实在 AnyThread 调用，只是需要你自己保持逻辑纯净。
+  \item \textbf{误解：} “Proxy 必然比 ThreadSafeUpdate 快很多。”  
+  \textbf{更正：} 简单逻辑差异甚微；优势体现在可扩展、可审查与防误用。
+\end{itemize}
+
+\subsection{选型决策速查表}
+\begin{center}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{p{3.4cm}| p{7.6cm}| p{2.2cm}}
+\toprule
+场景 & 推荐手段 & 备注 \\
+\midrule
+教学/试验 & 蓝图 ThreadSafeUpdate & 快速 \\\hline
+中/大型长线 & C++ Proxy & 工程化 \\\hline
+本帧状态机必需 & \ci{NativeUpdateAnimation} (GT) & 立即可见 \\\hline
+昂贵派生+可延迟 & Proxy::Update + PostUpdate & 安全 \\\hline
+动画师调参 & 蓝图普通事件（GT） & 避免并行写 \\\hline
+大规模性能调优 & 集中在 Proxy & 易聚合 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{内部 Wiki 可复用摘要}
+\begin{quote}
+Lyra 使用蓝图 ThreadSafeUpdate 是教学与快速调参折中；蓝图不能直接实现自定义 Proxy，因此官方示例给出一个受控并行数学入口。工业化生产建议使用：GT 收集输入 → Proxy 并行纯数据计算 → PostUpdate 回写；蓝图只做少量微调，避免在 AnyThread 访问 World/Actor/ASC。
+\end{quote}
+
+\subsection{一行强化记忆}
+\[
+\boxed{\text{Lyra 蓝图 ThreadSafeUpdate = 教学/调参折中；Proxy = 工程化长线方案。}}
+\]
+
+\subsection{如需下一步}
+可继续请求：
+\begin{itemize}
+  \item “将 ThreadSafeUpdate 逻辑迁到 Proxy” 最小示例
+  \item 通用 Lean/Aim 计算 Proxy 模板
+  \item 并行性能基准测试脚本建议
+\end{itemize}
+
+%/////
+\section{蓝图ThreadSafeUpdate并行逻辑迁移到动画代理的示例}
+把原本放在 \textbf{蓝图} \texttt{ThreadSafeUpdate}（或 \cppsign~\texttt{NativeThreadSafeUpdateAnimation}）里的并行计算逻辑，迁移到自定义 \texttt{FAnimInstanceProxy::Update}（AnyThread）中；Game Thread 只做\emph{指针/原始数据采集}；结果在 \texttt{Proxy::PostUpdate} 回填到 AnimInstance 的 Blueprint 可读变量。这样避免在并行线程直接访问 Actor / World / Component，保持线程安全。
+
+\subsection{设计最小职责拆分}
+\begin{enumerate}
+  \item \textbf{GameThread（NativeUpdateAnimation）}：采集并缓存角色移动组件指针。
+  \item \textbf{AnyThread（Proxy::Update）}：读取已缓存指针的轻量字段（如 \texttt{Velocity}），计算 \texttt{GroundSpeed} 与逻辑标志 \texttt{bShouldMove}。
+  \item \textbf{GameThread（Proxy::PostUpdate）}：把计算结果回写到 AnimInstance \cii{UPROPERTY}，供蓝图 \cii{PropertyAccess} 读取。
+  \item \textbf{Blueprint}：无需再实现 ThreadSafeUpdate，直接读 \texttt{GroundSpeed} / \texttt{bShouldMove}。
+\end{enumerate}
+
+\subsection{关键注意点}
+\begin{itemize}
+  \item 必须覆写 \texttt{CreateAnimInstanceProxy} / \texttt{DestroyAnimInstanceProxy}，否则不会使用自定义 Proxy。
+  \item Proxy 内部仅放 POD / 简单类型；指针用 \texttt{TWeakObjectPtr} 或仅在 Game Thread 赋值。
+  \item \textbf{AnyThread 禁止} 访问：Actor 方法、ASC、World、动态创建 UObject、写 AnimInstance 成员。
+  \item 结果数据通过 \cii{PostUpdate} 安全回填。
+\end{itemize}
+
+\subsection{头文件最小实现 (\texttt{AnimInstBase.h})}
+\begin{code}[caption={AnimInstBase.h}]
+#pragma once
+#include "Animation/AnimInstance.h"
+#include "AnimInstBase.generated.h"
+
+class UCharacterMovementComponent;
+class AAuraCharacterBase;
+
+/**
+ * 最小 AnimInstance：只演示 Proxy 迁移 GroundSpeed / bShouldMove
+ */
+UCLASS()
+class UAnimInstBase : public UAnimInstance
+{
+    GENERATED_BODY()
+public:
+    UAnimInstBase();
+
+    virtual void NativeInitializeAnimation() override;
+    virtual void NativeUpdateAnimation(float DeltaSeconds) override;
+
+    // 获取自定义 Proxy（仅 GameThread 调用）
+    class FAuraAnimInstanceProxy& GetAuraProxy();
+
+    // Blueprint 可直接 PropertyAccess 的数据（PostUpdate 回填）
+    UPROPERTY(BlueprintReadOnly, Category="Movement")
+    float GroundSpeed = 0.f;
+
+    UPROPERTY(BlueprintReadOnly, Category="Movement")
+    bool bShouldMove = false;
+
+protected:
+    UPROPERTY(Transient)
+    AAuraCharacterBase* AuraCharacter = nullptr;
+
+    UPROPERTY(Transient)
+    UCharacterMovementComponent* CharacterMovement = nullptr;
+
+    // 建立 / 销毁自定义 Proxy
+    virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
+    virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy) override;
+};
+
+/**
+ * 自定义 Proxy：
+ *  - AnyThread Update 中进行逻辑计算
+ *  - PostUpdate 把缓存结果写回 AnimInstance
+ */
+class FAuraAnimInstanceProxy : public FAnimInstanceProxy
+{
+public:
+    FAuraAnimInstanceProxy(UAnimInstance* InInstance)
+        : FAnimInstanceProxy(InInstance) {}
+
+    // GameThread 推送可供并行读取的指针
+    void SetMovementComponent(const UCharacterMovementComponent* InMove)
+    {
+        CharacterMovementComp = InMove;
+    }
+
+    // AnyThread 逻辑
+    virtual void Update(float DeltaSeconds) override;
+
+    // GameThread 回填
+    virtual void PostUpdate(UAnimInstance* InAnimInstance) const override;
+
+private:
+    TWeakObjectPtr<const UCharacterMovementComponent> CharacterMovementComp;
+
+    // 并行安全缓存
+    float CachedGroundSpeed = 0.f;
+    bool  bCachedShouldMove = false;
+};
+\end{code}
+
+\subsection{实现文件最小实现 (\texttt{AnimInstBase.cpp})}
+\begin{code}[caption={AnimInstBase.cpp}]
+#include "Animation/AnimInstBase.h"
+#include "Character/AuraCharacterBase.h"
+#include "GameFramework/CharacterMovementComponent.h"
+
+// ---------------- Proxy ----------------
+
+void FAuraAnimInstanceProxy::Update(float DeltaSeconds)
+{
+    FAnimInstanceProxy::Update(DeltaSeconds);
+
+    // 只进行轻量级读操作
+    if (const UCharacterMovementComponent* Move = CharacterMovementComp.Get())
+    {
+        CachedGroundSpeed = Move->Velocity.Size2D();
+        bCachedShouldMove = !FMath::IsNearlyZero(CachedGroundSpeed);
+    }
+    else
+    {
+        CachedGroundSpeed = 0.f;
+        bCachedShouldMove = false;
+    }
+}
+
+void FAuraAnimInstanceProxy::PostUpdate(UAnimInstance* InAnimInstance) const
+{
+    FAnimInstanceProxy::PostUpdate(InAnimInstance);
+    if (auto* AuraAnim = Cast<UAnimInstBase>(InAnimInstance))
+    {
+        AuraAnim->GroundSpeed = CachedGroundSpeed;
+        AuraAnim->bShouldMove = bCachedShouldMove;
+    }
+}
+
+// --------------- AnimInstance ---------------
+
+UAnimInstBase::UAnimInstBase() {}
+
+void UAnimInstBase::NativeInitializeAnimation()
+{
+    AuraCharacter = Cast<AAuraCharacterBase>(GetOwningActor());
+    if (AuraCharacter)
+    {
+        CharacterMovement = AuraCharacter->GetCharacterMovement();
+    }
+}
+
+void UAnimInstBase::NativeUpdateAnimation(float DeltaSeconds)
+{
+    if (CharacterMovement)
+    {
+        // GameThread 仅推送组件指针，不做重计算
+        GetAuraProxy().SetMovementComponent(CharacterMovement);
+    }
+}
+
+FAuraAnimInstanceProxy& UAnimInstBase::GetAuraProxy()
+{
+    return *static_cast<FAuraAnimInstanceProxy*>(
+        GetProxyOnGameThread<FAnimInstanceProxy>()
+    );
+}
+
+FAnimInstanceProxy* UAnimInstBase::CreateAnimInstanceProxy()
+{
+    return new FAuraAnimInstanceProxy(this);
+}
+
+void UAnimInstBase::DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy)
+{
+    delete InProxy;
+}
+\end{code}
+
+\subsection{迁移对照步骤}
+\begin{enumerate}
+  \item 原 \texttt{ThreadSafeUpdate} 中的速度采集与移动判定：挪到 \texttt{FAuraAnimInstanceProxy::Update}。
+  \item 删除或不再使用旧 Blueprint ThreadSafeUpdate 节点（避免重复写变量）。
+  \item 保留 \texttt{NativeUpdateAnimation}，只负责推送 MovementComponent 指针。
+  \item Blueprint 直接读取 \texttt{GroundSpeed} / \texttt{bShouldMove}，无需额外节点。
+\end{enumerate}
+
+\subsection{扩展（可选）}
+\begin{itemize}
+  \item \textbf{YawDelta}：GameThread 保存上一帧 Yaw，Proxy::Update 计算差值，PostUpdate 回填。
+  \item \textbf{加速度}：缓存上一帧速度（GameThread 或 Proxy 内部双缓存）求差。
+  \item \textbf{事件队列}：Proxy 写 Flag，PostUpdate 在 GameThread 触发通知 / 调试输出。
+\end{itemize}
+
+\subsection{Checklist 快速核对}
+\begin{itemize}
+  \item[\checkmark] 实现并注册自定义 Proxy
+  \item[\checkmark] AnyThread 不访问 Actor / World
+  \item[\checkmark] 数据回填集中于 PostUpdate
+  \item[\checkmark] Blueprint PropertyAccess 正常复用
+\end{itemize}
+
+\subsection{一行记忆公式}
+\[
+\text{Proxy 模式} = \text{GameThread 采集} \rightarrow \text{AnyThread 只读计算} \rightarrow \text{GameThread 回填}.
+\]
+
+
 \end{document}

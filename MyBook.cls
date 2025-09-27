@@ -363,143 +363,14 @@
   \fi
   \par\vspace*{\chap@post@vsp}
 }
-%定制section标题（不使用 titlesec）
-%%%%%%%%%%
-% 目标：
-% - 保持 \\@startsection 的内核路径，确保 TOC、书签、标记等语义不受影响；
-% - 用 TikZ 给编号加圆角彩色标签；
-% - 提供简明的用户接口：颜色、字体、间距、编号标签内边距/与标题间距；
-% - 兼容 \\section*（无编号时不显示标签）。
 
-% ---- 可配置项（用户接口） ----
-% 颜色：编号标签底色与标题文字色
-\def\sec@color{chapAccent}
-\newcommand{\setsectioncolor}[1]{\def\sec@color{#1}}
-\def\sec@textcolor{wineRed}
-\newcommand{\setsectiontextcolor}[1]{\def\sec@textcolor{#1}}
-
-% 字体：默认 Large 粗体
-\newcommand{\sec@font}{\Large\bfseries}
-\newcommand{\setsectionfont}[1]{\renewcommand{\sec@font}{#1}}
-
-% 标签与标题的间距、以及标签内边距
-\newlength{\sec@label@pad}\setlength{\sec@label@pad}{2.5pt}
-\newcommand{\setsectionlabelpadding}[1]{\setlength{\sec@label@pad}{#1}}
-\def\sec@title@gap{.6em}
-\newcommand{\setsectiontitlegap}[1]{\def\sec@title@gap{#1}}
-
-% 垂直间距：中文友好，避免使用负值（避免与上一段重叠）
-% 使用正的段前距离；可伸缩胶取正值
-\def\sec@before{5.5ex \@plus 1.5ex \@minus .5ex}
-\def\sec@after{3.2ex \@plus .4ex}
-\newcommand{\setsectionvspace}[2]{\def\sec@before{#1}\def\sec@after{#2}}
-
-% 开关：是否显示编号标签（对 \section* 无效）
-\newif\ifsec@showlabel
-\sec@showlabeltrue
-\newcommand{\sectionlabelon}{\sec@showlabeltrue}
-\newcommand{\sectionlabeloff}{\sec@showlabelfalse}
-
-% ---- 内部：编号格式（仅本次调用有效） ----
-% 使用 tcolorbox 的 \tcbox 绘制圆角色块，避免在标题中直接用 TikZ 的脆弱性
-\newcommand{\sec@cntformat}{%
-  \leavevmode
-  \colorbox{\sec@color}{\kern\sec@label@pad\textcolor{white}{\bfseries\thesection}\kern\sec@label@pad}%
-  \hspace{\sec@title@gap}%
-}
-
-% ---- 重新定义 \section：保持 \\@startsection 语义 ----
-\renewcommand\section{%
-  \@startsection{section}{1}{\z@}%
-    {\sec@before}%
-    {\sec@after}%
-    {\normalfont\sec@font\color{\sec@textcolor}}%
-}
-
-% 仅定制 section 的编号外观（全局钩子）
-\let\orig@seccntformat\@seccntformat
-\renewcommand\@seccntformat[1]{%
-  \ifstrequal{#1}{section}{%
-    \ifsec@showlabel\sec@cntformat\else\thesection\quad\fi
-  }{%
-    \ifstrequal{#1}{subsection}{%
-      \ifsubsec@showlabel\subsec@cntformat\else\thesubsection\quad\fi
-    }{\orig@seccntformat{#1}}%
-  }%
-}
-
-% 定制subsection标题（不使用 titlesec），与 section 风格一致、字号略小
-% ---- 可配置项（用户接口） ----
-% 颜色：编号标签底色与标题文字色（默认与章节强调色一致）
-\def\subsec@color{chapAccent}
-\newcommand{\setsubsectioncolor}[1]{\def\subsec@color{#1}}
-\def\subsec@textcolor{wineRed}
-\newcommand{\setsubsectiontextcolor}[1]{\def\subsec@textcolor{#1}}
-
-% 字体：默认 large 粗体
-\newcommand{\subsec@font}{\large\bfseries}
-\newcommand{\setsubsectionfont}[1]{\renewcommand{\subsec@font}{#1}}
-
-% 标签与标题的间距、以及标签内边距
-\newlength{\subsec@label@pad}\setlength{\subsec@label@pad}{2pt}
-\newcommand{\setsubsectionlabelpadding}[1]{\setlength{\subsec@label@pad}{#1}}
-\def\subsec@title@gap{.55em}
-\newcommand{\setsubsectiontitlegap}[1]{\def\subsec@title@gap{#1}}
-
-% 垂直间距：中文友好，避免负值引发重叠
-\def\subsec@before{5.0ex \@plus 1.2ex \@minus .3ex}
-\def\subsec@after{2.8ex \@plus .3ex}
-\newcommand{\setsubsectionvspace}[2]{\def\subsec@before{#1}\def\subsec@after{#2}}
-
-% 开关：是否显示编号标签（对 \subsection* 无效）
-\newif\ifsubsec@showlabel
-\subsec@showlabeltrue
-\newcommand{\subsectionlabelon}{\subsec@showlabeltrue}
-\newcommand{\subsectionlabeloff}{\subsec@showlabelfalse}
-
-% ---- 内部：编号格式 ----
-\newcommand{\subsec@cntformat}{%%
-  \leavevmode
-  \colorbox{\subsec@color}{\kern\subsec@label@pad\textcolor{white}{\bfseries\thesubsection}\kern\subsec@label@pad}%%
-  \hspace{\subsec@title@gap}%%
-}
-
-% ---- 重新定义 \subsection：保持 \@startsection 语义 ----
-\renewcommand\subsection{%%
-  \@startsection{subsection}{2}{\z@}%%
-    {\subsec@before}%%
-    {\subsec@after}%%
-    {\normalfont\subsec@font\color{\subsec@textcolor}}%%
-}
 
 \RequirePackage{enumitem}				
-\setlist[description]{style=multiline,
-  topsep=0.25cm,
-  itemsep=0cm,	%-0.25cm,
-	parsep=0.5cm,
-	labelwidth=2.5cm,
-	labelindent=\parindent,
-	leftmargin=3cm}
-
-% 将无序列表的项目符号改为酒红色
-\renewcommand{\labelitemi}{\textcolor{wineRed}{$\bullet$}}
-\setlist[itemize]{style=multiline,
-  topsep=0.25cm,
-	itemsep=0cm,	%-0.25cm,
-	parsep=0.5ex,%0.5cm,
-	labelwidth=0.35cm,
-	labelindent=\parindent,
-	leftmargin=.85cm}
+\renewcommand{\labelitemi}{$\bullet$}
+\setlist[itemize]{noitemsep}
 
 % 将有序列表的数字标签统一为酒红色（不影响正文文字）
-\setlist[enumerate]{style=multiline,
-  topsep=0.25cm,
-	itemsep=-0.25cm,
-	parsep=1.25ex, 	%0.5cm,
-	labelwidth=0.35cm,
-	labelindent=\parindent,
-  leftmargin=.85cm,
-  font=\color{wineRed}}
+\setlist[enumerate]{noitemsep}
 %\makeatother
 
 %代码环境定义
@@ -517,6 +388,7 @@
 	%staring code
 	\lstset{
 		language=[11]C++,
+		morekeywords={UCLASS,USTRUCT,UPROPERTY,UFUNCTION,GENERATED_BODY,override,final},
 		columns=fullflexible,%fixed
 		basicstyle=\ttfamily\small\linespread{1.25},
 		commentstyle=\color{green!70!black}\itshape,
