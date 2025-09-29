@@ -374,6 +374,17 @@
 \setlist[enumerate]{noitemsep}
 %\makeatother
 
+% ---- Pandoc compatibility stubs ----
+% Pandoc EPUB->LaTeX conversion may emit wrappers like \pandocbounded{...} to manage float/graphic layout.
+% Define a no-op wrapper so the included content passes through unchanged.
+% Also guard against multiple definitions if user later provides custom behavior.
+\providecommand{\pandocbounded}[1]{#1}
+% Some pandoc outputs prefix sectional anchors with \protect\phantomsection\label{...}. Both macros exist in hyperref;
+% if hyperref not loaded yet, \phantomsection is undefined -> we either load hyperref or stub it.
+% For now provide a lightweight stub; if user later loads hyperref the real definition overrides this.
+\providecommand{\phantomsection}{}
+
+
 %代码环境定义
 \RequirePackage{listings}
 % 为 listings 的自动换行设置可移植的换行标记，避免在类文件中直接使用 Unicode 字符

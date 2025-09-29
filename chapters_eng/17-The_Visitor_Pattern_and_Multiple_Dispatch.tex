@@ -1,0 +1,1683 @@
+﻿\chapter{The Visitor Pattern and Multiple Dispatch}
+
+The Visitor pattern is another classic object-oriented design pattern, one of the 23 patterns introduced in the book \emph{Design Patterns -- Elements of Reusable Object-Oriented Software}, by Erich Gamma, Richard Helm, Ralph Johnson, and John Vlissides. It was one of the more popular patterns during the golden age of object-oriented programming since it can be used to make large class hierarchies more maintainable. In recent years, the use of Visitor in C++ declined, as large complex hierarchies became less common, and the Visitor pattern is a fairly complex pattern to implement. Generic programming - in particular, the language features added in C++11 and C++14 - makes it easier to implement and maintain the Visitor classes, while the new applications of the old pattern have served to rekindle some of the fading interest in it.
+
+The following topics will be covered in this chapter:
+
+\begin{itemize}
+\item
+  The Visitor pattern
+\item
+  Implementations of Visitor in C++
+\item
+  The use of generic programming to simplify the Visitor classes
+\item
+  The use of Visitor for composite objects
+\item
+  Compile-time Visitor and reflection
+\end{itemize}
+
+Technical requirements
+
+The example code for this chapter can be found at the following GitHub link: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/main/Chapter17.
+
+\section{The Visitor pattern}
+
+The Visitor pattern stands out from the other classic object-oriented patterns due to its complexity. On the one hand, the basic structure of the Visitor pattern is quite complex and involves many coordinated classes that must work together to form the pattern. On the other hand, even the description of the Visitor pattern is complex - there are several very different ways to describe the same pattern. Many patterns can be applied to multiple kinds of problems, but the Visitor pattern goes beyond that - there are several ways to describe what it does that use completely different languages, talk about seemingly unrelated problems, and overall have nothing in common. However, they all describe the same pattern. Let's start by examining the many faces of the Visitor pattern, and then move on to the implementation.
+
+\subsection{What is the Visitor pattern?}
+
+The Visitor pattern is a pattern that separates the algorithm from the object structure, which is the data for this algorithm. Using the Visitor pattern, we can add a new operation to the class hierarchy without modifying the classes themselves. The use of the Visitor pattern follows the \textbf{open/closed principle} of software design - a class (or another unit of code, such as a module) should be closed for modifications; once the class presents an interface to its clients, the clients come to depend on this interface and the functionality it provides. This interface should remain stable; it should not be necessary to modify the classes in order to maintain the software and continue its development. At the same time, a class should be open for extensions - new functionality can be added to satisfy new requirements. As with all very general principles, a counter-example can be found where the rigorous application of a rule is worse than breaking it. Again, as with all general principles, its value lies not in being an absolute rule for every case, but rather a \emph{default} rule, a guideline that should be followed in the absence of a good reason not to; the reality is that the majority of everyday work is \emph{not special} and the result is better if this principle is followed.
+
+When viewed this way, the Visitor pattern allows us to add functionality to a class or an entire class hierarchy without having to modify the class. This feature can be particularly useful when dealing with public APIs - the users of the API can extend it with additional operations without having to modify the source code.
+
+A very different, more technical way to describe the Visitor pattern is to say that it implements \textbf{double dispatch}. This requires some explanation. Let's start with the regular virtual function calls:
+
+\begin{code}
+class Base {
+  virtual void f() = 0;
+};
+class Derived1 : public Base {
+  void f() override;
+};
+class Derived2 : public Base {
+  void f() override;
+};
+\end{code}
+
+If we invoke the \texttt{b-\textgreater{}f()} virtual function through a pointer to the \texttt{b} base class, the call is dispatched to \texttt{Derived1::f()} or \texttt{Derived2::f()}, depending on the real type of the object. This is the \textbf{single dispatch} - the function that is actually called is determined by a single factor, the type of the object.
+
+Now let\textquotesingle s assume that the function \texttt{f()} also takes an argument that is a pointer to a base class:
+
+\begin{code}
+class Base {
+  virtual void f(Base* p) = 0;
+};
+class Derived1 : public Base {
+  void f(Base* p) override;
+};
+class Derived2 : public Base {
+  void f(Base* p) override;
+};
+\end{code}
+
+The actual type of the \texttt{*p} object is also one of the derived classes. Now, the \texttt{b-\textgreater{}f(p)} call can have four different versions; both the \texttt{*b} and \texttt{*p} objects can be of either of the two derived types. It is reasonable to want the implementation to do something different in each of these cases. This would be double dispatch - the code that ultimately runs is determined by two separate factors. Virtual functions do not provide a way to implement double dispatch directly, but the Visitor pattern does exactly that.
+
+When presented this way, it is not obvious that the \textbf{double-dispatch} Visitor pattern has anything to do with the \textbf{operation-adding} Visitor pattern. However, they are exactly the same pattern, and the two requirements are really one and the same. Here is a way to look at it that might help - if we want to add an operation to all classes in a hierarchy, that is equivalent to adding a virtual function, so we have one factor controlling the final disposition of each call, the object type. But, if we can effectively add virtual functions, we can add more than one - one for each operation we need to support. The type of operation is the second factor controlling the dispatch, similar to the argument to the function in our previous example. Thus, the operation-adding visitor is able to provide double dispatch. Alternatively, if we had a way to implement double dispatch, we could do what the Visitor pattern does - effectively add a virtual function for each operation we want to support.
+
+Now that we know what the Visitor pattern does, it is reasonable to ask, \emph{why} would we want to do it? \emph{What} is the use of double dispatch? And why would we want \emph{another way} to add a virtual function substitute to a class when we can just add a \emph{genuine} virtual function? Setting aside the case of the public API with unavailable source code, why would we want to add an operation \emph{externally} instead of implementing it in every class? Consider the example of the serialization/deserialization problem. Serialization is an operation that converts an object into a format that can be stored or transmitted (for example, written into a file). Deserialization is the inverse operation - it constructs a new object from its serialized and stored image. To support serialization and deserialization in a straightforward, object-oriented way, each class in the hierarchy would need two methods, one for each operation. But what if there is more than one way to store an object? For example, we may need to write an object into a memory buffer, to be transmitted across the network and deserialized on another machine. Alternatively, we may need to save the object to disk, or else we may need to convert all objects in a container to a markup format such as JSON. The straightforward approach would have us add a serialization and a deserialization method to every object for every serialization mechanism. If a new and different serialization approach is needed, we have to go over the entire class hierarchy and add support for it.
+
+An alternative is to implement the entire serialization/deserialization operation in a separate function that can handle all classes. The resulting code is a loop that iterates over all objects, with a large decision tree inside of it. The code must interrogate every object and determine its type, for example, using dynamic casts. When a new class is added to the hierarchy, all serialization and deserialization implementations must be updated to handle the new objects.
+
+Both implementations are difficult to maintain for large hierarchies. The Visitor pattern offers a solution - it allows us to implement a new operation - in our case, the serialization - outside of the classes and without modifying them, but also without the downside of a huge decision tree in a loop (note that the Visitor pattern is not the only solution to the serialization problem; C++ offers other possible approaches as well, but we focus on the Visitor pattern in this chapter).
+
+As we stated at the beginning, the Visitor pattern is a complex pattern with a complex description. We can best handle this difficult pattern by studying concrete examples, starting from the very simple ones in the next section.
+
+\subsection{Basic Visitor in C++}
+
+The only way to really understand how the Visitor pattern operates is to work through an example. Let's start with a very simple one. First, we need a class hierarchy:
+
+\begin{code}
+// Example 01
+class Pet {
+  public:
+  virtual ~Pet() {}
+  Pet(std::string_view color) : color_(color) {}
+  const std::string& color() const { return color_; }
+  private:
+  const std::string color_;
+};
+class Cat : public Pet {
+  public:
+  Cat(std::string_view color) : Pet(color) {}
+};
+class Dog : public Pet {
+  public:
+  Dog(std::string_view color) : Pet(color) {}
+};
+\end{code}
+
+In this hierarchy, we have the \texttt{Pet} base class and several derived classes for different pet animals. Now we want to add some operations to our classes, such as ``feed the pet'' or ``play with the pet.'' The implementation depends on the type of pet, so these would have to be virtual functions if added directly to each class. This is not a problem for such a simple class hierarchy, but we are anticipating the future need for maintaining a much larger system in which modifying every class in the hierarchy is going to be expensive and time-consuming. We need a better way, and we begin by creating a new class, \texttt{PetVisitor}, which will be applied to every \texttt{Pet} object (visit it) and perform the operations we need. First, we need to declare the class:
+
+\begin{code}
+// Example 01
+class Cat;
+class Dog;
+class PetVisitor {
+  public:
+  virtual void visit(Cat* c) = 0;
+  virtual void visit(Dog* d) = 0;
+};
+\end{code}
+
+We had to forward-declare the \texttt{Pet} hierarchy classes because \texttt{PetVisitor} has to be declared before the concrete \texttt{Pet} classes. Now we need to make the \texttt{Pet} hierarchy visitable, which means we do need to modify it, but only once, regardless of how many operations we want to add later. We need to add a virtual function to accept the Visitor pattern to every class that can be visited:
+
+\begin{code}
+// Example 01
+class Pet {
+  public:
+  virtual void accept(PetVisitor& v) = 0;
+  ...
+};
+class Cat : public Pet {
+  public:
+  void accept(PetVisitor& v) override { v.visit(this); }
+  ...
+};
+class Dog : public Pet {
+  public:
+  void accept(PetVisitor& v) override { v.visit(this); }
+  ...
+};
+\end{code}
+
+Now our \texttt{Pet} hierarchy is visitable, and we have an abstract \texttt{PetVisitor} class. Everything is ready to implement new operations for our classes (note that nothing we have done so far depends on what operations we are going to add; we have created the visiting infrastructure that has to be implemented once). The operations are added by implementing concrete Visitor classes derived from \texttt{PetVisitor}:
+
+\begin{code}
+// Example 01
+class FeedingVisitor : public PetVisitor {
+  public:
+  void visit(Cat* c) override {
+    std::cout << "Feed tuna to the " << c->color()
+              << " cat" << std::endl;
+  }
+  void visit(Dog* d) override {
+    std::cout << "Feed steak to the " << d->color()
+              << " dog" << std::endl;
+  }
+};
+class PlayingVisitor : public PetVisitor {
+  public:
+  void visit(Cat* c) override {
+    std::cout << "Play with a feather with the "
+              << c->color() << " cat" << std::endl;
+  }
+  void visit(Dog* d) override {
+    std::cout << "Play fetch with the " << d->color()
+              << " dog" << std::endl;
+  }
+};
+\end{code}
+
+Assuming the visitation infrastructure is already built into our class hierarchy, we can implement a new operation by implementing a derived Visitor class, and all its virtual functions overrides for \texttt{visit()}. To invoke one of the new operations on an object from our class hierarchy, we need to create a visitor and visit the object:
+
+\begin{code}
+// Example 01
+Cat c("orange");
+FeedingVisitor fv;
+c.accept(fv); // Feed tuna to the orange cat
+\end{code}
+
+The latest example of the call is too simple in one important way - at the point of calling the visitor, we know the exact type of the object we are visiting. To make the example more realistic, we have to visit an object polymorphically:
+
+\begin{code}
+// Example 02
+std::unique_ptr<Pet> p(new Cat("orange"));
+...
+FeedingVisitor fv;
+p->accept(fv);
+\end{code}
+
+Here we do not know at compile time the actual type of the object pointed to by \texttt{p}; at the point where the visitor is accepted, \texttt{p} could have come from different sources. While less common, the visitor can also be used polymorphically:
+
+\begin{code}
+// Example 03
+std::unique_ptr<Pet> p(new Cat("orange"));
+std::unique_ptr<PetVisitor> v(new FeedingVisitor);
+...
+p->accept(*v);
+\end{code}
+
+When written this way, the code highlights the double-dispatch aspect of the Visitor pattern - the call to \texttt{accept()} ends up dispatched to a particular \texttt{visit()} function based on two factors - the type of the visitable \texttt{*p} object and the type of the \texttt{*v} visitor. If we wish to stress this aspect of the Visitor pattern, we can invoke the visitors using a helper function:
+
+\begin{code}
+// Example 03
+void dispatch(Pet& p, PetVisitor& v) { p.accept(v); }
+std::unique_ptr<Pet> p = ...;
+std::unique_ptr<PetVisitor> v = ...;
+dispatch(*p, *v); // Double dispatch
+\end{code}
+
+We now have the most bare-bones example of the classic object-oriented visitor in C++. Despite its simplicity, it has all the necessary components; an implementation for a large real-life class hierarchy and multiple visitor operations has a lot more code, but no new kinds of code, just more of the things we have already done. This example shows both aspects of the Visitor pattern; on the one hand, if we focus on the functionality of the software, with the visitation infrastructure now in place, we can add new operations without any changes to the classes themselves. On the other hand, if we look just at the way the operation is invoked, the \texttt{accept()} call, we have implemented double dispatch.
+
+We can immediately see the appeal of the Visitor pattern, we can add any number of new operations without having to modify every class in the hierarchy. If a new class is added to the \texttt{Pet} hierarchy, it is impossible to forget to handle it - if we do nothing at all to the visitor, the \texttt{accept()} call on the new class will not compile since there is no corresponding \texttt{visit()} function to call. Once we add the new \texttt{visit()} overload to the \texttt{PetVisitor} base class, we have to add it to all derived classes as well; otherwise, the compiler will let us know that we have a pure virtual function without an override. The latter is also one of the main disadvantages of the Visitor pattern - if a new class is added to the hierarchy, all visitors must be updated, whether the new classes actually need to support these operations or not. For this reason, it is sometimes recommended to use the visitor only on \emph{relatively stable} hierarchies that do not have new classes added often. There is also an alternative visitor implementation that somewhat mitigates this problem; we will see it later in this chapter.
+
+The example in this section is very simple - our new operations take no arguments and return no results. We will now consider whether these limitations are significant, and how they can be removed.
+
+\subsection{Visitor generalizations and limitations}
+
+Our very first visitor, in the previous section, allowed us to effectively add a virtual function to every class in the hierarchy. That virtual function had no parameters and no return value. The former is easy to extend; there is no reason at all why our \texttt{visit()} functions cannot have parameters. Let's expand our class hierarchy by allowing our pets to have kittens and puppies. This extension cannot be done using only the Visitor pattern - we need to add not only new operations but also new data members. The Visitor pattern can be used for the former, but the latter requires code changes. A policy-based design could have let us factor out this change into a new implementation of an existing policy if we had the foresight to provide the appropriate policy. We do have a separate chapter on \emph{Chapter 15, Policy-Based Design} in this book, so here we will avoid mixing several patterns together and just add the new data members:
+
+\begin{code}
+// Example 04
+class Pet {
+  public:
+  ..
+  void add_child(Pet* p) { children_.push_back(p); }
+  virtual void accept(PetVisitor& v, Pet* p = nullptr) = 0;
+  private:
+  std::vector<Pet*> children_;
+};
+\end{code}
+
+Each parent \texttt{Pet} object tracks its child objects (note that the container is a vector of pointers, not a vector of unique pointers, so the object does not own its children, but merely has access to them). We have also added the new \texttt{add\_child()} member function to add objects to the vector. We could have done this with a visitor, but this function is non-virtual, so we have to add it only once to the base class, not to every derived class - the visitor is unnecessary here. The \texttt{accept()} function has been modified to have an additional parameter that would have to be added to all derived classes as well, where it is simply forwarded to the \texttt{visit()} function:
+
+\begin{code}
+// Example 04
+class Cat : public Pet {
+  public:
+  Cat(std::string_view color) : Pet(color) {}
+  void accept(PetVisitor& v, Pet* p = nullptr) override {
+    v.visit(this, p);
+  }
+};
+class Dog : public Pet {
+  public:
+  Dog(std::string_view color) : Pet(color) {}
+  void accept(PetVisitor& v, Pet* p = nullptr) override {
+    v.visit(this, p);
+  }
+};
+\end{code}
+
+The \texttt{visit()} function also has to be modified to accept the additional argument, even for the visitors that do not need it. Changing the parameters of the \texttt{accept()} function is, therefore, an expensive global operation that should not be done often, if at all. Note that all overrides for the same virtual function in the hierarchy already have to have the same parameters. The Visitor pattern extends this restriction to all operations added using the same base Visitor object. A common workaround for this problem is to pass parameters using aggregates (classes or structures that combine multiple parameters together). The \texttt{visit()} function is declared to accept a pointer to the base aggregate class, while each visitor receives a pointer to a derived class that may have additional fields, and uses them as needed.
+
+Now, our additional argument is forwarded through the chain of virtual function calls to the visitor, where we can make use of it. Let's create a visitor that records the pet births and adds new pet objects as children to their parent objects:
+
+\begin{code}
+// Example 04
+class BirthVisitor : public PetVisitor {
+  public:
+  void visit(Cat* c, Pet* p) override {
+    assert(dynamic_cast<Cat*>(p));
+    c->add_child(p);
+  }
+  void visit(Dog* d, Pet* p) override {
+    assert(dynamic_cast<Dog*>(p));
+    d->add_child(p);
+  }
+};
+\end{code}
+
+Note that if we want to make sure that there are no biological impossibilities in our family tree, the verification has to be done at run time - at compile time, we do not know the actual types of the polymorphic objects. The new visitor is just as easy to use as the ones from the last section:
+
+\begin{code}
+Pet* parent; // A cat
+BirthVisitor bv;
+Pet* child(new Cat("calico"));
+parent->accept(bv, child);
+\end{code}
+
+Once we have established the parenthood relationships, we may want to examine our pet families. That is another operation we want to add, which calls for another Visitor:
+
+\begin{code}
+// Example 04
+class FamilyTreeVisitor : public PetVisitor {
+  public:
+  void visit(Cat* c, Pet*) override {
+    std::cout << "Kittens: ";
+    for (auto k : c->children_) {
+      std::cout << k->color() << " ";
+    }
+    std::cout << std::endl;
+  }
+  void visit(Dog* d, Pet*) override {
+    std::cout << "Puppies: ";
+    for (auto p : d->children_) {
+      std::cout << p->color() << " ";
+    }
+    std::cout << std::endl;
+  }
+};
+\end{code}
+
+We have hit a slight problem, though, because as written, the code will not compile. The reason is that the \texttt{FamilyTreeVisitor} class is trying to access the \texttt{Pet::children\_} data member, which is private. This is another weakness of the Visitor pattern - from our point of view, the visitors add new operations to the classes, just like virtual functions, but from the compiler's point of view, they are completely separate classes, not at all like member functions of the \texttt{Pet} classes and have no special access. Application of the Visitor pattern usually requires that the encapsulation is relaxed in one of two ways - we can either allow public access to the data (directly or through accessor member functions) or declare the Visitor classes to be friends (which does require changes to the source code). In our example, we will follow the second route:
+
+\begin{code}
+class Pet {
+  ...
+  friend class FamilyTreeVisitor;
+};
+\end{code}
+
+Now the family tree visitor works as expected:
+
+\begin{code}
+Pet* parent; // A cat
+...
+amilyTreeVisitor tv;
+parent->accept(tv); // Prints kitten colors
+\end{code}
+
+Unlike \texttt{BirthVisitor}, \texttt{FamilyTreeVisitor} does not need the additional argument.
+
+Now we have visitors that implement operations with parameters. What about the return values? Technically, there is no requirement for the \texttt{visit()} and \texttt{accept()} functions to return \texttt{void}. They can return anything else. However, the limitation that they have to all return the same type usually makes this capability useless. Virtual functions can have covariant return types, where the base class virtual function returns an object of some class and the derived class overrides return objects derived from that class, but even that is usually too limiting. There is another, much simpler solution - the \texttt{visit()} functions of every Visitor object have full access to the data members of that object. There is no reason why we cannot store the return value in the Visitor class itself and access it later. This fits well with the most common use where each visitor adds a different operation and is likely to have a unique return type, but the operation itself usually has the same return type for all classes in the hierarchy. For example, we can make our \texttt{FamilyTreeVisitor} count the total number of children and return the value through the Visitor object:
+
+\begin{code}
+// Example 05
+class FamilyTreeVisitor : public PetVisitor {
+  public:
+  FamilyTreeVisitor() : child_count_(0) {}
+  void reset() { child_count_ = 0; }
+  size_t child_count() const { return child_count_; }
+  void visit(Cat* c, Pet*) override {
+    visit_impl(c, "Kittens: ");
+  }
+  void visit(Dog* d, Pet*) override {
+    visit_impl(d, "Puppies: ");
+  }
+  private:
+  template <typename T>
+  void visit_impl(T* t, const char* s) {
+    std::cout << s;
+    for (auto p : t->children_) {
+      std::cout << p->color() << " ";
+        ++child_count_;
+      }
+      std::cout << std::endl;
+  }
+  size_t child_count_;
+};
+FamilyTreeVisitor tv;
+parent->accept(tv);
+std::cout << tv.child_count() << " kittens total"
+          << std::endl;
+\end{code}
+
+This approach imposes some limitations in multithreaded programs - the visitor is now not thread-safe since multiple threads cannot use the same Visitor object to visit different pet objects. The most common solution is to use one Visitor object per thread, usually a local variable created on the stack of the function that calls the visitor. If this is not possible, more complex options are available to give the visitor a per-thread (thread-local) state, but the analysis of such options lies outside of the scope of this book. On the other hand, sometimes we want to accumulate results over multiple visitations, in which case the previous technique of storing the result in the Visitor object works perfectly. Also note that the same solution can be used to pass arguments into the Visitor operations, instead of adding them to the \texttt{visit()} functions; we can store the arguments inside the Visitor object itself, and then we don't need anything special to access them from the visitor. This technique works particularly well when the arguments don't change on every invocation of the visitor, but may vary from one Visitor object to another.
+
+Let's return for a moment and examine the \texttt{FamilyTreeVisitor} implementation again. Note that it iterates over the child objects of the parent object and calls the same operation on each one, in turn. It does not, however, process the children of the child object - our family tree is only one-generation deep. The problem of visiting objects that contain other objects is very general and occurs rather often. Our motivational example from the very beginning of this chapter, the problem of serialization, demonstrates this need perfectly - every complex object is serialized by serializing its components, one by one, and they, in turn, are serialized the same way, until we get all the way down to the built-in types such as \texttt{int} and \texttt{double}, which we know how to read and write. The next section deals with visiting complex objects in a more comprehensive way than what we have done so far.
+
+\section{Visiting complex objects}
+
+In the last section, we saw how the Visitor pattern allows us to add new operations to the existing hierarchy. In one of the examples, we visited a complex object that contained pointers to other objects. The visitor iterated over these pointers, in a limited way. We are now going to consider the general problem of visiting objects that are composed of other objects, or objects that contain other objects and build up to the demonstration of a working serialization/deserialization solution at the end.
+
+\subsection{Visiting composite objects}
+
+The general idea of visiting complex objects is quite straightforward - when visiting the object itself, we generally do not know all the details of how to handle each component or contained object. But there is something else that does - the visitor for that object type is written specifically to handle that class and nothing else. This observation suggests that the correct way to handle the component objects is to simply visit each one, and thus delegate the problem to someone else (a generally powerful technique, in programming and otherwise).
+
+Let's first demonstrate this idea on the example of a simple container class, such as the \texttt{Shelter} class, which can contain any number of pet objects representing the pets waiting for adoption:
+
+\begin{code}
+// Example 06
+class Shelter {
+  public:
+  void add(Pet* p) {
+    pets_.emplace_back(p);
+  }
+  void accept(PetVisitor& v) {
+    for (auto& p : pets_) {
+      p->accept(v);
+    }
+  }
+  private:
+  std::vector<std::unique_ptr<Pet>> pets_;
+};
+\end{code}
+
+This class is essentially an adapter to make a vector of pet objects visitable (we have discussed the Adapter pattern in detail in the eponymous chapter). Note that the objects of this class do own the pet objects they contain - when the \texttt{Shelter} object is destroyed, so are all the \texttt{Pet} objects in the vector. Any container of unique pointers is a container that owns its contained objects; this is how polymorphic objects should be stored in a container such as \texttt{std::vector} (For non-polymorphic objects we can store objects themselves, but that won't work in our case, objects derived from \texttt{Pet} are of different types.)
+
+The code relevant to our current problem is, of course, \texttt{Shelter::accept()}, which determines how a \texttt{Shelter} object is visited. As you can see, we do not invoke the Visitor on the \texttt{Shelter} object itself. Instead, we delegate the visitation to each of the containing objects. Since our Visitors are already written to handle Pet objects, nothing more needs to be done. When \texttt{Shelter} is visited by, say, \texttt{FeedingVisitor}, every pet in the shelter gets fed, and we didn't have to write any special code to make it happen.
+
+Visitation of composite objects is done in a similar manner - if an object is composed of several smaller objects, we have to visit each of these objects. Let's consider an object representing a family with two family pets, a dog and a cat (the humans who serve the pets are not included in the following code, but we assume they are there too):
+
+\begin{code}
+// Example 07
+class Family {
+  public:
+  Family(const char* cat_color, const char* dog_color) :
+  cat_(cat_color), dog_(dog_color) {}
+  void accept(PetVisitor& v) {
+    cat_.accept(v);
+    dog_.accept(v);
+  }
+  private: // Other family members not shown for brevity
+  Cat cat_;
+  Dog dog_;
+};
+\end{code}
+
+Again, visiting the family with a visitor from the \texttt{PetVisitor} hierarchy is delegated so that each \texttt{Pet} object is visited, and the visitors already have everything they need to handle these objects (of course, a \texttt{Family} object could accept visitors of other types as well, we would have to write separate \texttt{accept()} methods for them).
+
+Now, at last, we have all the pieces we need to tackle the problem of serialization and deserialization of arbitrary objects. The next subsection shows how this can be done using the Visitor pattern.
+
+\subsection{Serialization and deserialization with Visitor}
+
+The problem itself was described in detail in the previous section - for serialization, each object needs to be converted to a sequence of bits, and these bits need to be stored, copied, or sent. The first part of the action depends on the object (each object is converted differently) but the second part depends on the specific application of the serialization (saving to disk is different from sending across the network). The implementation depends on two factors, hence the need for double dispatch, which is exactly what the Visitor pattern provides. Furthermore, if we have a way to serialize some object and then deserialize it (reconstruct the object from the sequence of bits), we should use the same method when this object is included in another object.
+
+To demonstrate serialization/deserialization of a class hierarchy using the Visitor pattern, we need a more complex hierarchy than the toy examples we have used so far. Let's consider this hierarchy of two-dimensional geometric objects:
+
+\begin{code}
+// Example 08
+class Geometry {
+  public:
+  virtual ~Geometry() {}
+};
+class Point : public Geometry {
+  public:
+  Point() = default;
+  Point(double x, double y) : x_(x), y_(y) {}
+  private:
+  double x_ {};
+  double y_ {};
+};
+class Circle : public Geometry {
+  public:
+  Circle() = default;
+  Circle(Point c, double r) : c_(c), r_(r) {}
+  private:
+  Point c_;
+  double r_ {};
+};
+class Line : public Geometry {
+  public:
+  Line() = default;
+  Line(Point p1, Point p2) : p1_(p1), p2_(p2) {}
+  private:
+  Point p1_;
+  Point p2_;
+};
+\end{code}
+
+All objects are derived from the abstract \texttt{Geometry} base class, but the more complex object contains one or more of the simpler objects; for example, \texttt{Line} is defined by two \texttt{Point} objects. Note that, at the end of the day, all our objects are made of \texttt{double} numbers, and, therefore, will serialize into a sequence of numbers. The key is knowing which \texttt{double} represents which field of which object; we need this to restore the original objects correctly.
+
+To serialize these objects using the Visitor pattern, we follow the same process we used in the last section. First, we need to declare the base Visitor class:
+
+\begin{code}
+// Example 08
+class Visitor {
+public:
+  virtual void visit(double& x) = 0;
+  virtual void visit(Point& p) = 0;
+  virtual void visit(Circle& c) = 0;
+  virtual void visit(Line& l) = 0;
+};
+\end{code}
+
+There is one additional detail here - we can also visit double values; each visitor would need to handle them appropriately (write them, read them, and so on). Visiting any geometry object will result, eventually, in visiting the numbers it is composed of.
+
+Our base \texttt{Geometry} class and all the classes derived from it need to accept this visitor:
+
+\begin{code}
+// Example 08
+class Geometry {
+  public:
+  virtual ~Geometry() {}
+  virtual void accept(Visitor& v) = 0;
+};
+\end{code}
+
+There is, of course, no way to add an \texttt{accept()} member function to double, but we won't have to. The \texttt{accept()} member functions for the derived classes, each of which is composed of one or more numbers and other classes, visit every data member in order:
+
+\begin{code}
+// Example 08
+void Point::accept(Visitor& v) {
+  v.visit(x_); // double
+  v.visit(y_); // double
+}
+void Circle::accept(Visitor& v) {
+  v.visit(c_); // Point
+  v.visit(r_); // double
+}
+void Point::accept(Visitor& v) {
+  v.visit(p1_); // Point
+  v.visit(p2_); // Point
+}
+\end{code}
+
+The concrete Visitor classes, all derived from the base \texttt{Visitor} class, are responsible for the specific mechanisms of serialization and deserialization. The order in which the objects are broken down into their parts, all the way down to the numbers, is controlled by each object, but the visitors determine what is done with these numbers. For example, we can serialize all objects into a string using the formatted I/O (similar to what we get if we print the numbers into \texttt{cout}):
+
+\begin{code}
+// Example 08
+class StringSerializeVisitor : public Visitor {
+public:
+  void visit(double& x) override { S << x << " "; }
+  void visit(Point& p) override { p.accept(*this); }
+  void visit(Circle& c) override { c.accept(*this); }
+  void visit(Line& l) override { l.accept(*this); }
+  std::string str() const { return S.str(); }
+  private:
+  std::stringstream S;
+};
+\end{code}
+
+The string is accumulated in \texttt{stringstream} until all the necessary objects are serialized:
+
+\begin{code}
+// Example 08
+Line l(...);
+Circle c(...);
+StringSerializeVisitor serializer;
+serializer.visit(l);
+serializer.visit(c);
+std::string s(serializer.str());
+\end{code}
+
+Now that we have the objects printed into the \texttt{s} string, we can restore them from this string, perhaps on a different machine (if we arranged for the string to be sent there). First, we need the deserializing Visitor:
+
+\begin{code}
+// Example 08
+class StringDeserializeVisitor : public Visitor {
+  public:
+  StringDeserializeVisitor(const std::string& s) {
+    S.str(s);
+  }
+  void visit(double& x) override { S >> x; }
+  void visit(Point& p) override { p.accept(*this); }
+  void visit(Circle& c) override { c.accept(*this); }
+  void visit(Line& l) override { l.accept(*this); }
+  private:
+  std::stringstream S;
+};
+\end{code}
+
+This Visitor reads the numbers from the string and saves them in the variables given to it by the object that is visited. The key to successful deserialization is to read the numbers in the same order as they were saved - for example, if we started by writing \emph{X} and \emph{Y} coordinates of a point, we should construct a point from the first two numbers we read and use them as \emph{X} and \emph{Y} coordinates. If the first point we wrote was the endpoint of a line, we should use the point we constructed as the endpoint of the new line. The beauty of the Visitor pattern is that the functions that do the actual reading and writing don't need to do anything special to preserve this order - the order is determined by each object and is guaranteed to be the same for all visitors (the object makes no distinction between the specific visitors and doesn't even know what kind of visitor is it). All we need to do is to visit the objects in the same order they were serialized in:
+
+\begin{code}
+// Example 08
+Line l1;
+Circle c1;
+// s is the string from a serializer
+StringDeserializeVisitor deserializer(s);
+deserializer.visit(l1); // Restored Line l
+deserializer.visit(c1); // Restored Circle c
+\end{code}
+
+So far, we have known which objects are serialized and in what order. Therefore, we can deserialize the same objects in the same order. A more general case is when we don't know what objects to expect during deserialization - the objects are stored in a visitable container, similar to \texttt{Shelter} in the earlier example, which has to ensure that the objects are serialized and deserialized in the same order. For example, consider this class, which stores a geometry represented as an intersection of two other geometries:
+
+\begin{code}
+// Example 09
+class Intersection : public Geometry {
+  public:
+  Intersection() = default;
+  Intersection(Geometry* g1, Geometry* g2) :
+    g1_(g1), g2_(g2) {}
+  void accept(Visitor& v) override {
+    g1_->accept(v);
+    g2_->accept(v);
+  }
+  private:
+  std::unique_ptr<Geometry> g1_;
+  std::unique_ptr<Geometry> g2_;
+};
+\end{code}
+
+Serialization of this object is straightforward - we serialize both geometries, in order, by delegating the details to these objects. We cannot call \texttt{v.visit()} directly because we do not know the types of the \texttt{*g1\_} and \texttt{*g2\_} geometries, but we can let these objects dispatch the call as appropriate. But deserialization, as written, will fail - the geometry pointers are \texttt{null}, there are no objects allocated yet, and we do not know what type of objects should be allocated. Somehow, we need to encode the types of objects in the serialized stream first, then construct them based on these encoded types. There is another pattern that offers the standard solution for this problem, and that is the Factory pattern (it is quite common to have to use more than one design pattern when building a complex system).
+
+There are several ways in which this can be done, but they all boil down to converting types to numbers and serializing those numbers. In our case, we have to know the complete list of geometry types when we declare the base \texttt{Visitor} class, so that we can also define an enumeration for all these types at the same time:
+
+\begin{code}
+// Example 09
+class Geometry {
+  public:
+  enum type_tag {POINT = 100, CIRCLE, LINE, INTERSECTION};
+  virtual type_tag tag() const = 0;
+};
+class Visitor {
+  public:
+  static Geometry* make_geometry(Geometry::type_tag tag);
+  virtual void visit(Geometry::type_tag& tag) = 0;
+  ...
+};
+\end{code}
+
+It is not essential that \texttt{enum\ type\_tag} be defined inside the \texttt{Geometry} class, or that the \texttt{make\_geometry} factory constructor be a static member function of the \texttt{Visitor} class. They can be declared outside of any class as well, but the virtual \texttt{tag()} method that will return the correct tag for every derived geometry type needs to be declared exactly as shown. The \texttt{tag()} overrides must be defined in every derived \texttt{Geometry} class, for example, the \texttt{Point} class:
+
+\begin{code}
+// Example 09
+class Point : public Geometry {
+  public:
+  ...
+  type_tag tag() const override { return POINT; }
+};
+\end{code}
+
+Other derived classes have to be similarly modified.
+
+Then we need to define the factory constructor:
+
+\begin{code}
+// Example 09
+Geometry* Visitor::make_geometry(Geometry::type_tag tag) {
+  switch (tag) {
+    case Geometry::POINT: return new Point;
+    case Geometry::CIRCLE: return new Circle;
+    case Geometry::LINE: return new Line;
+    case Geometry::INTERSECTION: return new Intersection;
+  }
+}
+\end{code}
+
+This factory function constructs the right derived object depending on the specified type tag. All that is left is for the \texttt{Intersection} object to serialize and deserialize the tags of the two geometries that form the intersection:
+
+\begin{code}
+// Example 09
+class Intersection : public Geometry {
+  public:
+  void accept(Visitor& v) override {
+    Geometry::type_tag tag;
+    if (g1_) tag = g1_->tag();
+    v.visit(tag);
+    if (!g1_) g1_.reset(Visitor::make_geometry(tag));
+    g1_->accept(v);
+    if (g2_) tag = g2_->tag();
+    v.visit(tag);
+    if (!g2_) g2_.reset(Visitor::make_geometry(tag));
+    g2_->accept(v);
+  }
+  ...
+};
+\end{code}
+
+First, the tags are sent to the visitor. The serializing visitor should write the tags along with the rest of the data:
+
+\begin{code}
+// Example 09
+class StringSerializeVisitor : public Visitor {
+  public:
+  void visit(Geometry::type_tag& tag) override {
+    S << size_t(tag) << " ";
+  }
+  ...
+};
+\end{code}
+
+The deserializing visitor has to read the tag (actually, it reads a \texttt{size\_t} number and converts it to the tag):
+
+\begin{code}
+// Example 09
+class StringDeserializeVisitor : public Visitor {
+  public:
+  void visit(Geometry::type_tag& tag) override {
+    size_t t;
+    S >> t;
+    tag = Geometry::type_tag(t);
+  }
+  ...
+};
+\end{code}
+
+Once the tag is restored by the deserializing visitor, the \texttt{Intersection} object can invoke the factory constructor to construct the right geometry object. Now we can deserialize this object from the stream, and our \texttt{Intersection} is restored as an exact copy of the one we serialized. Note that there are other ways to package visiting the tags and the calls to the factory constructor; the optimal solution depends on the roles of different objects in the system - for example, the deserializing visitor may construct the objects based on the tag instead of the composite object that owns these geometries. The sequence of events that need to take place, however, remains the same.
+
+So far, we have been learning about the classic object-oriented Visitor pattern. Before we see what the C++-specific twists on the classic pattern are, we should learn about another type of visitor that addresses some of the inconveniences in the Visitor pattern.
+
+\section{Acyclic Visitor}
+
+The Visitor pattern, as we have seen it so far, does what we wanted it to do. It separates the implementation of the algorithm from the object that is the data for the algorithm, and it allows us to select the correct implementation based on two run-time factors - the specific object type and the concrete operation we want to perform, both of which are selected from their corresponding class hierarchies. There is, however, a fly in the ointment - we wanted to reduce complexity and simplified the code maintenance, and we did, but now we have to maintain two parallel class hierarchies, the visitable objects and the visitors, and the dependencies between the two are non-trivial. The worst part of these dependencies is that they form a cycle - the Visitor object depends on the types of the visitable objects (there is an overload of the \texttt{visit()} methods for every visitable type), and the base visitable type depends on the base visitor type. The first half of this dependency is the worst. Every time a new object is added to the hierarchy, every visitor must be updated. The second half does not take much work from the programmer as new visitors can be added at any time and without any other changes - this is the whole point of the Visitor pattern. But there is still the compile-time dependency of the base visitable class, and, perforce, all derived classes, on the base Visitor class. Were the Visitor class to change, every file that uses one of the visitable classes would need to be recompiled. The visitors are, for the most part, stable in their interface and implementation, except for one case - adding a new visitable class. Thus, the cycle in action looks like this - a new class is added to the hierarchy of the visitable objects. The Visitor classes need to be updated with the new type. Since the base Visitor class was changed, the base visitable class and every line of code that depends on it must be recompiled, including the code that does not use the new visitable class, only the old ones. Even using forward declarations whenever possible does not help - if a new visitable class is added, all the old ones must be recompiled.
+
+The additional problem of the traditional Visitor pattern is that every possible combination of the object type and the visitor type must be handled. Often there are cases when some combinations do not make sense, and certain objects will never be visited by some types of visitors. But we cannot take advantage of this as every combination must have a defined action (the action could be very simple, but still, every Visitor class must have the full set of \texttt{visit()} member functions defined).
+
+The Acyclic Visitor pattern is a variant of the Visitor pattern that is specifically designed to break the dependency cycle and allow partial visitation. The base visitable class for the Acyclic Visitor pattern is the same as for the regular Visitor pattern:
+
+\begin{code}
+// Example 10
+class Pet {
+  public:
+  virtual ~Pet() {}
+  virtual void accept(PetVisitor& v) = 0;
+  ...
+};
+\end{code}
+
+However, that is where the similarity ends. The base Visitor class does not have the \texttt{visit()} overloads for every visitable. In fact, it has no \texttt{visit()} member function at all:
+
+\begin{code}
+// Example 10
+class PetVisitor {
+  public:
+  virtual ~PetVisitor() {}
+};
+\end{code}
+
+So, who does the visiting then? For every derived class in the original hierarchy, we also declare the corresponding Visitor class, and that is where the \texttt{visit()} function is:
+
+\begin{code}
+// Example 10
+class Cat;
+class CatVisitor {
+  public:
+  virtual void visit(Cat* c) = 0;
+};
+class Cat : public Pet {
+  public:
+  Cat(std::string_view color) : Pet(color) {}
+  void accept(PetVisitor& v) override {
+    if (CatVisitor* cv = dynamic_cast<CatVisitor*>(&v)) {
+      cv->visit(this);
+    } else { // Handle error
+      assert(false);
+    }
+  }
+};
+\end{code}
+
+Note that each visitor can visit only the class it was designed for - the \texttt{CatVisitor} visits only \texttt{Cat} objects, the \texttt{DogVisitor} visits only \texttt{Dog} objects, and so on. The magic is in the new \texttt{accept()} function - when a class is asked to accept a visitor, it first uses \texttt{dynamic\_cast} to check whether this is the right type of visitor. If it is, all is well, and the visitor is accepted. If it isn't, we have a problem and must handle the error (the exact mechanism of error handling depends on the application; for example, an exception can be thrown). The concrete Visitor classes, therefore, must be derived from both the common \texttt{PetVisitor} base class and the class-specific base class such as \texttt{CatVisitor}:
+
+\begin{code}
+// Example 10
+class FeedingVisitor : public PetVisitor,
+                       public CatVisitor,
+                       public DogVisitor {
+  public:
+  void visit(Cat* c) override {
+    std::cout << "Feed tuna to the " << c->color()
+              << " cat" << std::endl;
+  }
+  void visit(Dog* d) override {
+    std::cout << "Feed steak to the " << d->color()
+              << " dog" << std::endl;
+  }
+};
+\end{code}
+
+Each concrete visitor class is derived from the common visitor base and from every per-type visitor base (\texttt{CatVisitor}, \texttt{DogVisitor}, and so on) for every type that must be handled by this visitor. On the other hand, if this visitor is not designed to visit some of the classes in the hierarchy, we can simply omit the corresponding visitor base, and then we won't need to implement the virtual function override either:
+
+\begin{code}
+// Example 10
+class BathingVisitor : public PetVisitor,
+                       public DogVisitor
+                       { // But no CatVisitor
+  public:
+  void visit(Dog* d) override {
+    std::cout << "Wash the " << d->color()
+              << " dog" << std::endl;
+  }
+  // No visit(Cat*) here!
+};
+\end{code}
+
+The invocation of the Acyclic Visitor pattern is done in exactly the same way as with the regular Visitor pattern:
+
+\begin{code}
+// Example 10
+std::unique_ptr<Pet> c(new Cat("orange"));
+std::unique_ptr<Pet> d(new Dog("brown"));
+FeedingVisitor fv;
+c->accept(fv);
+d->accept(fv);
+BathingVisitor bv;
+//c->accept(bv); // Error
+d->accept(bv);
+\end{code}
+
+If we try to visit an object that is not supported by the particular Visitor, the error is detected. Therefore, we have solved the problem of partial visitation. What about the dependency cycle? That is taken care of as well - the common \texttt{PetVisitor} base class does not need to list the complete hierarchy of visitable objects, and the concrete visitable classes depend only on their per-class visitors, but not on any visitors for other types. Therefore, when another visitable object is added to the hierarchy, the existing ones do not need to be recompiled.
+
+The Acyclic Visitor pattern looks so good that one has to wonder, \emph{why not use it all the time instead of the regular Visitor pattern?} There are a few reasons. First of all, the Acyclic Visitor pattern uses \texttt{dynamic\_cast} to cast from one base class to another (sometimes called cross-cast). This operation is typically more expensive than the virtual function call, so the Acyclic Visitor pattern is slower than the alternative. Also, the Acyclic Visitor pattern requires a Visitor class for every visitable class, so twice as many classes, and it uses multiple inheritance with a lot of base classes. That second issue is not much of a problem for most modern compilers, but many programmers find it difficult to deal with multiple inheritance. Whether the first issue - the runtime cost of the dynamic cast - is a problem depends on the application, but it is something you need to be aware of. On the other hand, the Acyclic Visitor pattern really shines when the visitable object hierarchy changes frequently or when the cost of recompiling the entire code base is significant.
+
+You may have noticed one more issue with the Acyclic Visitor pattern - it has a lot of boilerplate code. Several lines of code have to be copied for every visitable class. In fact, the regular Visitor pattern suffers from the same problem in that implementing either kind of visitor involves a lot of repetitive typing. But C++ has a special set of tools to replace code repetition with code reuse: that is exactly what generic programming is for. We shall see next how the Visitor pattern is adapted to modern C++.
+
+\section{Visitors in modern C++}
+
+As we have just seen, the Visitor pattern promotes the separation of concerns; for example, the order of serialization and the mechanism of serialization are made independent, and a separate class is responsible for each. The pattern also simplifies code maintenance by collecting all code that performs a given task in one place. What the Visitor pattern does not promote is code reuse with no duplication. But that's the object-oriented Visitor pattern, before modern C++. Let's see what we can do with the generic capabilities of C++, starting from the regular Visitor pattern.
+
+\subsection{Generic Visitor}
+
+We are going to try to reduce the boilerplate code in the implementation of the Visitor pattern. Let's start with the \texttt{accept()} member function, which must be copied into every visitable class; it always looks the same:
+
+\begin{code}
+class Cat : public Pet {
+  void accept(PetVisitor& v) override { v.visit(this); }
+};
+\end{code}
+
+This function cannot be moved to the base class because we need to call the visitor with the actual type, not the base type - \texttt{visit()} accepts \texttt{Cat*}, \texttt{Dog*}, and so on, but not \texttt{Pet*}. We can get a template to generate this function for us if we introduce an intermediate templated base class:
+
+\begin{code}
+// Example 11
+class Pet { // Same as before
+  public:
+  virtual ~Pet() {}
+  Pet(std::string_view color) : color_(color) {}
+  const std::string& color() const { return color_; }
+  virtual void accept(PetVisitor& v) = 0;
+  private:
+  std::string color_;
+};
+template <typename Derived>
+class Visitable : public Pet {
+  public:
+  using Pet::Pet;
+  void accept(PetVisitor& v) override {
+    v.visit(static_cast<Derived*>(this));
+  }
+};
+\end{code}
+
+The template is parameterized by the derived class. In this regard, it is similar to the \textbf{Curiously Recurring Template Pattern} (\textbf{CRTP}), but here we do not inherit from the template parameter - we use it to cast the \texttt{this} pointer to the correct derived class pointer. Now we just need to derive each pet class from the right instantiation of the template, and we get the \texttt{accept()} function automatically:
+
+\begin{code}
+// Example 11
+class Cat : public Visitable<Cat> {
+  using Visitable<Cat>::Visitable;
+};
+class Dog : public Visitable<Dog> {
+  using Visitable<Dog>::Visitable;
+};
+\end{code}
+
+That takes care of half of the boilerplate code - the code inside the derived visitable objects. Now there is only the other half left: the code inside the Visitor classes, where we have to type the same declaration over and over again for every visitable class. We can't do much about the specific visitors; after all, that's where the real work is done, and, presumably, we need to do different things for different visitable classes (otherwise why use double dispatch at all?)
+
+However, we can simplify the declaration of the base Visitor class if we introduce this generic Visitor template:
+
+\begin{code}
+// Example 12
+template <typename ... Types> class Visitor;
+template <typename T> class Visitor<T> {
+  public:
+  virtual void visit(T* t) = 0;
+};
+template <typename T, typename ... Types>
+class Visitor<T, Types ...> : public Visitor<Types ...> {
+  public:
+  using Visitor<Types ...>::visit;
+  virtual void visit(T* t) = 0;
+};
+\end{code}
+
+Note that we have to implement this template only once: not once for each class hierarchy, but once forever (or at least until we need to change the signature of the \texttt{visit()} function, for example, to add arguments). This is a good generic library class. Once we have it, declaring a visitor base for a particular class hierarchy becomes so trivial that it feels anticlimactic:
+
+\begin{code}
+// Example 12
+\end{code}
+
+Notice the somewhat unusual syntax with the \texttt{class} keyword - it combines the template argument list with a forward declaration and is equivalent to the following:
+
+\begin{code}
+class Cat;
+class Dog;
+using PetVisitor = Visitor<Cat, Dog>;
+\end{code}
+
+How does the Generic Visitor base work? It uses the variadic template to capture an arbitrary number of type arguments, but the primary template is only declared, not defined. The rest are specializations. First, we have the special case of one type argument. We declare the pure \texttt{visit()} virtual member function for that type. Then we have a specialization for more than one type argument, where the first argument is explicit, and the rest are in the parameter pack. We generate the \texttt{visit()} function for the explicitly specified type and inherit the rest of them from an instantiation of the same variadic template but with one less argument. The instantiation is recursive until we are down to only one type argument, and then the first specialization is used.
+
+This generic and reusable code has one restriction: it does not handle deep hierarchies. Recall that each visitable class is derived from a common base:
+
+\begin{code}
+template <typename Derived>
+class Visitable : public Pet {...};
+class Cat : public Visitable<Cat> {...};
+\end{code}
+
+If we were to derive another class from \texttt{Cat}, it would have to be derived from \texttt{Visitable} as well:
+
+\begin{code}
+class SiameseCat : public Cat,
+                   public Visitable<SiameseCat> {...};
+\end{code}
+
+We cannot just derive \texttt{SiameseCat} from \texttt{Cat} because it is the Visitable template that provides the \texttt{accept()} method for each derived class. But we can't use the double inheritance as we just tried either, because now, the \texttt{SiameseCat} class inherits from Pet twice: once through the \texttt{Cat} base and once through the \texttt{Visitable} base. The only solution to this, if you still want to use the templates to generate \texttt{accept()} methods, is to separate the hierarchy so each visitable class such as \texttt{Cat} inherits from \texttt{Visitable} and from a corresponding base class \texttt{CatBase} that has all the ``cat-specific'' functionality except for the visitation support. This doubles the number of classes in the hierarchy and is a major drawback.
+
+Now that we have the boilerplate visitor code generated by templates, we can also make it simpler to define concrete visitors.
+
+\subsection{Lambda Visitor}
+
+Most of the work in defining a concrete visitor is writing code for the actual work that has to happen for every visitable object. There is not a lot of boilerplate code in a specific visitor class. But sometimes we may not want to declare the class itself. Think about lambda expressions - anything that can be done with a lambda expression can also be done with an explicitly declared callable class because lambdas are (anonymous) callable classes. Nonetheless, we find lambda expressions very useful for writing one-off callable objects. Similarly, we may want to write a visitor without explicitly naming it - a lambda Visitor. We would want it to look something like this:
+
+\begin{code}
+auto v(lambda_visitor<PetVisitor>(
+  [](Cat* c) { std::cout << "Let the " << c->color()
+                         << " cat out" << std::endl;
+  },
+  [](Dog* d) { std::cout << "Take the " << d->color()
+                         << " dog for a walk" << std::endl;
+  }
+));
+pet->accept(v);
+\end{code}
+
+There are two problems to be solved - how to create a class that handles a list of types and corresponding objects (in our case, the visitable types and the corresponding lambdas), and how to generate a set of overloaded functions using lambda expressions.
+
+The former problem will require us to recursively instantiate a template on the parameter pack, peeling off one argument at a time. The solution to the latter problem is similar to the overload set of the lambda expression, which was described in the chapter on class templates. We could use the overload set from that chapter, but we can use the recursive template instantiation that we need anyway, to build the overloaded set of functions directly.
+
+There is going to be one new challenge in this implementation - we have to process not one but two lists of types. The first list has all visitable types in it; in our case, \texttt{Cat} and \texttt{Dog}. The second list has the types of lambda expressions, one for each visitable type. We have not seen a variadic template with two parameter packs yet, and for a good reason - it is not possible to simply declare \texttt{template\textless{}typename...\ A,\ typename...\ B\textgreater{}} as the compiler would not know where the first list ends and the second begins. The trick is to hide one or both lists of types inside other templates. In our case, we already have the \texttt{Visitor} template that is instantiated on the list of visitable types:
+
+\begin{code}
+using PetVisitor = Visitor<class Cat, class Dog>;
+\end{code}
+
+We can extract this list from the \texttt{Visitor} template and match each type with its lambda expression. The partial specialization syntax used to process two parameter packs in sync is tricky, so we will work through it in steps. First of all, we need to declare the general template for our \texttt{LambdaVisitor} class:
+
+\begin{code}
+// Example 13
+template <typename Base, typename...>
+class LambdaVisitor;
+\end{code}
+
+Note that there is only one general parameter pack here, plus the base class for the visitor (in our case, it will be \texttt{PetVisitor}). This template must be declared, but it is never going to be used - we will provide a specialization for every case that needs to be handled. The first specialization is used when there is only one visitable type and one corresponding lambda expression:
+
+\begin{code}
+// Example 13
+template <typename Base, typename T1, typename F1>
+class LambdaVisitor<Base, Visitor<T1>, F1> :
+  private F1, public Base
+{
+  public:
+  LambdaVisitor(F1&& f1) : F1(std::move(f1)) {}
+  LambdaVisitor(const F1& f1) : F1(f1) {}
+  using Base::visit;
+  void visit(T1* t) override { return F1::operator()(t); }
+};
+\end{code}
+
+This specialization, in addition to handling the case where we have only one visitable type, is used as the last instantiation in every chain of recursive template instantiations. Since it is always the first base class in the recursive hierarchy of \texttt{LambdaVisitor} instantiations, it is the only one that directly inherits from the base Visitor class such as \texttt{PetVisitor}. Note that, even with a single \texttt{T1} visitable type, we use the \texttt{Visitor} template as a wrapper for it. This is done in preparation for the general case where we will have a list of types whose length is unknown. The two constructors store the \texttt{f1} lambda expression inside the \texttt{LambdaVisitor} class, using move instead of copy if possible. Finally, the \texttt{visit(T1*)} virtual function override simply forwards the call to the lambda expression. It may appear simpler, at first glance, to inherit publicly from \texttt{F1} and just agree to use the functional calling syntax (in other words, to rename all calls to \texttt{visit()} to calls to \texttt{operator()} everywhere). This is not going to work; we need the indirection because the \texttt{operator()} instance of the lambda expression itself cannot be a virtual function override. By the way, the \texttt{override} keyword here is invaluable in detecting bugs in code where the template is not inherited from the right base class or the virtual function declarations do not match exactly.
+
+The general case of any number of visitable types and lambda expressions is handled by this partial specialization, which explicitly deals with the first types in both lists, then recursively instantiates itself to process the rest of the lists:
+
+\begin{code}
+// Example 13
+template <typename Base,
+          typename T1, typename... T,
+          typename F1, typename... F>
+class LambdaVisitor<Base, Visitor<T1, T...>, F1, F...> :
+  private F1,
+  public LambdaVisitor<Base, Visitor<T ...>, F ...>
+{
+  public:
+  LambdaVisitor(F1&& f1, F&& ... f) :
+    F1(std::move(f1)),
+    LambdaVisitor<Base, Visitor<T...>, F...>(
+      std::forward<F>(f)...)
+  {}
+  LambdaVisitor(const F1& f1, F&& ... f) :
+    F1(f1),
+    LambdaVisitor<Base, Visitor<T...>, F...>(
+      std::forward<F>(f) ...)
+  {}
+  using LambdaVisitor<Base, Visitor<T ...>, F ...>::visit;
+  void visit(T1* t) override { return F1::operator()(t); }
+};
+\end{code}
+
+Again, we have two constructors that store the first lambda expression in the class and forward the rest to the next instantiation. One virtual function override is generated on each step of the recursion, always for the first type in the remaining list of the visitable classes. That type is then removed from the list, and the processing continues in the same manner until we reach the last instantiation, the one for a single visitable type.
+
+Since it is not possible to explicitly name the types of lambda expressions, we also cannot explicitly declare the type of the lambda visitor. Instead, the lambda expression types must be deduced by the template argument deduction, so we need a \texttt{lambda\_visitor()} template function that accepts multiple lambda expression arguments and constructs the \texttt{LambdaVisitor} object from all of them:
+
+\begin{code}
+// Example 13
+template <typename Base, typename ... F>
+auto lambda_visitor(F&& ... f) {
+  return LambdaVisitor<Base, Base, F...>(
+    std::forward<F>(f) ...);
+}
+\end{code}
+
+In C++17, the same can be accomplished with a deduction guide. Now that we have a class that stores any number of lambda expressions and binds each one to the corresponding \texttt{visit()} override, we can write lambda visitors just as easily as we write lambda expressions:
+
+\begin{code}
+// Example 13
+void walk(Pet& p) {
+  auto v(lambda_visitor<PetVisitor>(
+  [](Cat* c){std::cout << "Let the " << c->color()
+                         << " cat out" << std::endl;},
+  [](Dog* d){std::cout << "Take the " << d->color()
+                       << " dog for a walk" << std::endl;}
+  ));
+  p.accept(v);
+}
+\end{code}
+
+Note that, because of the way we declare the \texttt{visit()} function in the same class that inherits from the corresponding lambda expression, the order of the lambda expression in the argument list of the \texttt{lambda\_visitor()} function must match the order of classes in the list of types in \texttt{PetVisitor} definition. This restriction can be removed, if desired, at the cost of some additional complexity of the implementation.
+
+Another common way of dealing with type lists in C++ is to store them in a \texttt{std::tuple}: for example, we can use \texttt{std::tuple\textless{}Cat,\ Dog\textgreater{}} to represent a list consisting of the two types. Similarly, an entire parameter pack can be stored in a tuple:
+
+\begin{code}
+// Example 14
+template <typename Base, typename F1, typename... F>
+class LambdaVisitor<Base, std::tuple<F1, F...>> :
+  public F1, public LambdaVisitor<Base, std::tuple<F...>>;
+\end{code}
+
+You can compare examples 13 and 14 to see how to use \texttt{std::tuple} to store a type list.
+
+We have now seen how the common fragments of the visitor code can be turned into reusable templates, and how this, in turn, lets us create a lambda visitor. But we have not forgotten the other visitor implementation we learned in this chapter, the Acyclic Visitor pattern. Let's see how it, too, can benefit from the modern C++ language features.
+
+\subsection{Generic Acyclic Visitor}
+
+The Acyclic Visitor pattern does not need a base class with a list of all visitable types. However, it has its own share of boilerplate code. First of all, each visitable type needs the \texttt{accept()} member function, and it has more code than the similar function in the original Visitor pattern:
+
+\begin{code}
+// Example 10
+class Cat : public Pet {
+  public:
+  void accept(PetVisitor& v) override {
+    if (CatVisitor* cv = dynamic_cast<CatVisitor*>(&v)) {
+      cv->visit(this);
+    } else { // Handle error
+      assert(false);
+    }
+  }
+};
+\end{code}
+
+Assuming that the error handling is uniform, this function is repeated over and over for different types of visitors, each corresponding to its visitable type (such as \texttt{CatVisitor} here). Then there is the per-type Visitor class itself, for example:
+
+\begin{code}
+class CatVisitor {
+  public:
+  virtual void visit(Cat* c) = 0;
+};
+\end{code}
+
+Again, this code is pasted all over the program, with slight modifications. Let's convert this error-prone code duplication into easy-to-maintain reusable code.
+
+We will need to create some infrastructure first. The Acyclic Visitor pattern bases its hierarchy on a common base class for all visitors, such as the following:
+
+\begin{code}
+class PetVisitor {
+  public:
+  virtual ~PetVisitor() {}
+};
+\end{code}
+
+Note that there is nothing specific to the \texttt{Pet} hierarchy here. With a better name, this class can serve as a base class for any visitor hierarchy:
+
+\begin{code}
+// Example 15
+class VisitorBase {
+  public:
+  virtual ~VisitorBase() {}
+};
+\end{code}
+
+We also need a template to generate all these Visitor base classes specific to visitable types, to replace the near-identical \texttt{CatVisitor}, \texttt{DogVisitor}, and so on. Since all that is needed from these classes is the declaration of the pure virtual \texttt{visit()} method, we can parameterize the template by the visitable type:
+
+\begin{code}
+// Example 15
+template <typename Visitable> class Visitor {
+  public:
+  virtual void visit(Visitable* p) = 0;
+};
+\end{code}
+
+The base visitable class for any class hierarchy now accepts visitors using the common \texttt{VisitorBase} base class:
+
+\begin{code}
+// Example 15
+class Pet {
+  ...
+  virtual void accept(VisitorBase& v) = 0;
+};
+\end{code}
+
+Instead of deriving each visitable class directly from \texttt{Pet} and pasting a copy of the \texttt{accept()} method, we introduce an intermediate template base class that can generate this method with the correct types:
+
+\begin{code}
+// Example 15
+template <typename Visitable>
+class PetVisitable : public Pet {
+  public:
+  using Pet::Pet;
+  void accept(VisitorBase& v) override {
+    if (Visitor<Visitable>* pv =
+        dynamic_cast<Visitor<Visitable>*>(&v)) {
+      pv->visit(static_cast<Visitable*>(this));
+    } else { // Handle error
+      assert(false);
+    }
+ }
+};
+\end{code}
+
+This is the only copy of the \texttt{accept()} function we need to write, and it contains the preferred error handling implementation for our application to deal with cases when the visitor is not accepted by the base class (recall that Acyclic Visitor allows partial visitation, where some combinations of the visitor and visitable are not supported). Just like for the regular Visitor, the intermediate CRTP base class makes it hard to use deep hierarchies with this approach.
+
+The concrete visitable classes inherit from the common \texttt{Pet} base class indirectly, through the intermediate \texttt{PetVisitable} base class, which also provides them with the visitable interface. The argument to the \texttt{PetVisitable} template is the derived class itself (again, we see the CRTP in action):
+
+\begin{code}
+// Example 15
+class Cat : public PetVisitable<Cat> {
+  using PetVisitable<Cat>::PetVisitable;
+};
+class Dog : public PetVisitable<Dog> {
+  using PetVisitable<Dog>::PetVisitable;
+};
+\end{code}
+
+It is, of course, not mandatory to use the same base class constructors for all derived classes, as custom constructors can be defined in every class as needed.
+
+The only thing left is to implement the Visitor class. Recall that the specific visitor in the Acyclic Visitor pattern inherits from the common visitor base and each of the visitor classes that represent the supported visitable types. That is not going to change, but we now have a way to generate these visitor classes on demand:
+
+\begin{code}
+// Example 15
+class FeedingVisitor : public VisitorBase,
+                       public Visitor<Cat>,
+                       public Visitor<Dog>
+{
+  public:
+  void visit(Cat* c) override {
+    std::cout << "Feed tuna to the " << c->color()
+              << " cat" << std::endl;
+  }
+  void visit(Dog* d) override {
+    std::cout << "Feed steak to the " << d->color()
+              << " dog" << std::endl;
+  }
+};
+\end{code}
+
+Let's look back at the work we have done - the parallel hierarchy of visitor classes no longer needs to be typed explicitly; instead, they are generated as needed. The repetitive \texttt{accept()} functions are reduced to the single \texttt{PetVisitable} class template. Still, we have to write this template for every new visitable class hierarchy. We can generalize this too, and create a single reusable template for all hierarchies, parameterized by the base visitable class:
+
+\begin{code}
+// Example 16
+template <typename Base, typename Visitable>
+class VisitableBase : public Base {
+  public:
+  using Base::Base;
+  void accept(VisitorBase& vb) override {
+    if (Visitor<Visitable>* v = 
+        dynamic_cast<Visitor<Visitable>*>(&vb)) {
+      v->visit(static_cast<Visitable*>(this));
+    } else { // Handle error
+      assert(false);
+    }
+  }
+};
+\end{code}
+
+Now, for every visitable class hierarchy, we just need to create a template alias:
+
+\begin{code}
+// Example 16
+template <typename Visitable>
+using PetVisitable = VisitableBase<Pet, Visitable>;
+\end{code}
+
+We can make one more simplification and allow the programmer to specify the list of visitable classes as a list of types, instead of inheriting from \texttt{Visitor\textless{}Cat\textgreater{}}, \texttt{Visitor\textless{}Dog\textgreater{}}, and so on, as we have done previously. This requires a variadic template to store the list of types. The implementation is similar to the \texttt{LambdaVisitor} instance we saw earlier:
+
+\begin{code}
+// Example 17
+template <typename ... V> struct Visitors;
+template <typename V1>
+struct Visitors<V1> : public Visitor<V1> {};
+template <typename V1, typename ... V>
+struct Visitors<V1, V ...> : public Visitor<V1>,
+                             public Visitors<V ...> {};
+\end{code}
+
+We can use this wrapper template to shorten the declarations of the specific visitors:
+
+\begin{code}
+// Example 17
+class FeedingVisitor :
+  public VisitorBase, public Visitors<Cat, Dog>
+{
+  ...
+};
+\end{code}
+
+If desired, we can even hide \texttt{VisitorBase} in the definition of the \texttt{Visitors} template for the single type argument.
+
+We have now seen both the classic object-oriented Visitor pattern and its reusable implementations, made possible by the generic programming tools of C++. In the earlier chapters, we have seen how some patterns can be applied entirely at compile time. Let's now consider whether the same can be done with the Visitor pattern.
+
+\section{Compile-time Visitor}
+
+In this section, we will analyze the possibility of using the Visitor pattern at compile time, in a similar fashion to, say, the application of the Strategy pattern that leads to policy-based design.
+
+First of all, the multiple dispatch aspect of the Visitor pattern becomes trivial when used in the template context:
+
+\begin{code}
+template <typename T1, typename T2> auto f(T1 t1, T2 t2);
+\end{code}
+
+A template function can easily run a different algorithm for any combination of the \texttt{T1} and \texttt{T2} types. Unlike the run-time polymorphism implemented with virtual functions, dispatching the call differently based on two or more types comes at no extra cost (other than writing code for all the combinations we need to handle, of course). Based on this observation, we can easily mimic the classic Visitor pattern at compile time:
+
+\begin{code}
+// Example 18
+class Pet {
+  std::string color_;
+  public:
+  Pet(std::string_view color) : color_(color) {}
+  const std::string& color() const { return color_; }
+  template <typename Visitable, typename Visitor>
+  static void accept(Visitable& p, Visitor& v) {
+    v.visit(p);
+  }
+};
+\end{code}
+
+The \texttt{accept()} function is now a template and a static member function - the actual type of the first argument, the visitable object derived from the \texttt{Pet} class, will be deduced at compile time. The concrete visitable classes are derived from the base class in the usual way:
+
+\begin{code}
+// Example 18
+class Cat : public Pet {
+  public:
+  using Pet::Pet;
+};
+class Dog : public Pet {
+  public:
+  using Pet::Pet;
+};
+\end{code}
+
+The visitors do not need to be derived from a common base since we now resolve the types at compile time:
+
+\begin{code}
+// Example 18
+class FeedingVisitor {
+  public:
+  void visit(Cat& c) {
+    std::cout << "Feed tuna to the " << c.color()
+              << " cat" << std::endl;
+  }
+  void visit(Dog& d) {
+    std::cout << "Feed steak to the " << d.color()
+              << " dog" << std::endl;
+  }
+};
+\end{code}
+
+The visitable classes can accept any visitor that has the correct interface, that is, \texttt{visit()} overloads for all classes in the hierarchy:
+
+\begin{code}
+// Example 18
+Cat c("orange");
+Dog d("brown");
+FeedingVisitor fv;
+Pet::accept(c, fv);
+Pet::accept(d, fv);
+\end{code}
+
+Of course, any function that accepts the visitor arguments and needs to support multiple visitors would have to be made a template as well (it is no longer sufficient to have a common base class, which only helps to determine the actual object type at run time).
+
+The compile-time visitor solves the same problem as the classic visitor, it allows us to effectively add new member functions to a class without editing the class definition. It does, however, look much less exciting than the run-time version.
+
+More interesting possibilities arise when we combine the Visitor pattern with the Composition pattern. We have done this once already when we discussed the visitation of complex objects, especially in the context of the serialization problem. The reason this is particularly interesting is that it relates to the connection with one of the few \emph{big-ticket} features missing in C++; namely, the reflection. Reflection in programming is the ability of a program to examine and introspect its own source and then generate new behavior based on this introspection. Some programming languages, such as Delphi or Python, have native reflection capability, but C++ does not. Reflection is useful for solving many problems: for example, the serialization problem could be easily solved if we could make the compiler iterate over all data members of the object and serialize each one, recursively, until we reach the built-in types. We can implement something similar using a compile-time Visitor pattern.
+
+Again, we will consider the hierarchy of geometric objects. Since everything is now happening at compile time, we are not interested in the polymorphic nature of the classes (they could still use virtual functions if needed for runtime operations; we just won't be writing them or looking at them in this section). For example, here is the \texttt{Point} class:
+
+\begin{code}
+// Example 19
+class Point {
+  public:
+  Point() = default;
+  Point(double x, double y) : x_(x), y_(y) {}
+  template <typename This, typename Visitor>
+  static void accept(This& t, Visitor& v) {
+    v.visit(t.x_);
+    v.visit(t.y_);
+  }
+  private:
+  double x_ {};
+  double y_ {};
+};
+\end{code}
+
+The visitation is provided via the \texttt{accept()} function, as before, but it is class-specific now. The only reason we have the first template parameter, \texttt{This}, is to support both const and non-const operations easily: \texttt{This} can be \texttt{Point} or \texttt{const\ Point}. Any visitor to this class is sent to visit the two values that define the point, \texttt{x\_} and \texttt{y\_}. The visitor must have the appropriate interface, specifically, the \texttt{visit()} member function that accepts \texttt{double} arguments. Like most C++ template libraries, including the \textbf{Standard Template Library} (\textbf{STL}), this code is held together by conventions - there are no virtual functions to override or base classes to derive from, only the requirements on the interface of each class involved in the system. The more complex classes are composed of the simpler ones; for example, here is the \texttt{Line} class:
+
+\begin{code}
+// Example 19
+class Line {
+  public:
+  Line() = default;
+  Line(Point p1, Point p2) : p1_(p1), p2_(p2) {}
+  template <typename This, typename Visitor>
+  static void accept(This& t, Visitor& v) {
+    v.visit(t.p1_);
+    v.visit(t.p2_);
+  }
+  private:
+  Point p1_;
+  Point p2_;
+};
+\end{code}
+
+The \texttt{Line} class is composed of two points. At compile time, the visitor is directed to visit each point. That is the end of the involvement of the \texttt{Line} class; the \texttt{Point} class gets to determine how it is visited (as we have just seen, it also delegates the work to another visitor). Since we are not using runtime polymorphism anymore, the container classes that can hold geometries of different types now have to be templates:
+
+\begin{code}
+// Example 19
+template <typename G1, typename G2>
+class Intersection {
+  public:
+  Intersection() = default;
+  Intersection(G1 g1, G2 g2) : g1_(g1), g2_(g2) {}
+  template <typename This, typename Visitor>
+  static void accept(This& t, Visitor& v) {
+    v.visit(t.g1_);
+    v.visit(t.g2_);
+  }
+  private:
+  G1 g1_;
+  G2 g2_;
+};
+\end{code}
+
+We now have visitable types. We can use different kinds of visitors with this interface, not just serialization visitors. However, we are focused on serialization now. Previously, we have seen a visitor that converts objects into ASCII strings. Now let's serialize our objects as binary data, continuous streams of bits. The serialization visitor has access to a buffer of a certain size and writes the objects into that buffer, one \texttt{double} at a time:
+
+\begin{code}
+// Example 19
+class BinarySerializeVisitor {
+  public:
+  BinarySerializeVisitor(char* buffer, size_t size) :
+    buf_(buffer), size_(size) {}
+  void visit(double x) {
+    if (size_ < sizeof(x))
+      throw std::runtime_error("Buffer overflow");
+    memcpy(buf_, &x, sizeof(x));
+    buf_ += sizeof(x);
+    size_ -= sizeof(x);
+  }
+  template <typename T> void visit(const T& t) {
+    T::accept(t, *this);
+  }
+  private:
+  char* buf_;
+  size_t size_;
+};
+\end{code}
+
+The deserialization visitor reads memory from the buffer and copies it into the data members of the objects it restores:
+
+\begin{code}
+// Example 19
+class BinaryDeserializeVisitor {
+  public:
+  BinaryDeserializeVisitor(const char* buffer, size_t size)
+    : buf_(buffer), size_(size) {}
+  void visit(double& x) {
+    if (size_ < sizeof(x))
+      throw std::runtime_error("Buffer overflow");
+    memcpy(&x, buf_, sizeof(x));
+    buf_ += sizeof(x);
+    size_ -= sizeof(x);
+  }
+  template <typename T> void visit(T& t) {
+    T::accept(t, *this);
+  }
+  private:
+  const char* buf_;
+  size_t size_;
+};
+\end{code}
+
+Both visitors process built-in types directly by copying them to and from the buffer while letting the more complex types decide how the objects should be processed. In both cases, the visitors throw an exception if the size of the buffer is exceeded. Now we can use our visitors to, for example, send objects through a socket to another machine:
+
+\begin{code}
+// Example 19
+// On the sender machine:
+Line l = ...;
+Circle c = ...;
+Intersection<Circle, Circle> x = ...;
+char buffer[1024];
+BinarySerializeVisitor serializer(buffer, sizeof(buffer));
+serializer.visit(l);
+serializer.visit(c);
+serializer.visit(x);
+... send the buffer to the receiver ...
+// On the receiver machine:
+Line l;
+Circle c;
+Intersection<Circle, Circle> x;
+BinaryDeserializeVisitor deserializer(buffer, 
+  sizeof(buffer));
+deserializer.visit(l);
+deserializer.visit(c);
+deserializer.visit(x);
+\end{code}
+
+While we cannot implement universal reflection without language support, we can have classes reflect on their content in limited ways, such as this composite visitation pattern. There are also a few variations on the theme that we can consider.
+
+First of all, it is conventional to make the objects that have only one \emph{important} member function callable; in other words, instead of calling the member function, we invoke the object itself using the function call syntax. This convention dictates that the \texttt{visit()} member function should be called \texttt{operator()} instead:
+
+\begin{code}
+// Example 20
+class BinarySerializeVisitor {
+  public:
+  void operator()(double x);
+  template <typename T> void operator()(const T& t);
+  ...
+};
+\end{code}
+
+The visitable classes now call the visitors like functions:
+
+\begin{code}
+// Example 20
+class Point {
+  public:
+  static void accept(This& t, Visitor& v) {
+    v(t.x_);
+    v(t.y_);
+  }
+  ...
+};
+\end{code}
+
+It may also be convenient to implement wrapper functions to invoke visitors on more than one object:
+
+\begin{code}
+// Example 20
+SomeVisitor v;
+Object1 x; Object2 y; ...
+visitation(v, x, y, z);
+\end{code}
+
+This is easy to implement using a variadic template:
+
+\begin{code}
+// Example 20
+template <typename V, typename T>
+void visitation(V& v, T& t) {
+  v(t);
+}
+template <typename V, typename T, typename... U>
+void visitation(V& v, T& t, U&... u) {
+  v(t);
+  visitation(v, u ...);
+}
+\end{code}
+
+In C++17, we have fold expressions and do not need a recursive template:
+
+\begin{code}
+// Example 20
+template <typename V, typename T, typename... U>
+void visitation(V& v, U&... u) {
+  (v(u), ...);
+}
+\end{code}
+
+In C++14 we can mimic fold expressions using a hack based on \texttt{std::initializer\_list}:
+
+\begin{code}
+template <typename V, typename T, typename... U>
+void visitation(V& v, U&... u) {
+  using fold = int[];
+  (void)fold { 0, (v(u), 0)... };
+}
+\end{code}
+
+This works, but it is not going to win any prizes for clarity or maintainability.
+
+The compile-time visitors are, in general, easier to implement because we don't have to do anything clever to get multiple dispatch, as the templates provide it out of the box. We just need to come up with interesting applications of the pattern, such as the serialization/deserialization problem we just explored.
+
+\section{Visitor in C++17}
+
+C++17 introduced a major change in the way we use the Visitor pattern with the addition of \texttt{std::variant} to the standard library. The \texttt{std::variant} template is essentially a ``smart union:'' \texttt{std::variant\textless{}T1,\ T2,\ T3\textgreater{}} is similar to \texttt{union\ \{\ T1\ v1;\ T2\ v2;\ T3\ v3;\ \}} in that both can store a value of one of the specified types and only one value can be stored at a time. The key difference is that a variant object knows which type it contains, while with a union the programmer is wholly responsible for reading the same type as what was written earlier. It is undefined behavior to access a union as a type that differs from the one used to initialize it:
+
+\begin{code}
+union { int i; double d; std::string s; } u;
+u.i = 0;
+++u.i;               // OK
+std::cout << u.d;     // Undefined behavior
+\end{code}
+
+In contrast, \texttt{std::variant} offers a safe way to store values of different types in the same memory. It is easy to check at runtime which alternative type is currently stored in the variant, and accessing a variant as the wrong type throws an exception:
+
+\begin{code}
+std::variant<int, double, std::string> v;
+std::get<int>(v) = 0;     // Initialized as int
+std::cout << v.index();     // 0 is the index of int
+++std::get<0>(v);     // OK, int is 0th type
+std::get<1>(v);          // throws std::bad_variant_access
+\end{code}
+
+In many ways, \texttt{std::variant} offers capabilities similar to inheritance-based run-time polymorphism: both let us write code where the same variable name can refer to objects of different types at run time. The two major differences are: first, a \texttt{std::variant} does not require that all its types come from the same hierarchy (they need not be classes at all), and second, a variant object can store only one of the types listed in its declaration, while a base class pointer can point to any derived class. In other words, adding a new type to the hierarchy generally does not require recompilation of the code that uses the base class, while adding a new type to the variant requires changing the type of the variant object, so all code that refers to this object must be recompiled.
+
+In this section, we will focus on the use of \texttt{std::variant} for visitation. This capability is provided by the aptly named function \texttt{std::visit} that takes a callable and a variant:
+
+\begin{code}
+std::variant<int, double, std::string> v;
+struct Print {
+  void operator()(int i) { std::cout << i; }
+  void operator()(double d) { std::cout << d; }
+  void operator()(const std::string& s) { std::cout << s; }
+} print;
+std::visit(print, v);
+\end{code}
+
+To use with \texttt{std::visit}, the callable must have an \texttt{operator()} declared for every type that can be stored in the variant (otherwise the call will not compile). Of course, if the implementation is similar, we can use a template \texttt{operator()}, either in a function object or in a lambda:
+
+\begin{code}
+std::variant<int, double, std::string> v;
+std::visit([](const auto& x) { std::cout << x;}, v);
+\end{code}
+
+We will now reimplement our pet visitors using \texttt{std::variant} and \texttt{std::visit}. First of all, the \texttt{Pet} type is no longer the base class of the hierarchy but the variant, containing all possible type alternatives:
+
+\begin{code}
+// Example 21
+using Pet = 
+  std::variant<class Cat, class Dog, class Lorikeet>;
+\end{code}
+
+The types themselves do not need any visitation machinery. We may still use inheritance to reuse common implementation code, but there is no need for the types to belong to a single hierarchy:
+
+\begin{code}
+// Example 21
+class PetBase {
+  public:
+  PetBase(std::string_view color) : color_(color) {}
+  const std::string& color() const { return color_; }
+  private:
+  const std::string color_;
+};
+class Cat : private PetBase {
+  public:
+  using PetBase::PetBase;
+  using PetBase::color;
+};
+class Dog : private PetBase {
+  ... similar to Cat ...
+};
+class Lorikeet {
+  public:
+  Lorikeet(std::string_view body, std::string_view head) :
+    body_(body), head_(head) {}
+  std::string color() const {
+    return body_ + " and " + head_;
+  }
+  private:
+  const std::string body_;
+  const std::string head_;
+};
+\end{code}
+
+Now we need to implement some visitors. The visitors are just callable objects that can be invoked with every alternative type that might be stored in the variant:
+
+\begin{code}
+// Example 21
+class FeedingVisitor {
+  public:
+  void operator()(const Cat& c) {
+    std::cout << "Feed tuna to the " << c.color()
+              << " cat" << std::endl;
+  }
+  void operator()(const Dog& d) {
+    std::cout << "Feed steak to the " << d.color()
+              << " dog" << std::endl;
+  }
+  void operator()(const Lorikeet& l) {
+    std::cout << "Feed grain to the " << l.color()
+              << " bird" << std::endl;
+  }
+};
+\end{code}
+
+To apply a visitor to a variant, we call \texttt{std::visit}:
+
+\begin{code}
+// Example 21
+Pet p = Cat("orange");
+FeedingVisitor v;
+std::visit(v, p);
+\end{code}
+
+The variant \texttt{p} can contain any of the types we listed when we defined the type \texttt{Pet} (in this example, it's a \texttt{Cat}). We then invoke \texttt{std::visit} and the resulting action depends both on the visitor itself and on the type currently stored in the variant. The result looks a lot like a virtual function call, so we can say that \texttt{std::visit} allows us to add new polymorphic functions to a set of types (it would be misleading to call them ``virtual functions'' since the types do not have to even be classes).
+
+Whenever we see a callable object with the user-defined \texttt{operator()}, we must be thinking about lambdas. However, the use of lambdas with \texttt{std::visit} is not straightforward: we need the object to be callable with every type that can be stored in the variant, while a lambda has only one \texttt{operator()}. The first option is to make that operator a template (polymorphic lambdas) and handle all the possible types inside:
+
+\begin{code}
+// Example 22
+#define SAME(v, T) \
+  std::is_same_v<std::decay_t<decltype(v)>, T>
+auto fv = [](const auto& p) {
+  if constexpr (SAME(p, Cat)) {
+    std::cout << "Feed tuna to the " << p.color()
+              << " cat" << std::endl; }
+  else if constexpr (SAME(p, Dog)) {
+    std::cout << "Feed steak to the " << p.color()
+              << " dog" << std::endl; }
+  else if constexpr (SAME(p, Lorikeet)) {
+    std::cout << "Feed grain to the " << p.color()
+              << " bird" << std::endl; }
+  else abort();
+};
+\end{code}
+
+Here the lambda can be invoked with an argument of any type, and inside the body of the lambda, we use \texttt{if\ constexpr} to handle all types that can be stored in the variant. The disadvantage of this approach is that we no longer have compile-time validation that all possible types are handled by the visitor. The flip side of this is, however, that the code will now compile even if not all types are handled, and, as long as the visitor is not called with a type for which we have no action defined, the program will work fine. In this way, this version is similar to the acyclic visitor, while the previous implementation was similar to the regular visitor.
+
+It is also possible to implement the familiar set of overloaded \texttt{operator()} using lambdas and the technique for creating overload sets we have seen in \emph{Chapter 1, An Introduction to Inheritance and Polymorphism}:
+
+\begin{code}
+// Example 22
+template <typename... T> struct overloaded : T... {
+  using T::operator()...;
+};
+template <typename... T>
+overloaded( T...)->overloaded<T...>;
+auto pv = overloaded {
+  [](const Cat& c) {
+    std::cout << "Play with feather with the " << c.color()
+              << " cat" << std::endl; },
+  [](const Dog& d) {
+    std::cout << "Play fetch with the " << d.color()
+              << " dog" << std::endl; },
+  [](const Lorikeet& l) {
+    std::cout << "Teach words to the " << l.color()
+              << " bird" << std::endl; }
+};
+\end{code}
+
+This visitor is a class that inherits from all the lambdas and exposes their \texttt{operator()}, thus creating a set of overloads. It is used just like the visitor where we explicitly wrote each \texttt{operator()}:
+
+\begin{code}
+// Example 22
+Pet l = Lorikeet("yellow", "green");
+std::visit(pv, l);
+\end{code}
+
+So far, we have not used the full potential of \texttt{std::visit}: it can be called with any number of variant arguments. This allows us to perform an action that depends on more than two run-time conditions:
+
+\begin{code}
+// Example 23
+using Pet = std::variant<class Cat, class Dog>;
+Pet c1 = Cat("orange");
+Pet c2 = Cat("black");
+Pet d = Dog("brown");
+CareVisitor cv;
+std::visit(cv, c1, c2);      // Two cats
+std::visit(cv, c1, d);     // Cat and dog
+\end{code}
+
+The visitor has to be written in a way that handles all possible combinations of the types that can be stored in each variant:
+
+\begin{code}
+class CareVisitor {
+  public:
+  void operator()(const Cat& c1, const Cat& c2) {
+    std::cout << "Let the " << c1.color() << " and the "
+              << c2.color() << " cats play" << std::endl; }
+  void operator()(const Dog& d, const Cat& c) {
+    std::cout << "Keep the " << d.color()
+              << " dog safe from the vicious " << c.color()
+              << " cat" << std::endl; }
+  void operator()(const Cat& c, const Dog& d) {
+    (*this)(d, c);
+  }
+  void operator()(const Dog& d1, const Dog& d2) {
+    std::cout << "Take the " << d1.color() << " and the "
+              << d2.color() << " dogs for a walk"
+              << std::endl; }
+};
+\end{code}
+
+In practice, the only way it is feasible to write a callable for all possible type combinations is by using a template \texttt{operator()}, which works only if the visitor actions can be written in a generic way. Still, the ability to do multiple dispatch is a potentially useful feature of \texttt{std::visit} that goes beyond the double dispatch capability of the regular Visitor pattern.
+
+\section{Summary}
+
+In this chapter, we learned about the Visitor pattern and the different ways it can be implemented in C++. The classic object-oriented Visitor pattern allows us to effectively add a new virtual function to the entire class hierarchy without changing the source code of the classes. The hierarchy must be made visitable, but after that, any number of operations can be added, and their implementation is kept separate from the objects themselves. In the classic Visitor pattern implementation, the source code containing the visited hierarchy does not need to be changed, but it does need to be recompiled when a new class is added to the hierarchy. The Acyclic Visitor pattern solves this problem but at the cost of the additional dynamic cast. On the other hand, the Acyclic Visitor pattern also supports partial visitation - ignoring some visitor/visitable combinations - while the classic Visitor pattern requires that all combinations must at least be declared.
+
+For all visitor variants, the tradeoff for extensibility is the need to weaken the encapsulation and, frequently, grant external visitor classes access to what should be private data members.
+
+The Visitor pattern is often combined with other design patterns, in particular, the Composition pattern, to create complex visitable objects. The composite object delegates the visitation to its contained objects. This combined pattern is particularly useful when an object must be decomposed into its smallest building blocks; for example, for serialization.
+
+The classic Visitor pattern implements the double dispatch at run-time - during execution, the program selects which code to run based on two factors, the types of the visitor and the visitable objects. The pattern can be similarly used at compile time, where it provides a limited reflection capability.
+
+In C++17, \texttt{std::visit} can be used to extend the Visitor pattern to types not bound into a common hierarchy, and even to implement multiple dispatch.
+
+This chapter on the Visitor pattern used to conclude this book dedicated to C++ idioms and design patterns. But, like new stars, the birth of new patterns never stops -- new frontiers and new ideas bring with them new challenges to be solved and new solutions to be invented, and they evolve and develop until the programming community collectively arrives at something we can point to and say, with confidence, \emph{this is usually a good way to handle that problem}. We will elaborate on the strengths of each new approach, consider its drawbacks, and give it a name so we can concisely refer to the entire set of knowledge about the problem, its solutions, and its caveats. With that, a new pattern enters our design toolset and our programming vocabulary. To illustrate this process, in the next and final chapter, we have collected some of the patterns that emerged to address problems specific to concurrent programs.
+
+\section{Questions}
+
+\begin{enumerate}
+\item
+  What is the Visitor pattern?
+\item
+  What problem does the Visitor pattern solve?
+\item
+  What is double dispatch?
+\item
+  What are the advantages of the Acyclic Visitor pattern?
+\item
+  How does the Visitor pattern help implement serialization?
+\end{enumerate}
+

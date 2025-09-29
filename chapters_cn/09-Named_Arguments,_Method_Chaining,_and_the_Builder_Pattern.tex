@@ -1,0 +1,1359 @@
+% EN: ﻿\chapter{Named Arguments, Method Chaining, and the Builder Pattern}
+\Trans{﻿\chapter{Named Arguments, Method Chaining, and the Builder Pattern}}{}
+
+% EN: In this chapter, we are going to examine a solution to a very common C++ problem: too many arguments. No, we are not talking about the arguments between C++ programmers, such as whether to put curly braces at the end of the line or the start of the next one (we have no solution to that problem). This is the problem of C++ functions with too many arguments. If you have maintained a large C++ system long enough, you have seen it---functions start with simple declarations and, over time, grow additional arguments, often defaulted, to support new features.
+\Trans{In this chapter, we are going to examine a solution to a very common C++ problem: too many arguments. No, we are not talking about the arguments between C++ programmers, such as whether to put curly braces at the end of the line or the start of the next one (we have no solution to that problem). This is the problem of C++ functions with too many arguments. If you have maintained a large C++ system long enough, you have seen it---functions start with simple declarations and, over time, grow additional arguments, often defaulted, to support new features.}{}
+
+% EN: The following topics will be covered in this chapter:
+\Trans{The following topics will be covered in this chapter:}{}
+
+\begin{itemize}
+\item
+% EN:   What are the problems with long function declarations?
+\Trans{What are the problems with long function declarations?}{}
+\item
+% EN:   What is the alternative?
+\Trans{What is the alternative?}{}
+\item
+% EN:   What are the downsides of using the named arguments idiom?
+\Trans{What are the downsides of using the named arguments idiom?}{}
+\item
+% EN:   How can the named arguments idiom be generalized?
+\Trans{How can the named arguments idiom be generalized?}{}
+\end{itemize}
+
+\section{Technical requirements}
+
+% EN: Here is the example code: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter09.
+\Trans{Here is the example code: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter09.}{}
+
+% EN: Here is the Google Benchmark library: https://github.com/google/benchmark (see \emph{Chapter 4, Swap -- From Simple to Subtle}, for installation instructions).
+\Trans{Here is the Google Benchmark library: https://github.com/google/benchmark (see \emph{Chapter 4, Swap -- From Simple to Subtle}, for installation instructions).}{}
+
+% EN: The problem with arguments
+\Trans{The problem with arguments}{}
+
+% EN: Everyone who has worked on a sufficiently large C++ system at some point have had to add arguments to a function. To avoid breaking the existing code, the new argument is often given a default value which usually retains the old functionality. That works great the first time, is OK the second time, and then one has to start counting arguments on every function call. There are other problems with long function declarations as well, and if we want a better solution, it is worth our time to understand what they are before trying to solve them. We begin this section with a more in-depth analysis of the problem before moving on to the solution.
+\Trans{Everyone who has worked on a sufficiently large C++ system at some point have had to add arguments to a function. To avoid breaking the existing code, the new argument is often given a default value which usually retains the old functionality. That works great the first time, is OK the second time, and then one has to start counting arguments on every function call. There are other problems with long function declarations as well, and if we want a better solution, it is worth our time to understand what they are before trying to solve them. We begin this section with a more in-depth analysis of the problem before moving on to the solution.}{}
+
+\subsection{What's wrong with many arguments?}
+
+% EN: Whether the code that passes around a lot of arguments was written this way from the start or has grown \emph{organically}, it is fragile and vulnerable to programmer mistakes. The main problem is that there are, usually, many arguments of the same type, and they can be miscounted. Consider designing a civilization-building game---when a player creates a new city, a corresponding object is constructed. The player gets to choose what facilities to build in the city, and the game sets the options for available resources:
+\Trans{Whether the code that passes around a lot of arguments was written this way from the start or has grown \emph{organically}, it is fragile and vulnerable to programmer mistakes. The main problem is that there are, usually, many arguments of the same type, and they can be miscounted. Consider designing a civilization-building game---when a player creates a new city, a corresponding object is constructed. The player gets to choose what facilities to build in the city, and the game sets the options for available resources:}{}
+
+\begin{code}
+% EN: class City {
+  public:
+  enum center_t { KEEP, PALACE, CITADEL  };
+  City(size_t number_of_buildings,
+       size_t number_of_towers,
+       size_t guard_strength,
+       center_t center,
+       bool with_forge,
+       bool with_granary,
+       bool has_fresh_water,
+       bool is_coastal,
+       bool has_forest);
+  ...
+ };
+\Trans{class City { public: enum center_t { KEEP, PALACE, CITADEL }; City(size_t number_of_buildings, size_t number_of_towers, size_t guard_strength, center_t center, bool with_forge, bool with_granary, bool has_fresh_water, bool is_coastal, bool has_forest); ... };}{}
+
+\end{code}
+
+% EN: It looks like we have taken care of everything. To start the game, let's give each player a city with a keep, a guard tower, two buildings, and a guard company:
+\Trans{It looks like we have taken care of everything. To start the game, let's give each player a city with a keep, a guard tower, two buildings, and a guard company:}{}
+
+\begin{code}
+% EN: City Capital(2, 1, 1, City::KEEP,
+             false, false, false, false);
+\Trans{City Capital(2, 1, 1, City::KEEP, false, false, false, false);}{}
+
+\end{code}
+
+% EN: Can you see the mistake? The compiler, fortunately, can---not enough arguments. Since the compiler won't let us make a mistake here, this is no big deal, we just need to add the argument for \texttt{has\_forest}. Also, let's say the game placed the city near a river, so it has water now:
+\Trans{Can you see the mistake? The compiler, fortunately, can---not enough arguments. Since the compiler won't let us make a mistake here, this is no big deal, we just need to add the argument for \texttt{has\_forest}. Also, let's say the game placed the city near a river, so it has water now:}{}
+
+\begin{code}
+% EN: City Capital(2, 1, 1, City::KEEP,
+             false, true, false, false, false);
+\Trans{City Capital(2, 1, 1, City::KEEP, false, true, false, false, false);}{}
+
+\end{code}
+
+% EN: That was easy ... Oops! We now have the city on the river but without fresh water (just what is in that river?). At least the townsfolk won't starve, thanks to the free granary they accidentally received. That error---where the \texttt{true} value was passed to the wrong parameter---will have to be found during debugging. Also, this code is quite verbose, and we may find ourselves typing the same values over and over. Maybe the game tries to place cities near the rivers and forests by default? OK then:
+\Trans{That was easy ... Oops! We now have the city on the river but without fresh water (just what is in that river?). At least the townsfolk won't starve, thanks to the free granary they accidentally received. That error---where the \texttt{true} value was passed to the wrong parameter---will have to be found during debugging. Also, this code is quite verbose, and we may find ourselves typing the same values over and over. Maybe the game tries to place cities near the rivers and forests by default? OK then:}{}
+
+\begin{code}
+% EN: class City {
+  public:
+  enum center_t { KEEP, PALACE, CITADEL  };
+  City(size_t number_of_buildings,
+       size_t number_of_towers,
+       size_t guard_strength,
+       enter_t center,
+       bool with_forge,
+       bool with_granary,
+       bool has_fresh_water = true,
+       bool is_coastal = false,
+       bool has_forest = true);
+  ...
+ };
+\Trans{class City { public: enum center_t { KEEP, PALACE, CITADEL }; City(size_t number_of_buildings, size_t number_of_towers, size_t guard_strength, enter_t center, bool with_forge, bool with_granary, bool has_fresh_water = true, bool is_coastal = false, bool has_forest = true); ... };}{}
+
+\end{code}
+
+% EN: Now, let's go back to our first attempt to create a city---it now compiles, one argument short, and we are none the wiser that we miscounted the arguments. The game is a great success, and, in the next update, we get an exciting new building---a temple! We need to add a new argument to the constructor, of course. It makes sense to add it after \texttt{with\_granary}, with all the other buildings, and before the terrain features. But then we have to edit every call to the \texttt{City} constructor. What is worse, it is very easy to make a mistake since the \texttt{false} for \emph{no temple} looks, to both the programmer and the compiler, exactly like the \texttt{false} for \emph{no fresh water}. The new argument has to be inserted in the right place, in a long line of very similarly-looking values.
+\Trans{Now, let's go back to our first attempt to create a city---it now compiles, one argument short, and we are none the wiser that we miscounted the arguments. The game is a great success, and, in the next update, we get an exciting new building---a temple! We need to add a new argument to the constructor, of course. It makes sense to add it after \texttt{with\_granary}, with all the other buildings, and before the terrain features. But then we have to edit every call to the \texttt{City} constructor. What is worse, it is very easy to make a mistake since the \texttt{false} for \emph{no temple} looks, to both the programmer and the compiler, exactly like the \texttt{false} for \emph{no fresh water}. The new argument has to be inserted in the right place, in a long line of very similarly-looking values.}{}
+
+% EN: Of course, the existing game code works without temples, so they are only needed in the new updated code. There is some value in not disturbing existing code unless necessary. We could do that if we added the new argument at the end and gave it the default value, so any constructor call that was not changed still creates the exact same city as before:
+\Trans{Of course, the existing game code works without temples, so they are only needed in the new updated code. There is some value in not disturbing existing code unless necessary. We could do that if we added the new argument at the end and gave it the default value, so any constructor call that was not changed still creates the exact same city as before:}{}
+
+\begin{code}
+% EN: class City {
+  public:
+  enum center_t { KEEP, PALACE, CITADEL  };
+  City(size_t number_of_buildings,
+       size_t number_of_towers,
+       size_t guard_strength,
+       center_t center,
+       bool with_forge,
+       bool with_granary,
+       bool has_fresh_water = true,
+       bool is_coastal = false,
+       bool has_forest = true,
+       bool with_temple = false);
+  ...
+ };
+\Trans{class City { public: enum center_t { KEEP, PALACE, CITADEL }; City(size_t number_of_buildings, size_t number_of_towers, size_t guard_strength, center_t center, bool with_forge, bool with_granary, bool has_fresh_water = true, bool is_coastal = false, bool has_forest = true, bool with_temple = false); ... };}{}
+
+\end{code}
+
+% EN: But now, we let short-term convenience dictate our long-term interface design. The parameters no longer have even a logical grouping, and in the long run, mistakes are even more likely. Also, we did not fully solve the problem of not updating the code that does not need to change---the next release adds a new terrain, desert, and with it, another argument:
+\Trans{But now, we let short-term convenience dictate our long-term interface design. The parameters no longer have even a logical grouping, and in the long run, mistakes are even more likely. Also, we did not fully solve the problem of not updating the code that does not need to change---the next release adds a new terrain, desert, and with it, another argument:}{}
+
+\begin{code}
+% EN: class City {
+  public:
+  enum center_t { KEEP, PALACE, CITADEL  };
+  City(size_t number_of_buildings,
+       size_t number_of_towers,
+       size_t guard_strength,
+       center_t center,
+       bool with_forge,
+       bool with_granary,
+       bool is_coastal = false,
+       bool has_forest = true,
+       bool with_temple = false,
+       bool is_desert = false);
+  ...
+ };
+\Trans{class City { public: enum center_t { KEEP, PALACE, CITADEL }; City(size_t number_of_buildings, size_t number_of_towers, size_t guard_strength, center_t center, bool with_forge, bool with_granary, bool is_coastal = false, bool has_forest = true, bool with_temple = false, bool is_desert = false); ... };}{}
+
+\end{code}
+
+% EN: Once started, we have to give default values to all new arguments added at the end. Also, in order to create a city in the desert, we also have to specify whether it has a temple. There is no logical reason why it has to be this way, but we are bound by the process in which the interface evolved. The situation gets even worse when you consider that many types we used are convertible to each other:
+\Trans{Once started, we have to give default values to all new arguments added at the end. Also, in order to create a city in the desert, we also have to specify whether it has a temple. There is no logical reason why it has to be this way, but we are bound by the process in which the interface evolved. The situation gets even worse when you consider that many types we used are convertible to each other:}{}
+
+\begin{code}
+% EN: City Capital(2, 1, false, City::KEEP,
+             false, true, false, false, false);
+\Trans{City Capital(2, 1, false, City::KEEP, false, true, false, false, false);}{}
+
+\end{code}
+
+% EN: This creates a city with zero guard companies and not whatever the programmer expected to disable when they set the third argument to \texttt{false}. Even \texttt{enum} types do not offer full protection. You probably noticed that all new cities usually start as a keep, so it would make sense to have that as the default as well:
+\Trans{This creates a city with zero guard companies and not whatever the programmer expected to disable when they set the third argument to \texttt{false}. Even \texttt{enum} types do not offer full protection. You probably noticed that all new cities usually start as a keep, so it would make sense to have that as the default as well:}{}
+
+\begin{code}
+% EN: // Example 01
+class City {
+  public:
+  enum center_t { KEEP, PALACE, CITADEL  };
+  City(size_t number_of_buildings,
+       size_t number_of_towers,
+       size_t guard_strength,
+       center_t center = KEEP,
+       bool with_forge = false,
+       bool with_granary = false,
+       bool has_fresh_water = true,
+       bool is_coastal = false,
+       bool has_forest = true,
+       bool with_temple = false,
+       bool is_desert = false);
+  ...
+ };
+\Trans{// Example 01 class City { public: enum center_t { KEEP, PALACE, CITADEL }; City(size_t number_of_buildings, size_t number_of_towers, size_t guard_strength, center_t center = KEEP, bool with_forge = false, bool with_granary = false, bool has_fresh_water = true, bool is_coastal = false, bool has_forest = true, bool with_temple = false, bool is_desert = false); ... };}{}
+
+\end{code}
+
+% EN: Now, we don't have to type as many arguments and might even avoid some mistakes (if you don't write arguments, you can't write them in the wrong order). But, we can make new ones:
+\Trans{Now, we don't have to type as many arguments and might even avoid some mistakes (if you don't write arguments, you can't write them in the wrong order). But, we can make new ones:}{}
+
+\begin{code}
+% EN: City Capital(2, 1, City::CITADEL);
+\Trans{City Capital(2, 1, City::CITADEL);}{}
+\end{code}
+
+% EN: The two guard companies we just hired (because the numerical value of \texttt{CITADEL} is \texttt{2}) will find themselves quite short on space in the lowly keep (which we intended to change but did not). The \texttt{enum\ class} of C++11 offers better protection since each one is a different type without conversions to integers, but the overall problem remains. As we have seen, there are two problems with passing a lot of values to C++ functions as separate arguments. First, it creates very long declarations and function calls that are error-prone. Second, if we need to add a value or change the type of a parameter, there is a lot of code to be edited. The solution to both problems existed even before C++ was created; it comes from C---use aggregates---that is, structs---to combine many values into one parameter.
+\Trans{The two guard companies we just hired (because the numerical value of \texttt{CITADEL} is \texttt{2}) will find themselves quite short on space in the lowly keep (which we intended to change but did not). The \texttt{enum\ class} of C++11 offers better protection since each one is a different type without conversions to integers, but the overall problem remains. As we have seen, there are two problems with passing a lot of values to C++ functions as separate arguments. First, it creates very long declarations and function calls that are error-prone. Second, if we need to add a value or change the type of a parameter, there is a lot of code to be edited. The solution to both problems existed even before C++ was created; it comes from C---use aggregates---that is, structs---to combine many values into one parameter.}{}
+
+\subsection{Aggregate parameters}
+
+% EN: With aggregate parameters, we create a struct or a class that contains all the values, instead of adding one parameter per value. We don't have to be limited to one aggregate; for example, our city may take several structs, one for all terrain-related features that the game sets, and another for all features that the player controls directly:
+\Trans{With aggregate parameters, we create a struct or a class that contains all the values, instead of adding one parameter per value. We don't have to be limited to one aggregate; for example, our city may take several structs, one for all terrain-related features that the game sets, and another for all features that the player controls directly:}{}
+
+\begin{code}
+% EN: struct city_features_t {
+  size_t number_of_buildings = 1;
+  size_t number_of_towers = 0;
+  size_t guard_strength = 0;
+  enum center_t { KEEP, PALACE, CITADEL  };
+  center_t center = KEEP;
+  bool with_forge = false;
+  bool with_granary = false;
+  bool with_temple = false;
+ };
+struct terrain_features_t {
+  bool has_fresh_water = true;
+  bool is_coastal = false;
+  bool has_forest = true;
+  bool is_desert = false;
+ };
+class City {
+  public:
+  City(city_features_t city_features,
+       terrain_features_t terrain_features);
+  ...
+ };
+\Trans{struct city_features_t { size_t number_of_buildings = 1; size_t number_of_towers = 0; size_t guard_strength = 0; enum center_t { KEEP, PALACE, CITADEL }; center_t center = KEEP; bool with_forge = false; bool with_granary = false; bool with_temple = false; }; struct terrain_features_t { bool has_fresh_water = true; bool is_coastal = false; bool has_forest = true; bool is_desert = false; }; class City { public: City(city_features_t city_features, terrain_features_t terrain_features); ... };}{}
+
+\end{code}
+
+% EN: This solution has many advantages. First of all, assigning values to the arguments can be done explicitly, by name, and is very visible (and very verbose):
+\Trans{This solution has many advantages. First of all, assigning values to the arguments can be done explicitly, by name, and is very visible (and very verbose):}{}
+
+\begin{code}
+% EN: city_features_t city_features;
+city_features.number_of_buildings = 2;
+city_features.center = city_features::KEEP;
+...
+terrain_features_t terrain_features;
+terrain_features.has_fresh_water = true;
+...
+City Capital(city_features, terrain_features);
+\Trans{city_features_t city_features; city_features.number_of_buildings = 2; city_features.center = city_features::KEEP; ... terrain_features_t terrain_features; terrain_features.has_fresh_water = true; ... City Capital(city_features, terrain_features);}{}
+
+\end{code}
+
+% EN: It is much easier to see what each argument's value is, and mistakes are much less likely (the alternative, aggregate initialization of the structs, only moves the problem from one initialization to the other). If we need to add a new feature, most of the time we just have to add a new data member to one of the aggregate types. Only the code that actually deals with the new argument has to be updated; all the functions and classes that simply pass the arguments and forward them do not need to change at all. We can even give the aggregate types default values to provide default values for all arguments, as we have done in the last example.
+\Trans{It is much easier to see what each argument's value is, and mistakes are much less likely (the alternative, aggregate initialization of the structs, only moves the problem from one initialization to the other). If we need to add a new feature, most of the time we just have to add a new data member to one of the aggregate types. Only the code that actually deals with the new argument has to be updated; all the functions and classes that simply pass the arguments and forward them do not need to change at all. We can even give the aggregate types default values to provide default values for all arguments, as we have done in the last example.}{}
+
+% EN: This is, overall, an excellent solution to the problem of functions with many parameters. However, it has one drawback: the aggregates have to be explicitly created and initialized, line by line. This works out fine for many cases, especially when these classes and structs represent state variables that we are going to keep for a long time. But, when used purely as parameter containers, they create unnecessarily verbose code, starting from the fact that the aggregate variable must have a name. We don't really need that name, as we are going to use it only once to call the function, but we have to make one up. It would be tempting just to use a temporary variable:
+\Trans{This is, overall, an excellent solution to the problem of functions with many parameters. However, it has one drawback: the aggregates have to be explicitly created and initialized, line by line. This works out fine for many cases, especially when these classes and structs represent state variables that we are going to keep for a long time. But, when used purely as parameter containers, they create unnecessarily verbose code, starting from the fact that the aggregate variable must have a name. We don't really need that name, as we are going to use it only once to call the function, but we have to make one up. It would be tempting just to use a temporary variable:}{}
+
+\begin{code}
+% EN: struct city_features_t {
+  size_t number_of_buildings = 1;
+  size_t number_of_towers = 0;
+  size_t guard_strength = 0;
+  enum center_t { KEEP, PALACE, CITADEL  };
+  center_t center = KEEP;
+  bool with_forge = false;
+  bool with_granary = false;
+  bool with_temple = false;
+ };
+struct terrain_features_t {
+  bool has_fresh_water = true;
+  bool is_coastal = false;
+  bool has_forest = true;
+  bool is_desert = false;
+ };
+City Capital({2, 1, 0, KEEP, true, false, false },
+             {true, false, false, true });
+\Trans{struct city_features_t { size_t number_of_buildings = 1; size_t number_of_towers = 0; size_t guard_strength = 0; enum center_t { KEEP, PALACE, CITADEL }; center_t center = KEEP; bool with_forge = false; bool with_granary = false; bool with_temple = false; }; struct terrain_features_t { bool has_fresh_water = true; bool is_coastal = false; bool has_forest = true; bool is_desert = false; }; City Capital({2, 1, 0, KEEP, true, false, false}, {true, false, false, true});}{}
+
+\end{code}
+
+% EN: This works, but it brings us full circle, right to where we started; a function with a long list of easily mixed Boolean arguments. The fundamental problem we encounter is that C++ functions have positional arguments, and we are trying to come up with something that would let us specify arguments by name. Aggregate objects resolve this problem mostly as a side effect, and if the overall design benefits from collecting a group of values into one class, you should certainly do it. However, as a solution specifically for the problem of named arguments, with no other, more permanent reason to group the values together, they fall short. We will now see how this deficiency can be addressed.
+\Trans{This works, but it brings us full circle, right to where we started; a function with a long list of easily mixed Boolean arguments. The fundamental problem we encounter is that C++ functions have positional arguments, and we are trying to come up with something that would let us specify arguments by name. Aggregate objects resolve this problem mostly as a side effect, and if the overall design benefits from collecting a group of values into one class, you should certainly do it. However, as a solution specifically for the problem of named arguments, with no other, more permanent reason to group the values together, they fall short. We will now see how this deficiency can be addressed.}{}
+
+\section{Named arguments in C++}
+
+% EN: We have seen how collecting logically related values into aggregate objects gives us a side benefit; we can pass these values to functions and access them by name instead of by their order in a long list. The key is \emph{logically related}, though; aggregating values for no reason other than they happen to be used together in one function call creates unnecessary objects with names we would rather not have to invent. We need a way to create temporary aggregates, preferably without explicit names or declarations. We have a solution to this problem, and had it for a long time in C++; all it needs is a fresh look from a different perspective, which we are about to take now.
+\Trans{We have seen how collecting logically related values into aggregate objects gives us a side benefit; we can pass these values to functions and access them by name instead of by their order in a long list. The key is \emph{logically related}, though; aggregating values for no reason other than they happen to be used together in one function call creates unnecessary objects with names we would rather not have to invent. We need a way to create temporary aggregates, preferably without explicit names or declarations. We have a solution to this problem, and had it for a long time in C++; all it needs is a fresh look from a different perspective, which we are about to take now.}{}
+
+\subsection{Method chaining}
+
+% EN: Method chaining is a borrowed C++ technique; it originates in \textbf{Smalltalk}. Its main purpose is to eliminate unnecessary local variables. You have used method chaining already, although you may not have realized it. Consider this code that you have probably written many times:
+\Trans{Method chaining is a borrowed C++ technique; it originates in \textbf{Smalltalk}. Its main purpose is to eliminate unnecessary local variables. You have used method chaining already, although you may not have realized it. Consider this code that you have probably written many times:}{}
+
+\begin{code}
+% EN: // Example 02
+int i, j;
+std::cout << i << j;
+\Trans{// Example 02 int i, j; std::cout << i << j;}{}
+
+\end{code}
+
+% EN: The last line invoked the inserter operator \texttt{\textless{}\textless{}} twice. The first time it is invoked on the object on the left-hand side of the operator, \texttt{std::cout}. What object is the second call on? In general, the operator syntax is just a way to call a function named \texttt{operator\textless{}\textless{}()}. Usually, this particular operator is a non-member function, but the \texttt{std::ostream} class has several member function overloads as well, and one of them is for \texttt{int} values. So, the last line really is this:
+\Trans{The last line invoked the inserter operator \texttt{\textless{}\textless{}} twice. The first time it is invoked on the object on the left-hand side of the operator, \texttt{std::cout}. What object is the second call on? In general, the operator syntax is just a way to call a function named \texttt{operator\textless{}\textless{}()}. Usually, this particular operator is a non-member function, but the \texttt{std::ostream} class has several member function overloads as well, and one of them is for \texttt{int} values. So, the last line really is this:}{}
+
+\begin{code}
+% EN: // Example 02-
+std::cout.operator<<(i).operator<<(j);
+\Trans{// Example 02- std::cout.operator<<(i).operator<<(j);}{}
+
+\end{code}
+
+% EN: The second call to \texttt{operator\textless{}\textless{}()} is done on the result of the first one. The equivalent C++ code is this:
+\Trans{The second call to \texttt{operator\textless{}\textless{}()} is done on the result of the first one. The equivalent C++ code is this:}{}
+
+\begin{code}
+% EN: // Example 02
+auto& out1 = std::cout.operator(i);
+out1.operator<<(j);
+\Trans{// Example 02 auto& out1 = std::cout.operator(i); out1.operator<<(j);}{}
+
+\end{code}
+
+% EN: This is the method chaining---the call to one method function returns the object on which the next method should be called. In the case of \texttt{std::cout}, the member \texttt{operator\textless{}\textless{}()} returns a reference to the object itself. By the way, the non-member \texttt{operator\textless{}\textless{}()} does the same, only instead of the implicit argument \texttt{this}, it has the stream object as an explicit first argument. Now, we can use method chaining to eliminate the explicitly named argument object.
+\Trans{This is the method chaining---the call to one method function returns the object on which the next method should be called. In the case of \texttt{std::cout}, the member \texttt{operator\textless{}\textless{}()} returns a reference to the object itself. By the way, the non-member \texttt{operator\textless{}\textless{}()} does the same, only instead of the implicit argument \texttt{this}, it has the stream object as an explicit first argument. Now, we can use method chaining to eliminate the explicitly named argument object.}{}
+
+\subsection{Method chaining and named arguments}
+
+% EN: As we have seen before, the aggregate argument objects work well when they are not used mainly to hold arguments; if we need an object to hold the state of the system, and we build it over time and keep it for a long time, we can also pass this object as a single argument to any function that needs this state. It's creating aggregates for just one function call that we have a problem with. On the other hand, we do not like to write functions with many arguments either. This is particularly true for functions that usually have most arguments left as default, with only a few changes. Going back to our game, let's say that each day, game time, is processed by a function call.
+\Trans{As we have seen before, the aggregate argument objects work well when they are not used mainly to hold arguments; if we need an object to hold the state of the system, and we build it over time and keep it for a long time, we can also pass this object as a single argument to any function that needs this state. It's creating aggregates for just one function call that we have a problem with. On the other hand, we do not like to write functions with many arguments either. This is particularly true for functions that usually have most arguments left as default, with only a few changes. Going back to our game, let's say that each day, game time, is processed by a function call.}{}
+
+% EN: The function is called, once per game day, to advance the city through the day and process the consequences of various random events the game can generate:
+\Trans{The function is called, once per game day, to advance the city through the day and process the consequences of various random events the game can generate:}{}
+
+\begin{code}
+% EN: class City {
+  ...
+  void day(bool flood = false, bool fire = false,
+    bool revolt = false, bool exotic_caravan = false,
+    bool holy_vision = false, bool festival = false, ... );
+  ...
+ };
+\Trans{class City { ... void day(bool flood = false, bool fire = false, bool revolt = false, bool exotic_caravan = false, bool holy_vision = false, bool festival = false, ... ); ... };}{}
+
+\end{code}
+
+% EN: A lot of different events can happen over time, but rarely more than one happens on any particular day. We set all arguments to false by default, but this does not really help; there is no particular order to these events, and if the festival happens, all the previous arguments must be specified even though they are still equal to their default values.
+\Trans{A lot of different events can happen over time, but rarely more than one happens on any particular day. We set all arguments to false by default, but this does not really help; there is no particular order to these events, and if the festival happens, all the previous arguments must be specified even though they are still equal to their default values.}{}
+
+% EN: An aggregate object helps a lot, but we need to create and name it:
+\Trans{An aggregate object helps a lot, but we need to create and name it:}{}
+
+\begin{code}
+% EN: class City {
+  ...
+  struct DayEvents {
+    bool flood = false;
+    bool fire = false;
+    ...
+   };
+  void day(DayEvents events);
+  ...
+ };
+City capital(...);
+City::DayEvents events;
+events.fire = true;
+capital.day(events);
+\Trans{class City { ... struct DayEvents { bool flood = false; bool fire = false; ... }; void day(DayEvents events); ... }; City capital(...); City::DayEvents events; events.fire = true; capital.day(events);}{}
+
+\end{code}
+
+% EN: We would like to create a temporary \texttt{DayEvents} object just for the call to \texttt{City::day()}, but we need a way to set its data members. This is where method chaining comes in:
+\Trans{We would like to create a temporary \texttt{DayEvents} object just for the call to \texttt{City::day()}, but we need a way to set its data members. This is where method chaining comes in:}{}
+
+\begin{code}
+% EN: // Example 03
+class City {
+  ...
+  class DayEvents {
+    friend City;
+    bool flood = false;
+    bool fire = false;
+    public:
+    DayEvents() = default;
+    DayEvents& SetFlood() { flood = true; return *this;  }
+    DayEvents& SetFire() { fire = true; return *this;  }
+    ...
+   };
+  void day(DayEvents events);
+  ...
+ };
+City capital(...);
+capital.day(City::DayEvents().SetFire());
+\Trans{// Example 03 class City { ... class DayEvents { friend City; bool flood = false; bool fire = false; public: DayEvents() = default; DayEvents& SetFlood() { flood = true; return *this; } DayEvents& SetFire() { fire = true; return *this; } ... }; void day(DayEvents events); ... }; City capital(...); capital.day(City::DayEvents().SetFire());}{}
+
+\end{code}
+
+% EN: The default constructor constructs an unnamed temporary object. On that object, we invoke the \texttt{SetFire()} method. It modifies the object and returns a reference to itself. We pass the created and modified temporary object to the \texttt{day()} function, which processes the events of the day, displays the updated graphics of the city in flames, plays the sound of fire, and updates the status of the city to reflect that some buildings were damaged by fire.
+\Trans{The default constructor constructs an unnamed temporary object. On that object, we invoke the \texttt{SetFire()} method. It modifies the object and returns a reference to itself. We pass the created and modified temporary object to the \texttt{day()} function, which processes the events of the day, displays the updated graphics of the city in flames, plays the sound of fire, and updates the status of the city to reflect that some buildings were damaged by fire.}{}
+
+% EN: Since each of the \texttt{Set()} methods return a reference to the same object, we can invoke more than one in a method chain, to specify multiple events. Also, the \texttt{Set()} methods can take arguments, of course; for example, instead of \texttt{SetFire()} that always changes the fire event to \texttt{true} from its default \texttt{false}, we could have a method that can set the event flag either way:
+\Trans{Since each of the \texttt{Set()} methods return a reference to the same object, we can invoke more than one in a method chain, to specify multiple events. Also, the \texttt{Set()} methods can take arguments, of course; for example, instead of \texttt{SetFire()} that always changes the fire event to \texttt{true} from its default \texttt{false}, we could have a method that can set the event flag either way:}{}
+
+\begin{code}
+% EN: DayEvents& SetFire(bool value = true) {
+  fire = value;
+  return *this;
+\Trans{DayEvents& SetFire(bool value = true) { fire = value; return *this;}{}
+
+}
+\end{code}
+
+% EN: Today is the market day in our city, which coincides with a major festival, so the king hired an extra guard company in addition to the two already stationed in the city:
+\Trans{Today is the market day in our city, which coincides with a major festival, so the king hired an extra guard company in addition to the two already stationed in the city:}{}
+
+\begin{code}
+% EN: City capital(...);
+capital.day(City::DayEvents().
+            SetMarket().
+            SetFestival().
+            SetGuard(3));
+\Trans{City capital(...); capital.day(City::DayEvents(). SetMarket(). SetFestival(). SetGuard(3));}{}
+
+\end{code}
+
+% EN: Note that we did not have to specify anything for all the events that did not happen. We now have true named arguments; when we call a function, we pass the arguments in any order, by name, and we do not need to explicitly mention any arguments we wish to leave at their default values. This is the C++ named arguments idiom. A call with named arguments is, of course, more verbose than a call with positional arguments; each argument must have the name explicitly written. That was the point of the exercise. On the other hand, we come out ahead if there is a long list of default arguments we did not have to change. One question that could be asked is that of performance---we have a lot of extra function calls, the constructor, and a \texttt{Set()} call for every named argument, and that must cost something. Let's find out exactly what it costs.
+\Trans{Note that we did not have to specify anything for all the events that did not happen. We now have true named arguments; when we call a function, we pass the arguments in any order, by name, and we do not need to explicitly mention any arguments we wish to leave at their default values. This is the C++ named arguments idiom. A call with named arguments is, of course, more verbose than a call with positional arguments; each argument must have the name explicitly written. That was the point of the exercise. On the other hand, we come out ahead if there is a long list of default arguments we did not have to change. One question that could be asked is that of performance---we have a lot of extra function calls, the constructor, and a \texttt{Set()} call for every named argument, and that must cost something. Let's find out exactly what it costs.}{}
+
+\subsection{Performance of the named arguments idiom}
+
+% EN: There is definitely more going on with the named argument call, as more functions are called. On the other hand, the function calls are really simple and, if they are defined in the header file, and the entire implementation is visible to the compiler, there is no reason for the compiler not to inline all the \texttt{Set()} calls and eliminate the unnecessary temporary variables. With good optimization, we could expect similar performance from the named arguments idiom and the explicitly named aggregate object.
+\Trans{There is definitely more going on with the named argument call, as more functions are called. On the other hand, the function calls are really simple and, if they are defined in the header file, and the entire implementation is visible to the compiler, there is no reason for the compiler not to inline all the \texttt{Set()} calls and eliminate the unnecessary temporary variables. With good optimization, we could expect similar performance from the named arguments idiom and the explicitly named aggregate object.}{}
+
+% EN: The appropriate tool to measure the performance of a single function call is the micro benchmark. We use the Google microbenchmark library for this purpose. While the benchmarks are usually written in one file, we need another source file if we want the function we call to be external, not inlined. On the other hand, the \texttt{Set()} methods should definitely be inlined, so they should be defined in the header file. The second source file should contain the definition of the function we are calling with named or positional arguments. Both files are combined at link time:
+\Trans{The appropriate tool to measure the performance of a single function call is the micro benchmark. We use the Google microbenchmark library for this purpose. While the benchmarks are usually written in one file, we need another source file if we want the function we call to be external, not inlined. On the other hand, the \texttt{Set()} methods should definitely be inlined, so they should be defined in the header file. The second source file should contain the definition of the function we are calling with named or positional arguments. Both files are combined at link time:}{}
+
+\begin{code}
+% EN: $CXX named_args.C named_args_extra.C -g -O4 -I. \
+  -Wall -Wextra -Werror -pedantic --std=c++14 \
+  -I$GBENCH_DIR/include $GBENCH_DIR/lib/libbenchmark.a \
+  -lpthread -lrt -lm -o named_args
+\Trans{$CXX named_args.C named_args_extra.C -g -O4 -I. \ -Wall -Wextra -Werror -pedantic --std=c++14 \ -I$GBENCH_DIR/include $GBENCH_DIR/lib/libbenchmark.a \ -lpthread -lrt -lm -o named_args}{}
+
+\end{code}
+
+% EN: We can compare the positional arguments, the named arguments, and the arguments aggregate. The result will depend on the type and number of arguments. For example, for a function with four Boolean arguments, we can compare these calls:
+\Trans{We can compare the positional arguments, the named arguments, and the arguments aggregate. The result will depend on the type and number of arguments. For example, for a function with four Boolean arguments, we can compare these calls:}{}
+
+\begin{code}
+% EN: // Example 04
+// Positional arguments:
+Positional p(true, false, true, false);
+// Named arguments idiom:
+Named n(Named::Options().SetA(true).SetC(true));
+// Aggregate object:
+Aggregate::Options options;
+options.a = true;
+options.c = true;
+Aggregate a(options));
+\Trans{// Example 04 // Positional arguments: Positional p(true, false, true, false); // Named arguments idiom: Named n(Named::Options().SetA(true).SetC(true)); // Aggregate object: Aggregate::Options options; options.a = true; options.c = true; Aggregate a(options));}{}
+
+\end{code}
+
+% EN: The performance measured by the benchmark will depend greatly on the compiler and on the options that control optimization. For example, these numbers were collected on GCC12 with -O3:
+\Trans{The performance measured by the benchmark will depend greatly on the compiler and on the options that control optimization. For example, these numbers were collected on GCC12 with -O3:}{}
+
+\begin{code}
+% EN: Benchmark                 Time  UserCounters...
+BM_positional_const   0.233 ns  items_per_second=138.898G/s
+BM_named_const        0.238 ns  items_per_second=134.969G/s
+BM_aggregate_const    0.239 ns  items_per_second=135.323G/s
+\Trans{Benchmark Time UserCounters... BM_positional_const 0.233 ns items_per_second=138.898G/s BM_named_const 0.238 ns items_per_second=134.969G/s BM_aggregate_const 0.239 ns items_per_second=135.323G/s}{}
+
+\end{code}
+
+% EN: There is no noticeable performance hit for the explicitly named aggregate object that the compiler was able to inline and optimize away. The named and positional arguments perform similarly. Note that the performance of the function calls depends greatly on what else is going on in the program at the same time, since the arguments are passed on registers, and register availability is affected by the context.
+\Trans{There is no noticeable performance hit for the explicitly named aggregate object that the compiler was able to inline and optimize away. The named and positional arguments perform similarly. Note that the performance of the function calls depends greatly on what else is going on in the program at the same time, since the arguments are passed on registers, and register availability is affected by the context.}{}
+
+% EN: In our benchmark, we have used compile-time constants as argument values. This is not uncommon, especially for arguments that specify certain options---very often, at each call site, many of the options will be static, unchanging (the values are different in other places in the code where the same function is called, but on this line, many of the values are fixed at compile time). For example, if we have a special code branch to process natural disasters in our game, the ordinary branch will always call our day simulation with a flood, fire, and other disaster flags set to \texttt{false}. But, just as often the arguments are computed at runtime. How does this affect the performance? Let's create another benchmark where the values of the arguments are retrieved, for example, from a vector:
+\Trans{In our benchmark, we have used compile-time constants as argument values. This is not uncommon, especially for arguments that specify certain options---very often, at each call site, many of the options will be static, unchanging (the values are different in other places in the code where the same function is called, but on this line, many of the values are fixed at compile time). For example, if we have a special code branch to process natural disasters in our game, the ordinary branch will always call our day simulation with a flood, fire, and other disaster flags set to \texttt{false}. But, just as often the arguments are computed at runtime. How does this affect the performance? Let's create another benchmark where the values of the arguments are retrieved, for example, from a vector:}{}
+
+\begin{code}
+% EN: // Example 04
+std::vector<int> v; // Fill v with random values
+size_t i = 0;
+// ... Benchmark loop ...
+const bool a = v[i++];
+const bool b = v[i++];
+const bool c = v[i++];
+const bool d = v[i++];
+if (i == v.size()) i = 0; // Assume v.size() % 4 == 0
+Positional p(a, b, c, d); // Positional arguments
+Named n(Named::Options().
+  SetA(a).SetC(b).SetC(c).SetD(d)); // Named arguments
+Aggregate::Options options;
+options.a = a;
+options.b = b;
+options.c = c;
+options.d = d;
+Aggregate a(options)); // Aggregate object
+\Trans{// Example 04 std::vector<int> v; // Fill v with random values size_t i = 0; // ... Benchmark loop ... const bool a = v[i++]; const bool b = v[i++]; const bool c = v[i++]; const bool d = v[i++]; if (i == v.size()) i = 0; // Assume v.size() % 4 == 0 Positional p(a, b, c, d); // Positional arguments Named n(Named::Options(). SetA(a).SetC(b).SetC(c).SetD(d)); // Named arguments Aggregate::Options options; options.a = a; options.b = b; options.c = c; options.d = d; Aggregate a(options)); // Aggregate object}{}
+
+\end{code}
+
+% EN: By the way, it would be ill-advised to shorten the preceding code in this manner:
+\Trans{By the way, it would be ill-advised to shorten the preceding code in this manner:}{}
+
+\begin{code}
+% EN: Positional p(v[i++], v[i++], v[i++], v[i++]);
+\Trans{Positional p(v[i++], v[i++], v[i++], v[i++]);}{}
+\end{code}
+
+% EN: The reason is that the order in which the arguments are evaluated is undefined, so it is arbitrary which of the \texttt{i++} calls is executed first. If \texttt{i} starts from \texttt{0}, this call may end up calling \texttt{Positional(v{[}0{]},\ v{[}1{]},\ v{[}2{]},\ v{[}3{]})} or \texttt{Positional(v{[}3{]},\ v{[}2{]},\ v{[}1{]},\ v{[}0{]})} or any other permutation.
+\Trans{The reason is that the order in which the arguments are evaluated is undefined, so it is arbitrary which of the \texttt{i++} calls is executed first. If \texttt{i} starts from \texttt{0}, this call may end up calling \texttt{Positional(v{[}0{]},\ v{[}1{]},\ v{[}2{]},\ v{[}3{]})} or \texttt{Positional(v{[}3{]},\ v{[}2{]},\ v{[}1{]},\ v{[}0{]})} or any other permutation.}{}
+
+% EN: On the same compiler and hardware, we now get different numbers:
+\Trans{On the same compiler and hardware, we now get different numbers:}{}
+
+\begin{code}
+% EN: Benchmark                 Time  UserCounters...
+BM_positional_vars     50.8 ns  items_per_second=630.389M/s
+BM_named_vars          49.4 ns  items_per_second=647.577M/s
+BM_aggregate_vars      45.8 ns  items_per_second=647.349M/s
+\Trans{Benchmark Time UserCounters... BM_positional_vars 50.8 ns items_per_second=630.389M/s BM_named_vars 49.4 ns items_per_second=647.577M/s BM_aggregate_vars 45.8 ns items_per_second=647.349M/s}{}
+
+\end{code}
+
+% EN: We can see from the results that the compiler completely eliminated the overhead of the unnamed temporary object (or the named aggregate) and generated similarly performing code for all three ways to pass arguments into the function. In general, the result of the compiler optimizations is difficult to predict. For example, CLANG produces significantly different results (named argument calls are faster when most parameters are compile-time constants but slower when they are run-time values).
+\Trans{We can see from the results that the compiler completely eliminated the overhead of the unnamed temporary object (or the named aggregate) and generated similarly performing code for all three ways to pass arguments into the function. In general, the result of the compiler optimizations is difficult to predict. For example, CLANG produces significantly different results (named argument calls are faster when most parameters are compile-time constants but slower when they are run-time values).}{}
+
+% EN: The benchmark does not favor any particular argument-passing mechanism. We can say that the named arguments idiom performs no worse than an explicitly named aggregate object or the equivalent positional parameters, at least, if the compiler were able to eliminate the unnamed temporary especially. On some compilers, the named arguments may be faster if the function has many arguments. If the optimization does not happen, the call may be a bit slower. On the other hand, in many cases the performance of the function call itself is not critical; for example, our cities are constructed only when the player builds one, a few times during the game. The day events are processed once per game day, which probably takes more than a few seconds of real-time, not least so the player can enjoy interacting with the game. On the other hand, the functions that are repeatedly called in performance-critical code should be inlined whenever possible, and we can expect better optimizations for argument passing in this case as well. Overall, we can conclude that, unless the performance of the particular function call is critical for program performance, one should not be concerned with the overhead of named arguments. For performance-critical calls, performance should be measured on a case-by-case basis, and it is possible for named arguments to be faster than positional ones.
+\Trans{The benchmark does not favor any particular argument-passing mechanism. We can say that the named arguments idiom performs no worse than an explicitly named aggregate object or the equivalent positional parameters, at least, if the compiler were able to eliminate the unnamed temporary especially. On some compilers, the named arguments may be faster if the function has many arguments. If the optimization does not happen, the call may be a bit slower. On the other hand, in many cases the performance of the function call itself is not critical; for example, our cities are constructed only when the player builds one, a few times during the game. The day events are processed once per game day, which probably takes more than a few seconds of real-time, not least so the player can enjoy interacting with the game. On the other hand, the functions that are repeatedly called in performance-critical code should be inlined whenever possible, and we can expect better optimizations for argument passing in this case as well. Overall, we can conclude that, unless the performance of the particular function call is critical for program performance, one should not be concerned with the overhead of named arguments. For performance-critical calls, performance should be measured on a case-by-case basis, and it is possible for named arguments to be faster than positional ones.}{}
+
+\section{General method chaining}
+
+% EN: Applications of method chaining in C++ are not limited to argument passing (we have already seen another application, although a well-hidden one, in the form of streaming I/O). For use in other contexts, it is helpful to consider some more general forms of method chaining.
+\Trans{Applications of method chaining in C++ are not limited to argument passing (we have already seen another application, although a well-hidden one, in the form of streaming I/O). For use in other contexts, it is helpful to consider some more general forms of method chaining.}{}
+
+\subsection{Method chaining versus method cascading}
+
+% EN: The term \emph{method cascading} is not often found in the context of C++, and for a good reason---C++ does not really support it. Method cascading refers to calling a sequence of methods on the same object. For example, in \emph{Dart}, where method cascading is supported explicitly, we can write the following:
+\Trans{The term \emph{method cascading} is not often found in the context of C++, and for a good reason---C++ does not really support it. Method cascading refers to calling a sequence of methods on the same object. For example, in \emph{Dart}, where method cascading is supported explicitly, we can write the following:}{}
+
+\begin{code}
+% EN: var opt = Options();
+opt.SetA()..SetB();
+\Trans{var opt = Options(); opt.SetA()..SetB();}{}
+
+\end{code}
+
+% EN: This code first calls \texttt{SetA()} on the opt object, then calls \texttt{SetB()} on the same object. The equivalent code is this:
+\Trans{This code first calls \texttt{SetA()} on the opt object, then calls \texttt{SetB()} on the same object. The equivalent code is this:}{}
+
+\begin{code}
+% EN: var opt = Options();
+opt.SetA()
+opt.SetB();
+\Trans{var opt = Options(); opt.SetA() opt.SetB();}{}
+
+\end{code}
+
+% EN: But wait, did we not just do the same with C++ and our options object? We did, but we skimmed over an important difference. In method chaining, the next method is applied to the result of the previous one. This is a chained call in C++:
+\Trans{But wait, did we not just do the same with C++ and our options object? We did, but we skimmed over an important difference. In method chaining, the next method is applied to the result of the previous one. This is a chained call in C++:}{}
+
+\begin{code}
+% EN: Options opt;
+opt.SetA().SetB();
+\Trans{Options opt; opt.SetA().SetB();}{}
+
+\end{code}
+
+% EN: This chained call is equivalent to the following code:
+\Trans{This chained call is equivalent to the following code:}{}
+
+\begin{code}
+% EN: Options opt;
+Options& opt1 = opt.SetA();
+Options& opt2 = opt1.SetB();
+\Trans{Options opt; Options& opt1 = opt.SetA(); Options& opt2 = opt1.SetB();}{}
+
+\end{code}
+
+% EN: C++ does not have the cascading syntax, but the code equivalent to a cascade would be this:
+\Trans{C++ does not have the cascading syntax, but the code equivalent to a cascade would be this:}{}
+
+\begin{code}
+% EN: Options opt;
+opt.SetA();
+opt.SetB();
+\Trans{Options opt; opt.SetA(); opt.SetB();}{}
+
+\end{code}
+
+% EN: But this is exactly what we did earlier, and the short form was the same:
+\Trans{But this is exactly what we did earlier, and the short form was the same:}{}
+
+\begin{code}
+% EN: Options opt;
+opt.SetA().SetB();
+\Trans{Options opt; opt.SetA().SetB();}{}
+
+\end{code}
+
+% EN: What makes the C++ cascading possible in this case is that the methods return the reference to the same object. We can still say that the equivalent code is this:
+\Trans{What makes the C++ cascading possible in this case is that the methods return the reference to the same object. We can still say that the equivalent code is this:}{}
+
+\begin{code}
+% EN: Options opt;
+Options& opt1 = opt.SetA();
+Options& opt2 = opt1.SetB();
+\Trans{Options opt; Options& opt1 = opt.SetA(); Options& opt2 = opt1.SetB();}{}
+
+\end{code}
+
+% EN: And, it's technically true. But, because of the way the methods are written, we have the additional guarantee that \texttt{opt}, \texttt{opt1}, and \texttt{opt2} all refer to the same object. Method cascading can always be implemented through method chaining, but it restricts the interfaces because all calls must return a reference to \texttt{this}. This implementation technique is sometimes called by the somewhat unwieldy name \textbf{cascading-by-chaining by returning self}. The method chaining, in general, is not restricted to return \emph{self,} or the reference to the object itself (\texttt{*this} in C++). What can be accomplished with more general chaining? Let's see.
+\Trans{And, it's technically true. But, because of the way the methods are written, we have the additional guarantee that \texttt{opt}, \texttt{opt1}, and \texttt{opt2} all refer to the same object. Method cascading can always be implemented through method chaining, but it restricts the interfaces because all calls must return a reference to \texttt{this}. This implementation technique is sometimes called by the somewhat unwieldy name \textbf{cascading-by-chaining by returning self}. The method chaining, in general, is not restricted to return \emph{self,} or the reference to the object itself (\texttt{*this} in C++). What can be accomplished with more general chaining? Let's see.}{}
+
+\subsection{General method chaining}
+
+% EN: If the chained method does not return a reference to the object itself, it should return a new object. Usually, this object is of the same type, or at least a type from the same class hierarchy, if the methods are polymorphic. For example, let's consider a class that implements data collection. It has a method to filter the data using a predicate (a callable object, an object with an \texttt{operator()} that returns \texttt{true} or \texttt{false}). It also has a method to sort the collection. Each of these methods creates a new collection object and leaves the original object intact. Now, if we want to filter all valid data in our collection, and assuming that we have an \texttt{is\_valid} predicate object, we can create a sorted collection of valid data:
+\Trans{If the chained method does not return a reference to the object itself, it should return a new object. Usually, this object is of the same type, or at least a type from the same class hierarchy, if the methods are polymorphic. For example, let's consider a class that implements data collection. It has a method to filter the data using a predicate (a callable object, an object with an \texttt{operator()} that returns \texttt{true} or \texttt{false}). It also has a method to sort the collection. Each of these methods creates a new collection object and leaves the original object intact. Now, if we want to filter all valid data in our collection, and assuming that we have an \texttt{is\_valid} predicate object, we can create a sorted collection of valid data:}{}
+
+\begin{code}
+% EN: Collection c;
+... store data in the collection ...
+Collection valid_c = c.filter(is_valid);
+Collection sorted_valid_c = valid_c.sort();
+\Trans{Collection c; ... store data in the collection ... Collection valid_c = c.filter(is_valid); Collection sorted_valid_c = valid_c.sort();}{}
+
+\end{code}
+
+% EN: The intermediate object can be eliminated using method chaining:
+\Trans{The intermediate object can be eliminated using method chaining:}{}
+
+\begin{code}
+% EN: Collection c;
+...
+Collection sorted_valid_c = c.filter(is_valid).sort();
+\Trans{Collection c; ... Collection sorted_valid_c = c.filter(is_valid).sort();}{}
+
+\end{code}
+
+% EN: It should be clear after reading the last section that this is an example of method chaining, and a more general one than what we saw earlier---each method returns an object of the same type, but not the same object. The difference between chaining and cascading is very clear in this example---a cascade of methods would filter and sort the original collection (assuming we decided to support such operations).
+\Trans{It should be clear after reading the last section that this is an example of method chaining, and a more general one than what we saw earlier---each method returns an object of the same type, but not the same object. The difference between chaining and cascading is very clear in this example---a cascade of methods would filter and sort the original collection (assuming we decided to support such operations).}{}
+
+\subsection{Method chaining in class hierarchies}
+
+% EN: When applied to class hierarchies, method chaining runs into a particular problem; let's say that our \texttt{sort()} method returns a sorted data collection that is an object of a different type, \texttt{SortedCollection} , which is derived from the \texttt{Collection} class. The reason it is a derived class is that after sorting we can support efficient search, and so the \texttt{SortedCollection} class has a \texttt{search()} method that the base class does not have. We can still use method chaining, and even call the base class methods on the derived class, but doing so breaks the chain:
+\Trans{When applied to class hierarchies, method chaining runs into a particular problem; let's say that our \texttt{sort()} method returns a sorted data collection that is an object of a different type, \texttt{SortedCollection} , which is derived from the \texttt{Collection} class. The reason it is a derived class is that after sorting we can support efficient search, and so the \texttt{SortedCollection} class has a \texttt{search()} method that the base class does not have. We can still use method chaining, and even call the base class methods on the derived class, but doing so breaks the chain:}{}
+
+\begin{code}
+% EN: // Example 05
+class SortedCollection;
+class Collection {
+  public:
+  Collection filter();
+  // sort() converts Collection to SortedCollection.
+  SortedCollection sort();
+ };
+class SortedCollection : public Collection {
+  public:
+  SortedCollection search();
+  SortedCollection median();
+ };
+SortedCollection Collection::sort() {
+  SortedCollection sc;
+  ... sort the collection ...
+  return sc;
+\Trans{// Example 05 class SortedCollection; class Collection { public: Collection filter(); // sort() converts Collection to SortedCollection. SortedCollection sort(); }; class SortedCollection : public Collection { public: SortedCollection search(); SortedCollection median(); }; SortedCollection Collection::sort() { SortedCollection sc; ... sort the collection ... return sc;}{}
+
+}
+% EN: Collection c;
+auto c1 = c.sort().search().filter.median();
+\Trans{Collection c; auto c1 = c.sort().search().filter.median();}{}
+
+\end{code}
+
+% EN: In this example, the chaining worked for a while: we were able to sort a \texttt{Collection}, search the result, and filter the result of the search. The call to \texttt{sort()} operates on a \texttt{Collection} and returns a \texttt{SortedCollection}. The call to \texttt{search()} needs a \texttt{SortedCollection}, so it works as intended. The call to \texttt{filter()} needs a \texttt{Collection}; the method can be invoked on a derived class such as \texttt{SortedCollection}, but the return result is still going to be a \texttt{Collection}. Then the chain breaks: the call to \texttt{median()} needs a \texttt{SortedCollection}, which we have, except \texttt{filter()} effectively cast it back to a \texttt{Collection}. There is no way to tell median() that the object is really a \texttt{SortedCollection} (other than casting).
+\Trans{In this example, the chaining worked for a while: we were able to sort a \texttt{Collection}, search the result, and filter the result of the search. The call to \texttt{sort()} operates on a \texttt{Collection} and returns a \texttt{SortedCollection}. The call to \texttt{search()} needs a \texttt{SortedCollection}, so it works as intended. The call to \texttt{filter()} needs a \texttt{Collection}; the method can be invoked on a derived class such as \texttt{SortedCollection}, but the return result is still going to be a \texttt{Collection}. Then the chain breaks: the call to \texttt{median()} needs a \texttt{SortedCollection}, which we have, except \texttt{filter()} effectively cast it back to a \texttt{Collection}. There is no way to tell median() that the object is really a \texttt{SortedCollection} (other than casting).}{}
+
+% EN: Polymorphism, or virtual functions, does not help here; first of all, we would need to define virtual functions for \texttt{search()} and \texttt{median()} in the base class, even though we don't intend to support this functionality there, as only the derived class supports them. We cannot declare them pure virtual because we use the \texttt{Collection} as a concrete class, and any class with a pure virtual function is an abstract class, so objects of this class cannot be instantiated. We can make these functions abort at runtime, but at the very least we have moved the detection of a programming error---searching in an unsorted collection---from compile time to runtime. Worse, it does not even help:
+\Trans{Polymorphism, or virtual functions, does not help here; first of all, we would need to define virtual functions for \texttt{search()} and \texttt{median()} in the base class, even though we don't intend to support this functionality there, as only the derived class supports them. We cannot declare them pure virtual because we use the \texttt{Collection} as a concrete class, and any class with a pure virtual function is an abstract class, so objects of this class cannot be instantiated. We can make these functions abort at runtime, but at the very least we have moved the detection of a programming error---searching in an unsorted collection---from compile time to runtime. Worse, it does not even help:}{}
+
+\begin{code}
+% EN: class SortedCollection;
+class Collection {
+  public:
+  Collection filter();
+  // Converts Collection to SortedCollection
+  SortedCollection sort();
+  virtual SortedCollection median();
+ };
+class SortedCollection : public Collection {
+  public:
+  SortedCollection search();
+  SortedCollection median() override;
+ };
+SortedCollection Collection::sort() {
+  SortedCollection sc;
+  ... sort the collection ...
+  return sc;
+\Trans{class SortedCollection; class Collection { public: Collection filter(); // Converts Collection to SortedCollection SortedCollection sort(); virtual SortedCollection median(); }; class SortedCollection : public Collection { public: SortedCollection search(); SortedCollection median() override; }; SortedCollection Collection::sort() { SortedCollection sc; ... sort the collection ... return sc;}{}
+
+}
+% EN: SortedCollection Collection::median() {
+  cout << "Collection::median called!!!" << endl;
+  abort();
+  return { };     // Still need to return something
+\Trans{SortedCollection Collection::median() { cout << "Collection::median called!!!" << endl; abort(); return {}; // Still need to return something}{}
+
+}
+% EN: Collection c;
+auto c1 = c.sort().search().filter().median();
+\Trans{Collection c; auto c1 = c.sort().search().filter().median();}{}
+
+\end{code}
+
+% EN: This is not going to work because \texttt{Collection::filter} returns a copy of the object, not a reference to it. The object it returns is the base class, \texttt{Collection}. If called on a \texttt{SortedCollection} object, it rips out the base class portion from the derived object and returns that. If you think that making \texttt{filter()} virtual as well, and overriding it in the derived class, solves this problem at the expense of overriding every function in the base class, you have another surprise coming---virtual functions must have identical return types, except for \emph{covariant return types}. References to the base and derived classes are covariant return types. Classes themselves, returned by value, are not.
+\Trans{This is not going to work because \texttt{Collection::filter} returns a copy of the object, not a reference to it. The object it returns is the base class, \texttt{Collection}. If called on a \texttt{SortedCollection} object, it rips out the base class portion from the derived object and returns that. If you think that making \texttt{filter()} virtual as well, and overriding it in the derived class, solves this problem at the expense of overriding every function in the base class, you have another surprise coming---virtual functions must have identical return types, except for \emph{covariant return types}. References to the base and derived classes are covariant return types. Classes themselves, returned by value, are not.}{}
+
+% EN: Note that this problem would not have happened if we were returning object references. However, we can only return references to the object we are called on; if we create a new object in the body of a method function and return a reference to it, it's a dangling reference to a temporary object that is deleted the moment the function returns. The result is undefined behavior (the program is likely to crash). On the other hand, if we always return the reference to the original object, we cannot change its type from based to derived in the first place.
+\Trans{Note that this problem would not have happened if we were returning object references. However, we can only return references to the object we are called on; if we create a new object in the body of a method function and return a reference to it, it's a dangling reference to a temporary object that is deleted the moment the function returns. The result is undefined behavior (the program is likely to crash). On the other hand, if we always return the reference to the original object, we cannot change its type from based to derived in the first place.}{}
+
+% EN: The C++ solution to this problem involves the use of templates and a curious design pattern. In fact, it is so mind-twisting that the word \emph{curious} is even in its name---the Curiously Recurring Template Pattern. We have a whole chapter on the CRTP pattern in this book. The application of the pattern to our case is relatively straightforward---the base class needs to return the right type from its functions, but can't because it does not know what the type is. The solution---pass the right type into the base class as the template argument. Of course, the base class would have to be a base class template for this to work:
+\Trans{The C++ solution to this problem involves the use of templates and a curious design pattern. In fact, it is so mind-twisting that the word \emph{curious} is even in its name---the Curiously Recurring Template Pattern. We have a whole chapter on the CRTP pattern in this book. The application of the pattern to our case is relatively straightforward---the base class needs to return the right type from its functions, but can't because it does not know what the type is. The solution---pass the right type into the base class as the template argument. Of course, the base class would have to be a base class template for this to work:}{}
+
+\begin{code}
+% EN: template <typename T> class Collection {
+  public:
+  Collection() { }
+  T filter(); // "*this" is really a T, not a Collection
+  T sort() {
+    T sc; // Create new sorted collection
+    ...
+    return sc;
+   }
+ };
+class SortedCollection :
+  public Collection<SortedCollection> {
+  public:
+  SortedCollection search();
+  SortedCollection median();
+ };
+Collection<SortedCollection> c;
+auto c1 = c.sort().search().filter().median();
+\Trans{template <typename T> class Collection { public: Collection() {} T filter(); // "*this" is really a T, not a Collection T sort() { T sc; // Create new sorted collection ... return sc; } }; class SortedCollection : public Collection<SortedCollection> { public: SortedCollection search(); SortedCollection median(); }; Collection<SortedCollection> c; auto c1 = c.sort().search().filter().median();}{}
+
+\end{code}
+
+% EN: The chain here starts similarly to our initial example: \texttt{sort()} is invoked on a \texttt{Collection} and returns a \texttt{SortedCollection}, then \texttt{search()} applies to the \texttt{SortedCollection} and returns another \texttt{SortedCollection}, then \texttt{filter()} is called. This time, \texttt{filter()} from the base class \texttt{Collection} knows what the real type of the object is because \texttt{Collection} itself is a template instantiated on the type of the derived object. So, \texttt{filter()} works on any collection but returns an object of the same type as the initial collection -- in our case, both are \texttt{SortedCollection} objects. Finally, \texttt{median()} needs a \texttt{SortedCollection} and gets it.
+\Trans{The chain here starts similarly to our initial example: \texttt{sort()} is invoked on a \texttt{Collection} and returns a \texttt{SortedCollection}, then \texttt{search()} applies to the \texttt{SortedCollection} and returns another \texttt{SortedCollection}, then \texttt{filter()} is called. This time, \texttt{filter()} from the base class \texttt{Collection} knows what the real type of the object is because \texttt{Collection} itself is a template instantiated on the type of the derived object. So, \texttt{filter()} works on any collection but returns an object of the same type as the initial collection -- in our case, both are \texttt{SortedCollection} objects. Finally, \texttt{median()} needs a \texttt{SortedCollection} and gets it.}{}
+
+% EN: This is a complex solution. While it works, its complexity suggests that method chaining should be used judiciously when the object type has to change in the middle of the chain. There is a good reason for that---changing the object type is fundamentally different than calling a sequence of methods. It is a more significant event that perhaps should be made explicit, and the new object should get its own name.
+\Trans{This is a complex solution. While it works, its complexity suggests that method chaining should be used judiciously when the object type has to change in the middle of the chain. There is a good reason for that---changing the object type is fundamentally different than calling a sequence of methods. It is a more significant event that perhaps should be made explicit, and the new object should get its own name.}{}
+
+% EN: Now that we know what method chaining is, let us see where else it can be useful.
+\Trans{Now that we know what method chaining is, let us see where else it can be useful.}{}
+
+\section{The Builder pattern}
+
+% EN: Let us go almost all the way back to the start of the chapter and take another look at the way we pass named arguments to a C++ function. Instead of a constructor with many arguments, we settled on an options object where each argument is explicitly named:
+\Trans{Let us go almost all the way back to the start of the chapter and take another look at the way we pass named arguments to a C++ function. Instead of a constructor with many arguments, we settled on an options object where each argument is explicitly named:}{}
+
+\begin{code}
+% EN: City GreensDale(City::Options()
+  .SetCenter(City::KEEP)
+  .SetBuildings(3)
+  .SetGuard(1)
+  .SetForge()
+);
+\Trans{City GreensDale(City::Options() .SetCenter(City::KEEP) .SetBuildings(3) .SetGuard(1) .SetForge() );}{}
+
+\end{code}
+
+% EN: Let us now focus on the \texttt{Options} object itself, specifically, the way we construct it. The constructor does not create a finished object (that would just move the problem from the \texttt{City} constructor to the \texttt{Options} constructor). Instead, we build the object piece by piece. This is a particular case of a very general design pattern -- the Builder.
+\Trans{Let us now focus on the \texttt{Options} object itself, specifically, the way we construct it. The constructor does not create a finished object (that would just move the problem from the \texttt{City} constructor to the \texttt{Options} constructor). Instead, we build the object piece by piece. This is a particular case of a very general design pattern -- the Builder.}{}
+
+\subsection{Basics of the Builder pattern}
+
+% EN: The Builder design pattern is used whenever we decide that an object cannot be constructed in what we consider a complete state by the constructor alone. Instead, we write a helper class, or builder class, that builds these objects and hands them out to the program.
+\Trans{The Builder design pattern is used whenever we decide that an object cannot be constructed in what we consider a complete state by the constructor alone. Instead, we write a helper class, or builder class, that builds these objects and hands them out to the program.}{}
+
+% EN: The first question you might ask is ``Why?'' -- isn't the constructor supposed to do exactly that job? There could be several reasons. One very common reason is that we use a more general object to represent some more specific data set. For example, we want an object that holds Fibonacci numbers or prime numbers, and we decided to use a \texttt{std::vector} to store them. Now we have a problem: the vector has whatever constructors the STL provides, but we need to ensure that our vector has the right numbers in it, and we can't write a new constructor. We could create a special class to hold only prime numbers, but we will end up with a lot of classes that, after being constructed differently, are used in very similar ways. We would have to write new code to process prime numbers, odd numbers, square numbers, etc when using a vector for all of them would be perfectly sufficient. Alternatively, we could just use vectors everywhere and write the right values into them whenever our program needs it. This is no good too: we expose and duplicate a lot of low-level code that we would like to encapsulate and reuse (which is why we wanted a constructor for each kind of number).
+\Trans{The first question you might ask is ``Why?'' -- isn't the constructor supposed to do exactly that job? There could be several reasons. One very common reason is that we use a more general object to represent some more specific data set. For example, we want an object that holds Fibonacci numbers or prime numbers, and we decided to use a \texttt{std::vector} to store them. Now we have a problem: the vector has whatever constructors the STL provides, but we need to ensure that our vector has the right numbers in it, and we can't write a new constructor. We could create a special class to hold only prime numbers, but we will end up with a lot of classes that, after being constructed differently, are used in very similar ways. We would have to write new code to process prime numbers, odd numbers, square numbers, etc when using a vector for all of them would be perfectly sufficient. Alternatively, we could just use vectors everywhere and write the right values into them whenever our program needs it. This is no good too: we expose and duplicate a lot of low-level code that we would like to encapsulate and reuse (which is why we wanted a constructor for each kind of number).}{}
+
+% EN: The solution is the Builder pattern: the code for computing and storing the numbers is encapsulated in a builder class, but the object created by the builder is a generic vector. For example, here is a builder for Fibonacci numbers (the sequence of numbers that starts with 1, 1, and every subsequent number is a sum of the last two numbers):
+\Trans{The solution is the Builder pattern: the code for computing and storing the numbers is encapsulated in a builder class, but the object created by the builder is a generic vector. For example, here is a builder for Fibonacci numbers (the sequence of numbers that starts with 1, 1, and every subsequent number is a sum of the last two numbers):}{}
+
+\begin{code}
+% EN: // Example 08
+class FibonacciBuilder {
+  using V = std::vector<unsigned long>;
+  V cache_ { 1, 1, 2, 3, 5  };
+  public:
+  V operator()(size_t n) {
+    while (cache_.size() < n) {     // Cache new numbers
+      cache_.push_back(cache_[cache_.size() - 1] +
+                       cache_[cache_.size() - 2]);
+     }
+    return V{cache_.begin(), cache_.begin() + n };
+   }
+ };
+\Trans{// Example 08 class FibonacciBuilder { using V = std::vector<unsigned long>; V cache_ { 1, 1, 2, 3, 5 }; public: V operator()(size_t n) { while (cache_.size() < n) { // Cache new numbers cache_.push_back(cache_[cache_.size() - 1] + cache_[cache_.size() - 2]); } return V{cache_.begin(), cache_.begin() + n}; } };}{}
+
+\end{code}
+
+% EN: Suppose our program needs to get sequences of the first \texttt{n} Fibonacci numbers for some algorithm (the value of \texttt{n} varies at run time). We may need these numbers more than once, sometimes for larger values of \texttt{n} than before and sometimes for smaller ones. All we need to do is to ask the builder:
+\Trans{Suppose our program needs to get sequences of the first \texttt{n} Fibonacci numbers for some algorithm (the value of \texttt{n} varies at run time). We may need these numbers more than once, sometimes for larger values of \texttt{n} than before and sometimes for smaller ones. All we need to do is to ask the builder:}{}
+
+\begin{code}
+% EN: FibonacciBuilder b;
+auto fib10 = b(10);
+\Trans{FibonacciBuilder b; auto fib10 = b(10);}{}
+
+\end{code}
+
+% EN: We could keep the already known values somewhere in the program, but that complicates the program with the additional job of tracking them. It is better to move that work to a class dedicated to constructing Fibonacci numbers and nothing else - a builder. Is it worth it to cache Fibonacci numbers? Probably not really, but remember that this is a concise example: if we needed, say, prime numbers instead, reusing already known values would be very much worth it (but the code would be much longer).
+\Trans{We could keep the already known values somewhere in the program, but that complicates the program with the additional job of tracking them. It is better to move that work to a class dedicated to constructing Fibonacci numbers and nothing else - a builder. Is it worth it to cache Fibonacci numbers? Probably not really, but remember that this is a concise example: if we needed, say, prime numbers instead, reusing already known values would be very much worth it (but the code would be much longer).}{}
+
+% EN: The other common reason to use the builder is that the code necessary to build an object may be too complex for a constructor. Often, it manifests itself in the large number of arguments we would have to pass to a constructor if we tried to write one. The way we build the \texttt{Options} argument for our \texttt{City} at the start of this section is a trivial example of that, with the \texttt{Options} object acting as its own builder. Particular situations where builders are most useful include cases where the construction process is conditional and the data needed to fully construct an object varies in both the number and the type depending on some run-time variables. Again, our \texttt{City} is a trivial example of that: no single \texttt{City} needs every constructor argument, but without the \texttt{Options} and its (trivial) builder, we would have to provide a parameter for every one of them.
+\Trans{The other common reason to use the builder is that the code necessary to build an object may be too complex for a constructor. Often, it manifests itself in the large number of arguments we would have to pass to a constructor if we tried to write one. The way we build the \texttt{Options} argument for our \texttt{City} at the start of this section is a trivial example of that, with the \texttt{Options} object acting as its own builder. Particular situations where builders are most useful include cases where the construction process is conditional and the data needed to fully construct an object varies in both the number and the type depending on some run-time variables. Again, our \texttt{City} is a trivial example of that: no single \texttt{City} needs every constructor argument, but without the \texttt{Options} and its (trivial) builder, we would have to provide a parameter for every one of them.}{}
+
+% EN: The approach we have seen for our Fibonacci vector builder is a common variant of the Builder pattern in C++; it's not very exciting but it works. In this chapter, we are going to see some alternative ways to implement a Builder. The first one generalizes the way we built our \texttt{Options}.
+\Trans{The approach we have seen for our Fibonacci vector builder is a common variant of the Builder pattern in C++; it's not very exciting but it works. In this chapter, we are going to see some alternative ways to implement a Builder. The first one generalizes the way we built our \texttt{Options}.}{}
+
+\subsection{The fluent Builder}
+
+% EN: The way we build the \texttt{Options} object is through method chaining. Each method takes a small step toward constructing the final object. There is a general name for this approach: the fluent interface. While it is not limited to designing builders, the fluent interface became popular in C++ mostly as a way to build complex objects.
+\Trans{The way we build the \texttt{Options} object is through method chaining. Each method takes a small step toward constructing the final object. There is a general name for this approach: the fluent interface. While it is not limited to designing builders, the fluent interface became popular in C++ mostly as a way to build complex objects.}{}
+
+% EN: The fluent builder relies on method chaining: each member function of the builder class contributes to constructing the object that is being built and returns the builder itself, so the work can continue. For example, here is an \texttt{Employee} class (possibly for some workplace database):
+\Trans{The fluent builder relies on method chaining: each member function of the builder class contributes to constructing the object that is being built and returns the builder itself, so the work can continue. For example, here is an \texttt{Employee} class (possibly for some workplace database):}{}
+
+\begin{code}
+% EN: // Example 09
+class Employee {
+  std::string prefix_;
+  std::string first_name_;
+  std::string middle_name_;
+  std::string last_name_;
+  std::string suffix_;
+  friend class EmployeeBuilder;
+  Employee() = default;
+  public:
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const Employee& e);
+ };
+\Trans{// Example 09 class Employee { std::string prefix_; std::string first_name_; std::string middle_name_; std::string last_name_; std::string suffix_; friend class EmployeeBuilder; Employee() = default; public: friend std::ostream& operator<<(std::ostream& out, const Employee& e); };}{}
+
+\end{code}
+
+% EN: We are going to add even more data to the class later, but already it has enough data members to make a single constructor hard to use (too many arguments of the same type). We could use a constructor with an \texttt{Options} object, but, going forward, we expect the need to do some computations during the construction of the object: we may need to validate certain data, and other parts of the employee record may be conditional: two fields that cannot be set at the same time, a field whose default value depends on other fields, etc. So let's start designing a builder for this class.
+\Trans{We are going to add even more data to the class later, but already it has enough data members to make a single constructor hard to use (too many arguments of the same type). We could use a constructor with an \texttt{Options} object, but, going forward, we expect the need to do some computations during the construction of the object: we may need to validate certain data, and other parts of the employee record may be conditional: two fields that cannot be set at the same time, a field whose default value depends on other fields, etc. So let's start designing a builder for this class.}{}
+
+% EN: The \texttt{EmployeeBuilder} needs to construct an \texttt{Employee} object first, then provide several chained methods to set different fields of the object, and, finally, hand over the constructed object. There may be some error checking involved, or more complex operations affecting other multiple fields, but a basic builder looks like this:
+\Trans{The \texttt{EmployeeBuilder} needs to construct an \texttt{Employee} object first, then provide several chained methods to set different fields of the object, and, finally, hand over the constructed object. There may be some error checking involved, or more complex operations affecting other multiple fields, but a basic builder looks like this:}{}
+
+\begin{code}
+% EN: // Example 09
+class EmployeeBuilder {
+  Employee e_;
+  public:
+  EmployeeBuilder& SetPrefix(std::string_view s) {
+    e_.prefix_ = s; return *this;
+   }
+  EmployeeBuilder& SetFirstName(std::string_view s) {
+    e_.first_name_ = s ; return *this;
+   }
+  EmployeeBuilder& SetMiddleName(std::string_view s) {
+    e_.middle_name_ = s; return *this;
+   }
+  EmployeeBuilder& SetLastName(std::string_view s) {
+    e_.last_name_ = s; return *this;
+   }
+  EmployeeBuilder& SetSuffix(std::string_view s) {
+    e_.suffix_ = s; return *this;
+   }
+  operator Employee() {
+    assert(!e_.first_name_.empty() &&
+           !e_.last_name_.empty());
+    return std::move(e_);
+   }
+ };
+\Trans{// Example 09 class EmployeeBuilder { Employee e_; public: EmployeeBuilder& SetPrefix(std::string_view s) { e_.prefix_ = s; return *this; } EmployeeBuilder& SetFirstName(std::string_view s) { e_.first_name_ = s ; return *this; } EmployeeBuilder& SetMiddleName(std::string_view s) { e_.middle_name_ = s; return *this; } EmployeeBuilder& SetLastName(std::string_view s) { e_.last_name_ = s; return *this; } EmployeeBuilder& SetSuffix(std::string_view s) { e_.suffix_ = s; return *this; } operator Employee() { assert(!e_.first_name_.empty() && !e_.last_name_.empty()); return std::move(e_); } };}{}
+
+\end{code}
+
+% EN: Several design decisions had to be made along the way. First, we decided to make the constructor \texttt{Employee::Employee()} private, so only friends such as \texttt{EmployeeBuilder} can create these objects. This ensures that a partially initialized or otherwise invalid \texttt{Employee} object cannot appear in the program: the only way to get one is from a builder. This is usually the safer choice, but sometimes we need to be able to default-construct the objects (for example, to use them in containers or for many serialization/deserialization implementations). Second, the builder holds the object that is being built until it can be moved to the caller. This is the common approach, but we have to be careful to use each builder object only once. We could also provide a way to reinitialize the builder; this is often done when the builder needs to do a lot of computations whose results are reused for building multiple objects. Finally, in order to construct an \texttt{Employee} object, we need to construct a builder first:
+\Trans{Several design decisions had to be made along the way. First, we decided to make the constructor \texttt{Employee::Employee()} private, so only friends such as \texttt{EmployeeBuilder} can create these objects. This ensures that a partially initialized or otherwise invalid \texttt{Employee} object cannot appear in the program: the only way to get one is from a builder. This is usually the safer choice, but sometimes we need to be able to default-construct the objects (for example, to use them in containers or for many serialization/deserialization implementations). Second, the builder holds the object that is being built until it can be moved to the caller. This is the common approach, but we have to be careful to use each builder object only once. We could also provide a way to reinitialize the builder; this is often done when the builder needs to do a lot of computations whose results are reused for building multiple objects. Finally, in order to construct an \texttt{Employee} object, we need to construct a builder first:}{}
+
+\begin{code}
+% EN: Employee Homer = EmployeeBuilder()
+  .SetFirstName("Homer")
+  .SetMiddleName("J")
+  .SetLastName("Simpson")
+;
+\Trans{Employee Homer = EmployeeBuilder() .SetFirstName("Homer") .SetMiddleName("J") .SetLastName("Simpson") ;}{}
+
+\end{code}
+
+% EN: The other common approach is to provide a static function \texttt{Employee::create()} that constructs a builder; in this case, the builder constructor is made private, with friends.
+\Trans{The other common approach is to provide a static function \texttt{Employee::create()} that constructs a builder; in this case, the builder constructor is made private, with friends.}{}
+
+% EN: As we mentioned in the section on \emph{Method chaining in class hierarchies}, the chained methods do not have to all return references to the same class. If our \texttt{Employee} object has an internal structure such as separate sub-records for the home address, job location, and so on, we could have a more structured approach to the builder as well.
+\Trans{As we mentioned in the section on \emph{Method chaining in class hierarchies}, the chained methods do not have to all return references to the same class. If our \texttt{Employee} object has an internal structure such as separate sub-records for the home address, job location, and so on, we could have a more structured approach to the builder as well.}{}
+
+% EN: The goal here is to design an interface so the client code could look like this:
+\Trans{The goal here is to design an interface so the client code could look like this:}{}
+
+\begin{code}
+% EN: // Example 09
+Employee Homer = EmployeeBuilder()
+  .SetFirstName("Homer")
+  .SetMiddleName("J")
+  .SetLastName("Simpson")
+  .Job()
+    .SetTitle("Safety Inspector")
+    .SetOffice("Sector 7G")
+  .Address()
+    .SetHouse("742")
+    .SetStreet("Evergreen Terrace")
+    .SetCity("Springfield")
+  .Awards()
+    .Add("Remorseless Eating Machine")
+;
+\Trans{// Example 09 Employee Homer = EmployeeBuilder() .SetFirstName("Homer") .SetMiddleName("J") .SetLastName("Simpson") .Job() .SetTitle("Safety Inspector") .SetOffice("Sector 7G") .Address() .SetHouse("742") .SetStreet("Evergreen Terrace") .SetCity("Springfield") .Awards() .Add("Remorseless Eating Machine") ;}{}
+
+\end{code}
+
+% EN: To do this, we need to implement a hierarchy of builders with a common base class:
+\Trans{To do this, we need to implement a hierarchy of builders with a common base class:}{}
+
+\begin{code}
+% EN: // Example 09
+class JobBuilder;
+class AwardBuilder;
+class AbstractBuilder {
+  protected:
+  Employee& e_;
+  public:
+  explicit AbstractBuilder(Employee& e) : e_(e) { }
+  operator Employee() {
+    assert(!e_.first_name_.empty() &&
+           !e_.last_name_.empty());
+      return std::move(e_);
+   }
+  JobBuilder Job();
+  AddressBuilder Address();
+  AwardBuilder Awards();
+ };
+\Trans{// Example 09 class JobBuilder; class AwardBuilder; class AbstractBuilder { protected: Employee& e_; public: explicit AbstractBuilder(Employee& e) : e_(e) {} operator Employee() { assert(!e_.first_name_.empty() && !e_.last_name_.empty()); return std::move(e_); } JobBuilder Job(); AddressBuilder Address(); AwardBuilder Awards(); };}{}
+
+\end{code}
+
+% EN: We still start with \texttt{EmployeeBuilder} which constructs the \texttt{Employee} object; the rest of the builders hold a reference to it, and, by calling the corresponding member function on \texttt{AbstractBuilder} we can switch to a different type of builder for the same \texttt{Employee} object. Note that, while \texttt{AbstractBuilder} serves as the base class for all other builders, there are no pure virtual functions (or any other virtual functions): as we have seen earlier, run-time polymorphism is not particularly useful in method chaining:
+\Trans{We still start with \texttt{EmployeeBuilder} which constructs the \texttt{Employee} object; the rest of the builders hold a reference to it, and, by calling the corresponding member function on \texttt{AbstractBuilder} we can switch to a different type of builder for the same \texttt{Employee} object. Note that, while \texttt{AbstractBuilder} serves as the base class for all other builders, there are no pure virtual functions (or any other virtual functions): as we have seen earlier, run-time polymorphism is not particularly useful in method chaining:}{}
+
+\begin{code}
+% EN: class EmployeeBuilder : public AbstractBuilder {
+  Employee employee_;
+  public:
+  EmployeeBuilder() : AbstractBuilder(employee_) { }
+  EmployeeBuilder& SetPrefix(std::string_view s){
+    e_.prefix_ = s; return *this;
+   }
+  鈥?
+ };
+\Trans{class EmployeeBuilder : public AbstractBuilder { Employee employee_; public: EmployeeBuilder() : AbstractBuilder(employee_) {} EmployeeBuilder& SetPrefix(std::string_view s){ e_.prefix_ = s; return *this; } 鈥? };}{}
+
+\end{code}
+
+% EN: To add the job information, we switch to the \texttt{JobBuilder}:
+\Trans{To add the job information, we switch to the \texttt{JobBuilder}:}{}
+
+\begin{code}
+% EN: // Example 09
+class JobBuilder : public AbstractBuilder {
+  public:
+  explicit JobBuilder(Employee& e) : AbstractBuilder(e) { }
+  JobBuilder& SetTitle(std::string_view s) {
+    e_.title_ = s; return *this;
+   }
+  鈥?
+  JobBuilder& SetManager(std::string_view s) {
+    e_.manager_ = s; return *this;
+   }
+  JobBuilder& SetManager(const Employee& manager) {
+    e_.manager_ = manager.first_name_ + " " +
+                  manager.last_name_;
+     return *this;
+   }
+  JobBuilder& CopyFrom(const Employee& other) {
+    e_.manager_ = other.manager_;
+    鈥?
+    return *this;
+   }
+ };
+JobBuilder AbstractBuilder::Job() {
+  return JobBuilder(e_);
+\Trans{// Example 09 class JobBuilder : public AbstractBuilder { public: explicit JobBuilder(Employee& e) : AbstractBuilder(e) {} JobBuilder& SetTitle(std::string_view s) { e_.title_ = s; return *this; } 鈥? JobBuilder& SetManager(std::string_view s) { e_.manager_ = s; return *this; } JobBuilder& SetManager(const Employee& manager) { e_.manager_ = manager.first_name_ + " " + manager.last_name_; return *this; } JobBuilder& CopyFrom(const Employee& other) { e_.manager_ = other.manager_; 鈥? return *this; } }; JobBuilder AbstractBuilder::Job() { return JobBuilder(e_);}{}
+
+}
+\end{code}
+
+% EN: Once we have a \texttt{JobBuilder}, all its chained methods return a reference to itself; of course, a \texttt{JobBuilder} is also an \texttt{AbstractBuilder}, so we could switch to another builder type such as \texttt{AddressBuilder} any time. Note that we can declare the \texttt{AbstractBuilder::Job()} method with just the forward declaration of the \texttt{JobBuilder}, but the implementation has to be deferred until the type itself is defined.
+\Trans{Once we have a \texttt{JobBuilder}, all its chained methods return a reference to itself; of course, a \texttt{JobBuilder} is also an \texttt{AbstractBuilder}, so we could switch to another builder type such as \texttt{AddressBuilder} any time. Note that we can declare the \texttt{AbstractBuilder::Job()} method with just the forward declaration of the \texttt{JobBuilder}, but the implementation has to be deferred until the type itself is defined.}{}
+
+% EN: In this example, we also see the flexibility of the Builder pattern that would be very difficult to implement using constructors only. For example, there are two ways to define an employee's manager: we can provide the name, or use another employee record. Also, we can copy the workplace information from another employee's records, and still use \texttt{Set} methods to modify the fields that are not the same.
+\Trans{In this example, we also see the flexibility of the Builder pattern that would be very difficult to implement using constructors only. For example, there are two ways to define an employee's manager: we can provide the name, or use another employee record. Also, we can copy the workplace information from another employee's records, and still use \texttt{Set} methods to modify the fields that are not the same.}{}
+
+% EN: Other builders such as \texttt{AddressBuilder} are likely to be similar. But there may be very different builders as well. For example, an employee could have an arbitrary number of awards:
+\Trans{Other builders such as \texttt{AddressBuilder} are likely to be similar. But there may be very different builders as well. For example, an employee could have an arbitrary number of awards:}{}
+
+\begin{code}
+% EN: // Example 09
+class Employee {
+  鈥?name, job, address, etc 鈥?
+  std::vector<std::string> awards_;
+ };
+\Trans{// Example 09 class Employee { 鈥?name, job, address, etc 鈥? std::vector<std::string> awards_; };}{}
+
+\end{code}
+
+% EN: The corresponding builder needs to reflect the nature of the information that it is adding to the object:
+\Trans{The corresponding builder needs to reflect the nature of the information that it is adding to the object:}{}
+
+\begin{code}
+% EN: // Example 09
+class AwardBuilder : public AbstractBuilder {
+  public:
+  explicit AwardBuilder(Employee& e) : AbstractBuilder(e)
+  { }
+  AwardBuilder& Add(std::string_view award) {
+    e_.awards_.emplace_back(award); return *this;
+   }
+ };
+AwardBuilder AbstractBuilder::Awards() {
+  return AwardBuilder(e_);
+\Trans{// Example 09 class AwardBuilder : public AbstractBuilder { public: explicit AwardBuilder(Employee& e) : AbstractBuilder(e) {} AwardBuilder& Add(std::string_view award) { e_.awards_.emplace_back(award); return *this; } }; AwardBuilder AbstractBuilder::Awards() { return AwardBuilder(e_);}{}
+
+}
+\end{code}
+
+% EN: We can call \texttt{AwardBuilder::Add()} as many times as we need to build the particular \texttt{Employee} object.
+\Trans{We can call \texttt{AwardBuilder::Add()} as many times as we need to build the particular \texttt{Employee} object.}{}
+
+% EN: Here is our builder in action. Note how, for different employees, we can use different ways to supply the required information:
+\Trans{Here is our builder in action. Note how, for different employees, we can use different ways to supply the required information:}{}
+
+\begin{code}
+% EN: Employee Barry = EmployeeBuilder()
+  .SetFirstName("Barnabas")
+  .SetLastName("Mackleberry")
+;
+\Trans{Employee Barry = EmployeeBuilder() .SetFirstName("Barnabas") .SetLastName("Mackleberry") ;}{}
+
+\end{code}
+
+% EN: We can use one employee record to add the manager's name to another employee:
+\Trans{We can use one employee record to add the manager's name to another employee:}{}
+
+\begin{code}
+% EN: Employee Homer = EmployeeBuilder()
+  .SetFirstName("Homer")
+  .SetMiddleName("J")
+  .SetLastName("Simpson")
+  .Job()
+    .SetTitle("Safety Inspector")
+    .SetOffice("Sector 7G")
+    .SetManager(Barry) // Writes "Barnabas Mackleberry"
+  .Address()
+    .SetHouse("742")
+    .SetStreet("Evergreen Terrace")
+    .SetCity("Springfield")
+  .Awards()
+    .Add("Remorseless Eating Machine")
+;
+\Trans{Employee Homer = EmployeeBuilder() .SetFirstName("Homer") .SetMiddleName("J") .SetLastName("Simpson") .Job() .SetTitle("Safety Inspector") .SetOffice("Sector 7G") .SetManager(Barry) // Writes "Barnabas Mackleberry" .Address() .SetHouse("742") .SetStreet("Evergreen Terrace") .SetCity("Springfield") .Awards() .Add("Remorseless Eating Machine") ;}{}
+
+\end{code}
+
+% EN: We can copy employment records between employees:
+\Trans{We can copy employment records between employees:}{}
+
+\begin{code}
+% EN: Employee Lenny = EmployeeBuilder()
+  .SetFirstName("Lenford")
+  .SetLastName("Leonard")
+  .Job()
+    .CopyFrom(Homer)
+;
+\Trans{Employee Lenny = EmployeeBuilder() .SetFirstName("Lenford") .SetLastName("Leonard") .Job() .CopyFrom(Homer) ;}{}
+
+\end{code}
+
+% EN: Some of the fields, such as first and last name, are optional, and the builder checks the finished records for completeness before they can be accessed (see the \texttt{AbstractBuilder::operator\ Employee()} above). Other fields, such as name suffixes, are optional:
+\Trans{Some of the fields, such as first and last name, are optional, and the builder checks the finished records for completeness before they can be accessed (see the \texttt{AbstractBuilder::operator\ Employee()} above). Other fields, such as name suffixes, are optional:}{}
+
+\begin{code}
+% EN: Employee Smithers = EmployeeBuilder()
+  .SetFirstName("Waylon")
+  .SetLastName("Smithers")
+  .SetSuffix("Jr") // Only when needed!
+;
+\Trans{Employee Smithers = EmployeeBuilder() .SetFirstName("Waylon") .SetLastName("Smithers") .SetSuffix("Jr") // Only when needed! ;}{}
+
+\end{code}
+
+% EN: The fluent builder is a powerful C++ pattern for constructing complex objects with many components, particularly when parts of the object are optional. However, it can get quite verbose for objects containing large amounts of highly structured data. There are alternatives, of course.
+\Trans{The fluent builder is a powerful C++ pattern for constructing complex objects with many components, particularly when parts of the object are optional. However, it can get quite verbose for objects containing large amounts of highly structured data. There are alternatives, of course.}{}
+
+\subsection{The implicit builder}
+
+% EN: We have already seen a case where the Builder pattern was employed without a dedicated builder object: all \texttt{Options} objects for named argument passing act as their own builders. We are going to see another version which is particularly interesting because there is no explicit builder object here. This design is particularly suitable for building nested hierarchical data such as XML files. We are going to demonstrate its use to build a (very simplified) HTML writer.
+\Trans{We have already seen a case where the Builder pattern was employed without a dedicated builder object: all \texttt{Options} objects for named argument passing act as their own builders. We are going to see another version which is particularly interesting because there is no explicit builder object here. This design is particularly suitable for building nested hierarchical data such as XML files. We are going to demonstrate its use to build a (very simplified) HTML writer.}{}
+
+% EN: In this design, HTML records are going to be represented by the corresponding classes: a class for the \texttt{\textless{}P\textgreater{}} tag, another for the \texttt{\textless{}UL\textgreater{}} tag, and so on. All of these classes elaborate the common base class, \texttt{HTMLElement}:
+\Trans{In this design, HTML records are going to be represented by the corresponding classes: a class for the \texttt{\textless{}P\textgreater{}} tag, another for the \texttt{\textless{}UL\textgreater{}} tag, and so on. All of these classes elaborate the common base class, \texttt{HTMLElement}:}{}
+
+\begin{code}
+% EN: class HTMLElement {
+  public:
+  const std::string name_;
+  const std::string text_;
+  const std::vector<HTMLElement> children_;
+  HTMLElement(std::string_view name, std::string_view text)
+    : name_(name), text_(text) { }
+  HTMLElement(std::string_view name, std::string_view text,
+              std::vector<HTMLElement>&& children)
+    : name_(name), text_(text),
+      children_(std::move(children)) { }
+  friend std::ostream& operator<<(std::ostream& out,
+    const HTMLElement& element);
+ };
+\Trans{class HTMLElement { public: const std::string name_; const std::string text_; const std::vector<HTMLElement> children_; HTMLElement(std::string_view name, std::string_view text) : name_(name), text_(text) {} HTMLElement(std::string_view name, std::string_view text, std::vector<HTMLElement>&& children) : name_(name), text_(text), children_(std::move(children)) {} friend std::ostream& operator<<(std::ostream& out, const HTMLElement& element); };}{}
+
+\end{code}
+
+% EN: There is, of course, a lot more to an HTML element, but we have to keep things simple. Also, our base element allows unlimited nesting: any element can have a vector of child elements, each of which can have child elements, and so on. Printing of an element is, therefore, recursive:
+\Trans{There is, of course, a lot more to an HTML element, but we have to keep things simple. Also, our base element allows unlimited nesting: any element can have a vector of child elements, each of which can have child elements, and so on. Printing of an element is, therefore, recursive:}{}
+
+\begin{code}
+% EN: std::ostream& operator<<(std::ostream& out,
+                         const HTMLElement& element) {
+  out << "<" << element.name_ << ">\n";
+  if (!element.text_.empty())
+    out << "  " << element.text_ << "\n";
+  for (const auto& e : element.children_) out << e;
+  out << "</" << element.name_ << ">" << std::endl;
+  return out;
+\Trans{std::ostream& operator<<(std::ostream& out, const HTMLElement& element) { out << "<" << element.name_ << ">\n"; if (!element.text_.empty()) out << " " << element.text_ << "\n"; for (const auto& e : element.children_) out << e; out << "</" << element.name_ << ">" << std::endl; return out;}{}
+
+}
+\end{code}
+
+% EN: Note that, in order to add child elements, we have to supply them in a \texttt{std::vector} which is then moved into the \texttt{HTMLElement} object. The rvalue reference means that the vector argument is going to be a temporary value or a result of \texttt{std::move}. However, we are not going to add the child elements to vectors ourselves: this is the job of the derived classes for the specific elements (\texttt{\textless{}P\textgreater{}}, \texttt{\textless{}UL\textgreater{}}, etc). The specific element classes can prevent the addition of child elements when the syntax does not allow it, as well as enforce other restrictions on the fields of an HTML element.
+\Trans{Note that, in order to add child elements, we have to supply them in a \texttt{std::vector} which is then moved into the \texttt{HTMLElement} object. The rvalue reference means that the vector argument is going to be a temporary value or a result of \texttt{std::move}. However, we are not going to add the child elements to vectors ourselves: this is the job of the derived classes for the specific elements (\texttt{\textless{}P\textgreater{}}, \texttt{\textless{}UL\textgreater{}}, etc). The specific element classes can prevent the addition of child elements when the syntax does not allow it, as well as enforce other restrictions on the fields of an HTML element.}{}
+
+% EN: What do these specific classes look like? The simpler ones are going to look like this:
+\Trans{What do these specific classes look like? The simpler ones are going to look like this:}{}
+
+\begin{code}
+% EN: class HTML : public HTMLElement {
+  public:
+  HTML() : HTMLElement("html", "") { }
+  HTML(std::initializer_list<HTMLElement> children) :
+    HTMLElement("html", "", children) { };
+ };
+\Trans{class HTML : public HTMLElement { public: HTML() : HTMLElement("html", "") {} HTML(std::initializer_list<HTMLElement> children) : HTMLElement("html", "", children) {}; };}{}
+
+\end{code}
+
+% EN: This \texttt{HTML} class represents the \texttt{\textless{}html\textgreater{}} tag. Classes such as \texttt{Body}, \texttt{Head}, \texttt{UL}, \texttt{OL}, and many more, are written exactly the same way. The class \texttt{P} for the \texttt{\textless{}P\textgreater{}} tag is similar except it does not allow nested objects, so it has only one constructor that takes the text argument. It is very important that these classes do not add any data members; they must initialize the base \texttt{HTMLElement} object and nothing else. The reason should be obvious if you look at the base class again: we store a vector of \texttt{HTMLElement} child objects. However, they were constructed -- as \texttt{HTML} or as \texttt{UL,} or as anything else -- they are only \texttt{HTMLElement} objects now. Any extra data is going to be lost.
+\Trans{This \texttt{HTML} class represents the \texttt{\textless{}html\textgreater{}} tag. Classes such as \texttt{Body}, \texttt{Head}, \texttt{UL}, \texttt{OL}, and many more, are written exactly the same way. The class \texttt{P} for the \texttt{\textless{}P\textgreater{}} tag is similar except it does not allow nested objects, so it has only one constructor that takes the text argument. It is very important that these classes do not add any data members; they must initialize the base \texttt{HTMLElement} object and nothing else. The reason should be obvious if you look at the base class again: we store a vector of \texttt{HTMLElement} child objects. However, they were constructed -- as \texttt{HTML} or as \texttt{UL,} or as anything else -- they are only \texttt{HTMLElement} objects now. Any extra data is going to be lost.}{}
+
+% EN: You may also notice that the vector parameter of the \texttt{HTMLElement} constructor is initialized from a \texttt{std::initializer\_list} argument. This conversion is done implicitly by the compiler from the list of the constructor arguments:
+\Trans{You may also notice that the vector parameter of the \texttt{HTMLElement} constructor is initialized from a \texttt{std::initializer\_list} argument. This conversion is done implicitly by the compiler from the list of the constructor arguments:}{}
+
+\begin{code}
+% EN: // Example 10
+auto doc = HTML{
+  Head{
+    Title{"Mary Had a Little Lamb" }
+   },
+  Body{
+    P{"Mary Had a Little Lamb" },
+    OL{
+      LI{"Its fleece was white as snow" },
+      LI{"And everywhere that Mary went" },
+      LI{"The lamb was sure to go" }
+     }
+   }
+ };
+\Trans{// Example 10 auto doc = HTML{ Head{ Title{"Mary Had a Little Lamb"} }, Body{ P{"Mary Had a Little Lamb"}, OL{ LI{"Its fleece was white as snow"}, LI{"And everywhere that Mary went"}, LI{"The lamb was sure to go"} } } };}{}
+
+\end{code}
+
+% EN: This statement begins with a call to construct an \texttt{HTML} object using two arguments. They are \texttt{Head} and \texttt{Body} objects, but they get converted to \texttt{HTMLElement} and put into \texttt{std::initializer\_list\textless{}HTMLElement\textgreater{}} by the compiler. The list is then used to initialize a vector, which is moved into the \texttt{children\_} vector in the \texttt{HTML} object. Both \texttt{Head} and \texttt{Body} objects themselves have child objects, one of which (\texttt{OL}) has its own child objects.
+\Trans{This statement begins with a call to construct an \texttt{HTML} object using two arguments. They are \texttt{Head} and \texttt{Body} objects, but they get converted to \texttt{HTMLElement} and put into \texttt{std::initializer\_list\textless{}HTMLElement\textgreater{}} by the compiler. The list is then used to initialize a vector, which is moved into the \texttt{children\_} vector in the \texttt{HTML} object. Both \texttt{Head} and \texttt{Body} objects themselves have child objects, one of which (\texttt{OL}) has its own child objects.}{}
+
+% EN: Note it gets a little tricky if you want to have additional constructor arguments because you cannot mix regular arguments with initializer list elements. This problem happens, for example, with the \texttt{LI} class. The straightforward way to implement this class, based on what we learned so far, is as follows:
+\Trans{Note it gets a little tricky if you want to have additional constructor arguments because you cannot mix regular arguments with initializer list elements. This problem happens, for example, with the \texttt{LI} class. The straightforward way to implement this class, based on what we learned so far, is as follows:}{}
+
+\begin{code}
+% EN: //Example 10
+class LI : public HTMLElement {
+  public:
+  explicit LI(std::string_view text) :
+    HTMLElement("li", text) { }
+  LI(std::string_view text,
+     std::initializer_list<HTMLElement> children) :
+    HTMLElement("li", text, children) { }
+ };
+\Trans{//Example 10 class LI : public HTMLElement { public: explicit LI(std::string_view text) : HTMLElement("li", text) {} LI(std::string_view text, std::initializer_list<HTMLElement> children) : HTMLElement("li", text, children) {} };}{}
+
+\end{code}
+
+% EN: Unfortunately, you can't call this constructor with something like this:
+\Trans{Unfortunately, you can't call this constructor with something like this:}{}
+
+\begin{code}
+% EN: //Example 10
+LI{"A",
+  UL{
+    LI{"B" },
+    LI{"C" }
+   }
+\Trans{//Example 10 LI{"A", UL{ LI{"B"}, LI{"C"} }}{}
+
+}
+\end{code}
+
+% EN: It seems obvious that what the programmer wanted is for the first argument to be \texttt{"A"} and the second argument (and any more arguments, if we had them) should go into the initializer list. But that doesn't work: generally, to form an initializer list, we have to enclose the element sequence in braces \texttt{\{ ... \}}. Only when the entire argument list matches an initializer list can these braces be omitted. With some arguments not being part of the initializer list, we have to be explicit:
+\Trans{It seems obvious that what the programmer wanted is for the first argument to be \texttt{"A"} and the second argument (and any more arguments, if we had them) should go into the initializer list. But that doesn't work: generally, to form an initializer list, we have to enclose the element sequence in braces \texttt{\{ ... \}}. Only when the entire argument list matches an initializer list can these braces be omitted. With some arguments not being part of the initializer list, we have to be explicit:}{}
+
+\begin{code}
+% EN: //Example 10
+LI{"A",
+  {UL{        // Notice { before UL!
+    LI{"B" },
+    LI{"C" }
+   } }            // And closing  } here
+\Trans{//Example 10 LI{"A", {UL{ // Notice { before UL! LI{"B"}, LI{"C"} }} // And closing } here}{}
+
+}
+\end{code}
+
+% EN: If you don't want to write the extra braces, you have to change the constructor slightly:
+\Trans{If you don't want to write the extra braces, you have to change the constructor slightly:}{}
+
+\begin{code}
+% EN: //Example 11
+class LI : public HTMLElement {
+  public:
+  explicit LI(std::string_view text) :
+    HTMLElement("li", text) { }
+  template <typename ... Children>
+  LI(std::string_view text, const Children&... children) :
+    HTMLElement("li", text,
+           std::initializer_list<HTMLElement>{children... })
+  { }
+ };
+\Trans{//Example 11 class LI : public HTMLElement { public: explicit LI(std::string_view text) : HTMLElement("li", text) {} template <typename ... Children> LI(std::string_view text, const Children&... children) : HTMLElement("li", text, std::initializer_list<HTMLElement>{children...}) {} };}{}
+
+\end{code}
+
+% EN: Instead of using an initializer list parameter, we use a parameter pack and explicitly convert it to an initializer list (which is then converted to a vector). Of course, the parameter pack will accept an arbitrary number of arguments of any type, not just \texttt{HTMLElement} and its derived classes, but the conversion to the initializer list will fail. If you want to follow the practice that any template that did not fail to instantiate should not produce compilation errors in its body, you have to restrict the types in the parameter pack to classes derived from \texttt{HTMLElement}. This is easily done using C++20 concepts:
+\Trans{Instead of using an initializer list parameter, we use a parameter pack and explicitly convert it to an initializer list (which is then converted to a vector). Of course, the parameter pack will accept an arbitrary number of arguments of any type, not just \texttt{HTMLElement} and its derived classes, but the conversion to the initializer list will fail. If you want to follow the practice that any template that did not fail to instantiate should not produce compilation errors in its body, you have to restrict the types in the parameter pack to classes derived from \texttt{HTMLElement}. This is easily done using C++20 concepts:}{}
+
+\begin{code}
+% EN: // Example 12
+class LI : public HTMLElement {
+  public:
+  explicit LI(std::string_view text) :
+    HTMLElement("li", text) { }
+  LI(std::string_view text,
+     const std::derived_from<HTMLElement>
+     auto& ... children) :
+    HTMLElement("li", text,
+           std::initializer_list<HTMLElement>{children... })
+  { }
+ };
+\Trans{// Example 12 class LI : public HTMLElement { public: explicit LI(std::string_view text) : HTMLElement("li", text) {} LI(std::string_view text, const std::derived_from<HTMLElement> auto& ... children) : HTMLElement("li", text, std::initializer_list<HTMLElement>{children...}) {} };}{}
+
+\end{code}
+
+% EN: If you don't use C++20 but still want to restrict the parameter types, you should read the \emph{Chapter 7, SFINAE, Concepts, and Overload Resolution Management} in this book.
+\Trans{If you don't use C++20 but still want to restrict the parameter types, you should read the \emph{Chapter 7, SFINAE, Concepts, and Overload Resolution Management} in this book.}{}
+
+% EN: With the parameter pack used as an intermediary for constructing an initializer list, we can avoid the extra braces and write our HTML document like this:
+\Trans{With the parameter pack used as an intermediary for constructing an initializer list, we can avoid the extra braces and write our HTML document like this:}{}
+
+\begin{code}
+% EN: // Examples 11, 12
+auto doc = HTML{
+  Head{
+    Title{"Mary Had a Little Lamb" }
+   },
+  Body{
+    P{"Mary Had a Little Lamb" },
+    OL{
+      LI{"Its fleece was white as snow" },
+      LI{"And everywhere that Mary went" },
+      LI{"The lamb was sure to go" }
+     },
+    UL{
+      LI{"It followed her to school one day" },
+      LI{"Which was against the rules",
+        UL{
+          LI{"It made the children laugh and play" },
+          LI{"To see a lamb at school" }
+         }
+       },
+      LI{"And so the teacher turned it out" }
+     }
+   }
+ };
+\Trans{// Examples 11, 12 auto doc = HTML{ Head{ Title{"Mary Had a Little Lamb"} }, Body{ P{"Mary Had a Little Lamb"}, OL{ LI{"Its fleece was white as snow"}, LI{"And everywhere that Mary went"}, LI{"The lamb was sure to go"} }, UL{ LI{"It followed her to school one day"}, LI{"Which was against the rules", UL{ LI{"It made the children laugh and play"}, LI{"To see a lamb at school"} } }, LI{"And so the teacher turned it out"} } } };}{}
+
+\end{code}
+
+% EN: This does look like an application of the Builder pattern: even though the final construction is done by a single call to the HTMLElement constructor, that constructor just moves the already constructed vector of child elements into its final location. The actual construction is done in steps like all builders do. But where is the builder object? There isn't one, not explicitly. Part of the builder functionality is provided by all the derived objects, such as \texttt{HTML}, \texttt{UL}, etc. They may look like they represent the corresponding HTML constructs, but they really don't: after the entire document is constructed, we only have \texttt{HTMLElement} objects. The derived objects are used only to build the document. The rest of the builder code is generated by the compiler when it does all the implicit conversions between parameter packs, initializer lists, and vectors. By the way, any half-decent optimizing compiler is going to get rid of all the intermediate copies and copy the input strings straight into the final vector where they are going to be stored.
+\Trans{This does look like an application of the Builder pattern: even though the final construction is done by a single call to the HTMLElement constructor, that constructor just moves the already constructed vector of child elements into its final location. The actual construction is done in steps like all builders do. But where is the builder object? There isn't one, not explicitly. Part of the builder functionality is provided by all the derived objects, such as \texttt{HTML}, \texttt{UL}, etc. They may look like they represent the corresponding HTML constructs, but they really don't: after the entire document is constructed, we only have \texttt{HTMLElement} objects. The derived objects are used only to build the document. The rest of the builder code is generated by the compiler when it does all the implicit conversions between parameter packs, initializer lists, and vectors. By the way, any half-decent optimizing compiler is going to get rid of all the intermediate copies and copy the input strings straight into the final vector where they are going to be stored.}{}
+
+% EN: Of course, this is a very simplified example, and for any practical use, we would need to store more data with HTML elements and give the programmer a way to initialize this data. We could combine the implicit builder approach with the fluent interface to provide an easy way to add optional values such as style, type, etc, to all \texttt{HTMLElement} objects.
+\Trans{Of course, this is a very simplified example, and for any practical use, we would need to store more data with HTML elements and give the programmer a way to initialize this data. We could combine the implicit builder approach with the fluent interface to provide an easy way to add optional values such as style, type, etc, to all \texttt{HTMLElement} objects.}{}
+
+% EN: By now you have seen three distinct Builder designs: there is the ``traditional'' builder with a single builder object, the fluent builder that employs method chaining, and the implicit builder that uses many small builder helper objects and relies heavily on compiler-generated code. There are other designs, but they are mostly variants and combinations of the approaches you have learned. Our study of the Builder pattern has drawn to a close.
+\Trans{By now you have seen three distinct Builder designs: there is the ``traditional'' builder with a single builder object, the fluent builder that employs method chaining, and the implicit builder that uses many small builder helper objects and relies heavily on compiler-generated code. There are other designs, but they are mostly variants and combinations of the approaches you have learned. Our study of the Builder pattern has drawn to a close.}{}
+
+\section{Summary}
+
+% EN: Yet again, we have seen the power of C++ to essentially create a new language out of the existing one; C++ does not have named function arguments, only positional ones. That is part of the core language. And yet, we were able to extend the language and add support for named arguments in a reasonable-looking way, using the method chaining technique. We have also explored the other applications of method chaining beyond the named arguments idiom.
+\Trans{Yet again, we have seen the power of C++ to essentially create a new language out of the existing one; C++ does not have named function arguments, only positional ones. That is part of the core language. And yet, we were able to extend the language and add support for named arguments in a reasonable-looking way, using the method chaining technique. We have also explored the other applications of method chaining beyond the named arguments idiom.}{}
+
+% EN: One of these applications, the fluent builder, is again an exercise in creating new languages: the power of the fluent interface, in general, is that it can be used to create domain-specific languages to execute sequences of instructions on some data. And so the fluent builder can be used to allow the programmer to describe the construction of objects as a sequence of steps that are familiar in a particular domain. Then, of course, there is the implicit builder that (with the right indents) even makes C++ code look a bit like the HTML document that is being built.
+\Trans{One of these applications, the fluent builder, is again an exercise in creating new languages: the power of the fluent interface, in general, is that it can be used to create domain-specific languages to execute sequences of instructions on some data. And so the fluent builder can be used to allow the programmer to describe the construction of objects as a sequence of steps that are familiar in a particular domain. Then, of course, there is the implicit builder that (with the right indents) even makes C++ code look a bit like the HTML document that is being built.}{}
+
+% EN: The next chapter introduces the only purely performance-oriented idiom in this book. We have discussed in several chapters the performance cost of memory allocation, and its impact on the implementation of several patterns. The next idiom, local buffer optimization, attacks the problem head-on, by avoiding memory allocation altogether.
+\Trans{The next chapter introduces the only purely performance-oriented idiom in this book. We have discussed in several chapters the performance cost of memory allocation, and its impact on the implementation of several patterns. The next idiom, local buffer optimization, attacks the problem head-on, by avoiding memory allocation altogether.}{}
+
+\section{Questions}
+
+\begin{enumerate}
+\item
+% EN:   Why do functions with many arguments of the same or related types lead to fragile code?
+\Trans{Why do functions with many arguments of the same or related types lead to fragile code?}{}
+\item
+% EN:   How do aggregate argument objects improve code maintainability and robustness?
+\Trans{How do aggregate argument objects improve code maintainability and robustness?}{}
+\item
+% EN:   What is the named argument idiom and how does it differ from aggregate arguments?
+\Trans{What is the named argument idiom and how does it differ from aggregate arguments?}{}
+\item
+% EN:   What is the difference between method chaining and cascading?
+\Trans{What is the difference between method chaining and cascading?}{}
+\item
+% EN:   What is the Builder pattern?
+\Trans{What is the Builder pattern?}{}
+\item
+% EN:   What is the fluent interface and when is it used?
+\Trans{What is the fluent interface and when is it used?}{}
+\end{enumerate}
+

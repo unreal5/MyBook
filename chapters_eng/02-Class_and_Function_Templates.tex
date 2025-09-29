@@ -1,0 +1,1551 @@
+% \chapter{Class and Function Templates}
+\chapter{类与函数模板}
+
+% The template programming features of C++ form a large and complex subject, with many books dedicated exclusively to teaching these features. In this book, we will use many of the advanced C++ generic programming features. How, then, should we prepare ourselves to understand these language constructs as they make their appearance throughout this book? This chapter takes an informal approach---instead of precise definitions, we demonstrate the use of templates through examples and explain what the different language features do. If you find your knowledge lacking at this point, you're encouraged to seek a deeper understanding and read one or more of the books dedicated entirely to the C++ language that are focused on explaining its syntax and semantics. Of course, if you wish for a more precise, formal description, you can refer to the C++ standard or a reference book.
+本章要介绍的 C++ 模板编程特性是一个庞大而复杂的主题，已有许多专著专门系统讲解这些内容。本书后续会使用大量现代 C++ 泛型编程（模板）进阶特性。那么读者该如何准备，才能在后面的章节里理解这些语法结构的用法？本章采取一种“非正式”方式：我们不追求严密教科书式定义，而是通过示例展示模板的使用，并解释不同语言要素的作用。如果你发现自己当前理解还不够深入，建议补充阅读一到多本专门聚焦 C++ 语法与语义的权威教材；若需要更精确、形式化的描述，可以直接查阅 C++ 标准或参考手册。
+
+% The following topics will be covered in this chapter:
+本章将涵盖以下主题：
+
+\begin{itemize}
+% Templates in C++
+\item C++ 中的模板
+% Class and function templates
+\item 类模板与函数模板
+% Template instantiations
+\item 模板实例化
+% Template specializations
+\item 模板特化（全特化与偏特化）
+% Overloading of template functions
+\item 模板函数的重载
+% Variadic templates
+\item 可变参数模板
+% Lambda expressions
+\item Lambda 表达式
+% Concepts
+\item Concepts（概念）
+\end{itemize}
+
+% \section{Templates in C++}
+\section{C++ 中的模板}
+
+% One of the greatest strengths of C++ is its support for generic programming. In generic programming, the algorithms and data structures are written in terms of generic types that will be specified later. This allows the programmer to implement a function or a class once, and later, instantiate it for many different types. Templates are a C++ feature that allows classes and functions to be defined on generic types. C++ supports three kinds of templates---function, class, and variable templates.
+C++ 的一大核心优势在于其对“泛型编程”（generic programming）的强力支持。泛型编程的思想是：算法与数据结构以“之后才被具体化”的抽象类型来编写；这样我们只需实现一次函数或类，就能在稍后针对多种实际类型进行实例化生成代码。模板（template）正是 C++ 提供的机制，用来在“类型参数化”基础上定义类与函数。C++ 共支持三种模板：函数模板、类模板与变量模板。
+
+% \subsection{Function templates}
+\subsection{函数模板}
+
+% Function templates are generic functions---unlike regular functions, a template function does not declare its argument types. Instead, the types are template parameters:
+函数模板是一种“泛型函数”——不同于普通函数，它的参数类型不直接在形参列表里写死，而是通过模板形参（类型参数）来抽象：
+
+\begin{code}
+// Example 01
+template <typename T>
+T increment(T x) { return x + 1; }
+\end{code}
+
+% This template function can be used to increment a value of any type by one, for which adding one is a valid operation:
+该模板函数可对“支持 +1 操作”的任意类型值做自增（返回新值）：
+
+\begin{code}
+increment(5);    // T is int, returns 6
+increment(4.2);    // T is double, return 5.2 char c[10];
+increment(c);    // T is char*, returns &c[1]
+\end{code}
+
+% Most template functions have some limitations on the types that are used as their template parameters. For example, our \cii{increment()} function requires that the expression \cii{x\ +\ 1} is valid for the type of \cii{x}. Otherwise, the attempt to instantiate the template will fail, with a somewhat verbose compilation error.
+大多数函数模板对可用作模板参数的类型都存在某种“隐含前提”。例如这里的 \cii{increment()} 要求对类型 \cii{T} 的对象 \cii{x}，表达式 \cii{x + 1} 必须可编译；否则实例化时会失败，并出现较为冗长的编译错误信息。
+
+% Both non-member and class member functions can be function templates; however, virtual functions cannot be templates. The generic types can be used not only to declare function parameters but to declare any variables inside the body of the function:
+自由函数与类成员函数都可以写成函数模板；但虚函数（virtual）不能是模板。模板类型参数不仅可用于形参，也可在函数体内部声明局部变量时使用：
+
+\begin{code}
+template <typename T> T sum(T from, T to, T step) {
+  T res = from;
+  while ((from += step) < to) { res += from; }
+  return res;
+}
+\end{code}
+
+% In C++20, simple template declarations can be abbreviated: instead of writing
+C++20 中，某些简单形式的模板声明可以“省略写法”。例如下面的写法：
+
+\begin{code}
+template <typename T> void f(T t);
+\end{code}
+
+% we can write
+可以简写为：
+
+\begin{code}
+// Example 01a
+void f(auto t);
+\end{code}
+
+% Other than more terse declarations, there is no particular advantage to this abbreviation, and the feature is quite limited. First of all, \cii{auto} can be used only as the ``top-level'' parameter type; for example, this is invalid (but allowed by some compilers):
+除语法更简短之外，此“缩写”并无其它额外优势，且适用范围有限。首先，\cii{auto} 只能出现在“顶层”形参类型位置；例如下面写法在标准里是非法的（尽管部分编译器可能放宽接受）：
+
+\begin{code}
+void f(std::vector<auto>& v);
+\end{code}
+
+% and must still be written as
+必须仍旧写成：
+
+\begin{code}
+template <typename T> void f(std::vector<T>& v);
+\end{code}
+
+% Also, if you need to use template type parameters elsewhere in the function declaration, you can't abbreviate them:
+另外，如果你需要在函数声明的其它位置再次引用该模板类型参数，就不能使用这种缩写：
+
+\begin{code}
+template <typename T> T f(T t);
+\end{code}
+
+% Of course, you could declare the return type as \cii{auto} and use the trailing return type:
+当然你可以把返回类型写成 \cii{auto}，再用尾置返回类型：
+
+\begin{code}
+auto f(auto t) -> decltype(t);
+\end{code}
+
+% but at this point, the template is not really ``abbreviated.''
+但这样做其实已经失去了“简写”的意义。
+
+% We will see more of function templates later, but let's introduce class templates next.
+后面还会继续深入函数模板，这里先转到类模板。
+
+% \subsection{Class templates}
+\subsection{类模板}
+
+% Class templates are classes that use generic types, usually to declare their data members, but also to declare methods and local variables inside them:
+类模板（class template）即“带有类型参数”的类定义。最常见地它用这些类型参数来声明数据成员，同时也可用于成员函数签名、返回值及内部局部变量声明：
+
+\begin{code}
+// Example 02
+template <typename T> class ArrayOf2 {
+  public:
+  T& operator[](size_t i) { return a_[i]; }
+  const T& operator[](size_t i) const { return a_[i]; }
+  T sum() const { return a_[0] + a_[1]; }
+  private:
+  T a_[2];
+};
+\end{code}
+
+% This class is implemented once, and can then be used to define an array of two elements of any type:
+该类只需实现一次，随后即可用于构造任意类型的“两个元素的数组”对象：
+
+\begin{code}
+ArrayOf2<int> i; i[0] = 1; i[1] = 5;
+std::cout << i.sum();                       // 6
+ArrayOf2<double> x; x[0] = -3.5; x[1] = 4;
+std::cout << x.sum();                       // 0.5
+ArrayOf2<char*> c; char s[] = "Hello";
+c[0] = s; c[1] = s + 2;
+\end{code}
+
+% Pay particular attention to the last example---you might expect the \cii{ArrayOf2} template not to be valid with a type such as \cii{char*}---after all, it has a method, \cii{sum()}, that does not compile if the type of \cii{a\_{[}0{]}} and \cii{a\_{[}1{]}} is a pointer. However, our example compiles as written---a method of a class template does not have to be valid until we try to use it. If we never call \cii{c.sum()}, then the fact that it would not compile never comes up, and the program remains valid. If we do call a member function that does not compile for the chosen template arguments, we get a syntax error in the body of the template (in our example, something about not being able to add two pointers). These error messages are rarely straightforward. Even if they were, it is unclear if the problem is in the body of the function, or if the function was not supposed to be called in the first place. Later in this chapter, we will see how to improve this situation.
+请特别留意最后一个例子——你可能原本会认为 \cii{ArrayOf2} 不能用于 \cii{char*} 这样的类型：因为成员函数 \cii{sum()} 在元素是指针时无法编译（指针不能直接相加以得到语义化结果）。然而示例整体依然可以编译：原因在于“类模板的方法直到被实际用到才需要通过编译”。如果我们从不调用 \cii{c.sum()}，就不会触发那段无效代码的实例化，程序整体仍合法。若调用了不适配实参类型的成员函数，则会在模板实例化阶段于函数体内部得到编译错误（例如“不能对两个指针做加法”）。此类错误信息往往不够直观，甚至让人不确定是实现写错，还是函数根本不该被调用。后文会介绍改进这一问题的手段。
+
+\subsection{Variable templates}
+% The last kind of template in C++ is a variable template, which was introduced in C++14. This template allows us to define a variable with a generic type:
+最后一种模板形式是“变量模板”（variable template），它在 C++14 中被引入。变量模板允许我们为“泛型类型”定义一个变量：
+
+\begin{code}
+// Example 03
+template <typename T>
+constexpr T pi = T(3.14159265358979323846264338327950288419716939937510582097494459230781L);
+pi<float>;      // 3.141592
+pi<double>;     // 3.141592653589793
+\end{code}
+
+% Variable templates are, for the most part, very straightforward to use, mostly for defining your own constants, but there are some interesting patterns that take advantage of them; we will see one in the next section.
+变量模板总体使用非常直接，最常见用途是定义你自己的常量。不过也存在一些更有趣的用法模式；下一小节会看到一个例子。
+
+\subsection{Non-type template parameters}
+% Usually, template parameters are types, but C++ also allows for several kinds of non-type parameters. First of all, template parameters can be values of integer or enumeration types:
+通常模板参数是“类型”，但 C++ 也允许若干“非类型模板参数”（non-type template parameter）。首先，模板参数可以是整数类型或枚举类型的值：
+
+\begin{code}
+// Example 04
+template <typename T, size_t N> class Array {
+  public:
+  T& operator[](size_t i) {
+    if (i >= N) throw std::out_of_range("Bad index");
+     return data_[i];
+  }
+  private:
+  T data_[N];
+};
+Array<int, 5> a;      // OK
+cin >> a[0];
+Array<int, a[0]> b;   // Error
+\end{code}
+
+% This is a template with two parameters---the first is a type, but the second is not. It is a value of type \cii{size\_t} that determines the size of the array; the advantage of such a template over a built-in C-style array is that it can do range checking. The C++ standard library has a \cii{std::array} class template that should be used instead of implementing your own array in any real program, but it does make for an easy-to-follow example.
+上面的模板有两个参数——第一个是类型，第二个则是“非类型”参数。第二个参数是一个 \cii{size_t} 常量，用来决定数组长度。与内置 C 风格数组相比，这种写法的优势是可以做越界检查。标准库已经提供了 \cii{std::array}（真实工程应优先使用），这里只是为了举例说明。
+
+% The values of non-type parameters that are used to instantiate a template must be compile-time constants or \cii{constexpr} values---the last line in the preceding example is invalid because the value of \cii{a{[}0{]}} is not known until the program reads it in at runtime. C++20 allows floating-point and user-defined types for non-type template parameters; until then, the parameters were limited to integral types, pointers (including function and member pointers), references, and enumerations. Of course, the value of a non-type parameter has to be a compile-time constant so, for example, pointers to local variables are not allowed.
+非类型模板参数用于实例化时所提供的值必须是“编译期常量”或 \cii{constexpr} 值——示例里最后一行非法，就是因为 \cii{a[0]} 只有在运行期读取输入后才知道。C++20 起允许浮点数与用户自定义字面量类型作为非类型模板参数；在此之前仅限：整型、指针（含函数指针与成员指针）、引用、枚举。注意其值必须是编译期常量，因此指向局部变量的指针不能用作非类型模板实参。
+
+% The numeric template parameters used to be very popular in C++ because they allow complex compile-time calculations to be implemented, but in the recent versions of the standard, \cii{constexpr} functions can be used to the same effect and are much easier to read. Of course, the standard takes with one hand and gives with the other, and so an interesting new use case emerged for non-template parameters combined with \cii{constexpr} functions: these functions, first introduced in C++11, are used to define ``immediate functions,'' or functions that are evaluated at compile time. The problem with \cii{constexpr} functions is that they \emph{may} evaluate at compile time but it's not required; they could also be evaluated at run time:
+过去“数值型”非类型模板参数非常常见，因为它们能实现复杂的编译期计算。但后来标准引入并增强了 \cii{constexpr} 函数，可以达到类似目的且更易读。当然标准一手给一手也会再提供新能力——非类型模板参数与 \cii{constexpr} 结合出现了新的用例：在 C++11 中引入的 \cii{constexpr} 函数可用于定义“立即函数”（immediate function），即必须在编译期求值的函数。不过普通 \cii{constexpr} 函数只是“可以”在编译期执行，并非“必须”，也可能在运行期执行：
+
+\begin{code}
+constexpr size_t length(const char* s) {
+  size_t res = 0;
+  while (*(s++)) ++res;
+  return res;
+}
+std::cout << length("abc") << std::endl;
+char s[] = "runtime";
+std::cout << length(s) << std::endl;
+\end{code}
+
+% Here we have a \cii{constexpr} function \cii{length()}. Does the length computation actually happen at compile time? There is no way to know short of examining the generated assembly code (which can differ from one compiler to another). The only way to be sure is to invoke the function in a compile-time context, for example:
+我们定义了一个 \cii{constexpr} 函数 \cii{length()}。它的求值是否真的在编译期发生？除非去查看生成的汇编（而且不同编译器可能不同），否则无法保证。唯一能确定的方法是在“编译期上下文”中调用它，例如：
+
+\begin{code}
+static_assert(length("abc") == 3, ""); // OK
+char s[] = "runtime";
+static_assert(length(s) == 7, ""); // Fails
+\end{code}
+
+% The first assert compiles, and the second does not even though the value 7 is correct: the argument is not a compile-time value, so the evaluation must happen at run time.
+第一个断言能通过；第二个虽然值也确实是 7，但却无法编译：原因是参数不是编译期常量，因此只能在运行期求值。
+
+% In C++20, the function may be declared \cii{consteval} instead of \cii{constexpr}: this guarantees that the evaluation happens at compile time or not at all (thus, the second \cii{cout} statement in the preceding example will not compile). Prior to C++20, we have to get creative. Here is one way to enforce compile-time execution:
+C++20 中可以把函数声明为 \cii{consteval}（替代 \cii{constexpr}）以强制其“必须”在编译期求值，若无法则整体不成立（所以前面例子里第二个 \cii{cout} 将无法编译）。在 C++20 之前我们需要一些技巧。下面是强制编译期执行的一种方式：
+
+\begin{code}
+// Example 05c
+template <auto V>
+static constexpr auto force_consteval = V;
+\end{code}
+
+% The \cii{force\_consteval} variable template can be used to enforce compile-time evaluation as follows:
+这个 \cii{force\_consteval} 变量模板可以这样使用，从而迫使表达式在编译期被实例化与求值：
+
+\begin{code}
+std::cout << force_consteval<length("abc")> << std::endl;
+char s[] = "runtime";
+std::cout << force_consteval<length(s)> << std::endl;
+\end{code}
+
+% The second \cii{cout} statement does not compile because the function \cii{length()} cannot be evaluated as an immediate function. The variable template \cii{force\_consteval} uses a non-type template parameter whose type is not specified but deduced from the template argument (an \cii{auto} template parameter). This is a C++17 feature; in C++14 we have to use a rather unelegant macro to achieve the same result:
+第二个 \cii{cout} 无法编译，因为 \cii{length()} 不能在该调用上下文被视为立即函数。这里的变量模板 \cii{force\_consteval} 使用了一个“类型由模板实参自动推导”的非类型模板参数（即 \cii{auto} 模板参数），这是 C++17 特性；在 C++14 里需要借助不太优雅的宏才能模拟：
+
+\begin{code}
+// Example 05d
+template <typename T, T V>
+static constexpr auto force_consteval_helper = V;
+#define force_consteval(V)
+force_consteval_helper<decltype(V), (V)>
+std::cout << force_consteval(length("abc")) << std::endl;
+\end{code}
+
+% If a non-type template parameter seems ``less than a type,'' you will like the next option, a parameter that is definitely more than a simple type.
+如果觉得“非类型模板参数”看上去不够“高级”，那么你可能会喜欢下一类：其本身就是“模板”的模板参数。
+
+\subsection{Template template parameters}
+% The second kind of non-type template parameter worth mentioning is a \emph{template template} parameter---a template parameter that is itself a template. We will need them in the later chapters of this book. This template parameter is substituted---not with a name of a class, but a name of an entire template.
+另一类值得关注的“高级”参数是 *模板模板参数*（template template parameter）——也就是“其自身是模板”的模板参数。后续多章会频繁用到。该参数被替换时，提供的不是一个具体类名，而是“一个模板”的名字。
+
+% Here is a class template with a template template parameter:
+下面是一个带模板模板参数的类模板示例：
+
+\begin{code}
+// Example 06a
+template <typename T,
+         template <typename> typename Container>
+class Builder {
+  Container<T> data_;
+  public:
+  void add(const T& t) { data_.push_back(t); }
+  void print() const {
+    for (const auto& x : data_) std::cout << x << " ";
+    std::cout << std::endl;
+  }
+};
+\end{code}
+
+% The \cii{Builder} template declares a class that is used to construct (build) a container of an arbitrary type \cii{T}. The container itself does not have a specific type, it's a template itself.
+	exttt{Builder} 模板声明了一个类，用来“构建”由任意类型 \cii{T} 组成的容器。注意容器本身没有具体类型——它本身也是一个模板。
+
+% It can be instantiated with any container template that takes one type argument:
+它可以用“接收一个类型参数”的任意容器模板来实例化：
+
+\begin{code}
+template <typename T> class my_vector { 鈥?};
+Builder<int, my_vector> b;
+b.add(1);
+b.add(2);
+b.print();
+\end{code}
+
+% Of course, there are additional requirements on the \cii{Container} template: it must have a single type parameter \cii{T} (the rest may be defaulted), it should be default-constructible, it must have a \cii{push\_back()} method, and so on. C++20 gives us a concise way to state these requirements and make them a part of the template interface; we will learn about it later in this chapter, in the \emph{Concepts} section.
+当然，对 \cii{Container} 这个模板还隐含一些约束：它需要至少有一个类型参数（其余可有缺省），应支持默认构造，且需要有 \cii{push_back()} 等方法。C++20 提供了将这些“需求”直接写进接口的简洁方式——稍后在 *Concepts* 小节会学习。
+
+% Here is a function template that has two template template parameters:
+下面是一个拥有两个“模板模板参数”的函数模板：
+
+\begin{code}
+// Example 06b
+template <template <typename> class Out_container,
+          template <typename> class In_container,
+          typename T> Out_container<T>
+resequence(const In_container<T>& in_container) {
+  Out_container<T> out_container;
+  for (auto x : in_container) {
+    out_container.push_back(x);
+  }
+  return out_container;
+}
+\end{code}
+
+% This function takes an arbitrary container as an argument and returns another container, a different template, but instantiated on the same type, with the values copied from the input container:
+这个函数接收任意容器参数，并返回另一个“不同模板类型”的容器，但两者都以相同元素类型实例化；返回容器中的元素值从输入容器复制而来：
+
+\begin{code}
+my_vector<int> v { 1, 2, 3, 4, 5 };
+template <typename T> class my_deque { 鈥?};
+auto d = resequence<my_deque>(v);// my_deque with 1 鈥?5
+\end{code}
+
+% Note that the compiler deduces both the type of the template argument (\cii{In\_container} as \cii{my\_vector}) and the type of its template parameter (\cii{T} as \cii{int}). Of course, the remaining template parameter \cii{Out\_container} cannot be deduced (it is not used in any parameters of the template function) and must be explicitly specified, which fits our intended use.
+注意：编译器同时推导出了“输入容器模板”的类型（\cii{In_container = my_vector}）以及其内部类型参数（\cii{T = int}）。另一个模板参数 \cii{Out_container} 无法被推导（未出现在函数形参类型中），因此需要显式写出——这也正符合我们预期（调用端决定要转换成哪种容器模板）。
+
+% There is a major limitation on template template parameters that is made more complex by the fact that different compilers enforce it unevenly (i.e., some compilers let through the code that should not compile but you would really like it to). The limitation is that the number of template parameters specified for the template template must match the number of the template parameters of the argument. Consider this template function:
+模板模板参数有一个重要限制，并且不同编译器对其执行严格度不一致（有的会“放行”其实不符合标准的代码）。限制是：模板模板参数的“形参个数”必须与传入的“模板实参”的参数个数匹配。看下面的函数模板：
+
+\begin{code}
+template <template <typename> class Container, typename T>
+void print(const Container<T>& container) {
+  for (auto x : container) { std::cout << x << " "; }
+  std::cout << std::endl;
+}
+std::vector<int> v { 1, 2, 3, 4, 5 };
+print(v);
+\end{code}
+
+% This code may compile, but it depends on the version of the standard and the compiler's strict adherence to the standard: the \cii{std::vector} template has two template parameters, not one. The second parameter is the allocator; it has a default value, which is why we do not have to specify the allocator type when declaring a vector object. GCC, Clang, and MSVC all relax this requirement to some degree (but not to the same degree). Variadic templates, which we will see later in this chapter, offer another, more robust solution (at least in C++17 and later).
+这段代码“可能”编译通过，取决于标准版本及编译器是否严格。\cii{std::vector} 实际有两个模板参数而非一个，第二个是分配器（有缺省参数），所以我们平时声明 vector 不必写出来。GCC / Clang / MSVC 在不同程度上放宽这一匹配要求。后面会介绍的“可变参数模板”提供了更健壮的解决方案（尤其在 C++17 及之后）。
+
+% Templates are a kind of recipe for generating code. Next, we will see how we can convert these recipes into actual code we can run.
+模板可以看作“生成代码的配方”。接下来我们来看：如何把这些“配方”在需要的时候转化为真正可执行的代码。
+
+\section{Template instantiations}
+% The template name is not a type and cannot be used to declare a variable or call a function. To create a type or a function, the template must be instantiated. Most of the time, templates are instantiated implicitly when they are used. We will again start with function templates.
+模板名字本身不是一个“类型”，因此不能直接用来声明变量或调用函数。要得到真正的类型或函数，必须对模板进行“实例化”（instantiation）。大多数情况下，模板在被“使用”时会被隐式实例化。我们再次从函数模板开始讨论。
+
+\subsection{Function templates}
+% To use a function template to generate a function, we have to specify which types should be used for all template type parameters. We can just specify the types directly:
+要利用函数模板生成具体函数，必须为所有“类型模板参数”确定实际类型。可以显式地直接写出这些类型：
+
+\begin{code}
+template <typename T> T half(T x) { return x/2; }
+int i = half<int>(5);
+\end{code}
+
+% This instantiates the \cii{half} function template with the \cii{int} type. The type is explicitly specified; we could call the function with an argument of another type, as long as it is convertible to the type we requested:
+这会显式实例化出 \cii{half<int>}。虽然我们传入的参数类型也可以是别的，但需要能隐式转换成我们明确指定的那个类型：
+
+\begin{code}
+double x = half<double>(5);
+\end{code}
+
+% Even though the argument is an \cii{int}, the instantiation is that of \cii{half\textless{}double\textgreater{}}, and the return type is \cii{double}. The integer value \cii{5} is implicitly converted to \cii{double}.
+尽管调用实参是 \cii{int}，这里实例化的是 \cii{half<double>}，返回类型为 \cii{double}。整数 \cii{5} 被隐式转换成 \cii{double}。
+
+% Even though every function template can be instantiated by specifying all its type parameters, this is rarely done. Most of the uses of function templates involve the automatic deduction of types. Consider the following:
+虽然可以总是显式列出全部类型参数来实例化函数模板，但实践中这样做并不常见。多数情况下会依赖“自动类型推导”。例如：
+
+\begin{code}
+auto x = half(8);    // int
+auto y = half(1.5);    // double
+\end{code}
+
+% The template type can be deduced only from the template function arguments---the compiler will attempt to select the type for the \cii{T} parameter to match the type of the function argument that is declared with the same type. In our case, the function template has the argument \cii{x} of the \cii{T} type. Any call to this function has to provide some value for this argument, and this value must have a type. The compiler will deduce that \cii{T} must be that type. In the first call in the preceding code block, the argument is \cii{5}, and its type is \cii{int}. There is nothing better to do than to assume that \cii{T} should be \cii{int} in this particular template instantiation. Similarly, in the second call, we can deduce that \cii{T} must be \cii{double}.
+模板形参类型的推导只能来自函数模板的形参类型——编译器会尝试让模板参数 \cii{T} 与对应函数形参类型一致。此处函数模板的参数 \cii{x} 声明为 \cii{T}。任意一次调用都会给该参数传一个“具有静态类型”的值，因此编译器可据此推得 \cii{T}。第一行调用中实参字面量 \cii{5} 的类型为 \cii{int}，于是推导出实例化为 \cii{T=int}。第二次调用里字面量为浮点，推导出 \cii{T=double}。
+
+% After this deduction, the compiler performs type substitution: all other mentions of the \cii{T} type are replaced by the type that was deduced; in our case, there is only one other use of \cii{T}, which is the return type.
+完成推导后，编译器执行“类型替换”：将模板定义体内所有出现的 \cii{T} 都用推导出的具体类型替换；此例中另一个出现点是返回类型。
+
+% Template argument deduction is widely used to capture types that we cannot easily determine:
+模板实参推导广泛用于“捕获那些我们不想/不便显式写出的类型”：
+
+\begin{code}
+long x = ...;
+unsigned int y = ...;
+auto x = half(y + z);
+\end{code}
+
+% Here, we deduce the \cii{T} type to be whatever the type of the expression \cii{y\ +\ z} is (it's \cii{long}, but with template deduction, we don't need to specify that explicitly, and the deduced type will \emph{follow} the argument type if we ever change the types of \cii{y} and \cii{z}). Consider the following example:
+这里我们让 \cii{T} 自动成为表达式 \cii{y + z} 的结果类型（这里是 \cii{long}，但我们无需关心细节；如果以后改了 \cii{y} 或 \cii{z} 的类型，推导结果会自动“跟随变化”）。再看一个例子：
+
+\begin{code}
+template <typename U> auto f(U);
+half(f(5));
+\end{code}
+
+% We deduce \cii{T} to match whatever type the \cii{f()} template function returns for an \cii{int} argument (of course, the definition of the \cii{f()} template function has to be provided before it can be called, but we do not need to dig into the header files where \cii{f()} is defined, as the compiler will deduce the right type for us).
+这里我们令 \cii{T} 推导为 \cii{f(5)}（即 \cii{f()} 接收一个 \cii{int} 实参时）返回的类型。自然需要在此之前有 \cii{f()} 的定义可见，但我们不必去头文件里“手工查类型”，编译器会替我们完成推导。
+
+% Only the types that are used to declare function arguments can be deduced. There is no rule that all template type parameters must be somehow present in the argument list, but any parameters that cannot be deduced must be explicitly specified:
+只有出现在“函数形参类型”中的模板参数类型才能被推导。标准并不要求所有模板参数都必须出现在形参列表里；但是凡是无法推导出的参数，就必须显式指定：
+
+\begin{code}
+template <typename U, typename V> U half(V x) {
+  return x/2;
+}
+auto y = half<double>(8);
+\end{code}
+
+% Here, the first template type parameter is explicitly specified, so \cii{U} is double, and \cii{V} is deduced to be \cii{int}.
+此处第一个模板参数被显式指定为 \cii{double}（即 \cii{U}），而 \cii{V} 则由实参类型推导为 \cii{int}。
+
+% Sometimes, the compiler cannot deduce template type parameters, even if they are used to declare arguments:
+有时即便类型形参用于声明了函数参数，编译器也无法成功推导：
+
+\begin{code}
+template <typename T> T Max(T x, T y) {
+  return (x > y) ? x : y;
+}
+auto x = Max(7L, 11); // Error
+\end{code}
+
+% Here, we can deduce from the first argument that \cii{T} must be \cii{long}, but from the second argument, we deduce that \cii{T} must be \cii{int}. It is often surprising to programmers who learn their way around templates that the \cii{long} type is not deduced in this case---after all, if we substitute \cii{long} for \cii{T} everywhere, the second argument will be implicitly converted, and the function will compile fine. So why isn't the \emph{larger} type deduced? Because the compiler does not attempt to find a type for which all argument conversions are possible: after all, there is usually more than one such type. In our example, \cii{T} could be \cii{double} or \cii{unsigned\ long}, and the function would still be valid. If a type can be deduced from more than one argument, the result of all these deductions must be the same.
+这里从第一个实参可推得 \cii{T=long}，但第二个实参又暗示 \cii{T=int}。初学者常疑惑：为什么编译器不选择“更大的” \cii{long}? —— 毕竟如果选 \cii{long}，第二个参数还能隐式转换，函数也能工作。原因是：编译器不会“尝试寻找一个让所有实参都能转换过去”的公共类型，因为往往存在多种可能（此例也可用 \cii{double} 或 \cii{unsigned long}）。当同一个模板参数从多个实参被推导时，所有推导结果必须一致，否则推导失败。
+
+% Otherwise, the template instantiation is considered ambiguous.
+如果不一致，则该次模板实例化“歧义”而失败。
+
+% The type deduction is not always as straightforward as using the type of the argument for a type parameter. The argument may be declared with a type that's more complex than a type parameter itself:
+类型推导并不总是“直接使用实参的静态类型”这么简单；形参类型往往比单独一个模板参数更复杂：
+
+\begin{code}
+template <typename T> T decrement(T* p) {
+  return --(*p);
+}
+int i = 7;
+decrement(&i);    // i == 6
+\end{code}
+
+% Here, the type of the argument is a \emph{pointer to} \cii{int}, but the type that is deduced for \cii{T} is \cii{int}. The deduction of types can be arbitrarily complex, as long as it's unambiguous:
+此处实参类型是“指向 \cii{int} 的指针”，但推导出的 \cii{T} 是 \cii{int} 本身。推导逻辑只要不产生歧义，就可以相当复杂：
+
+\begin{code}
+template <typename T> T first(const std::vector<T>& v) {
+  return v[0];
+}
+std::vector<int> v{11, 25, 67};
+first(v);    // T is int, returns 11
+\end{code}
+
+% Here, the argument is an instantiation of another template, \cii{std::vector}, and we have to deduce the template parameter type from the type that was used to create this vector instantiation.
+这里形参是另一个模板（\cii{std::vector}）的实例化类型，我们需要从该实例化类型中再抽取出其内部模板参数类型。
+
+% As we have seen, if a type can be deduced from more than one function argument, the result of these deductions must be the same. On the other hand, one argument can be used to deduce more than one type:
+总结之前：如果某个模板类型形参可由多个实参推导，则所有推导结果必须一致。反过来，一个实参也可以同时为多个模板参数提供推导信息：
+
+\begin{code}
+template <typename U, typename V>
+std::pair<V, U> swap12(const std::pair<U, V>& x) {
+  return std::pair<V, U>(x.second, x.first);
+}
+swap12(std::make_pair(7, 4.2)); // pair of 4.2, 7
+\end{code}
+
+% Here, we deduce two types, \cii{U} and \cii{V}, from one argument, then use these two types to form a new type, \cii{std::pair\textless{}V,\ U\textgreater{}}. This example is unnecessarily verbose, and we can take advantage of a few more C++ features to make it both more compact and easier to maintain. First of all, the standard already has a function that deduces the argument types and uses them to declare a pair, and we have even used this function---\cii{std::make\_pair()}.
+这里我们从单个实参同时推导出 \cii{U} 与 \cii{V}，再组合成新的类型 \cii{std::pair<V, U>}。该写法有些啰嗦，可以借助更多 C++ 语言特性让其简化。首先，标准库已经提供了一个可推导实参类型并构造 pair 的辅助函数 —— \cii{std::make_pair()}。
+
+% Secondly, the return type of the function can be deduced from the expression in the \cii{return} statement (a C++14 feature). The rules of this deduction are similar to the rules of the template argument type deduction. With these simplifications, our example becomes the following:
+其次，函数返回类型也可由 \cii{return} 语句中的表达式自动推导（C++14 特性），其规则类似模板实参推导。于是例子可改写为：
+
+\begin{code}
+template <typename U, typename V>
+auto swap12(const std::pair<U, V>& x) {
+  return std::make_pair(x.second, x.first);
+}
+\end{code}
+
+% Note that we don't explicitly use the types \cii{U} and \cii{V} anymore. We still need this function to be a template, since it operates on a generic type, that is, a pair of two types that we don't know until we instantiate the function. We could, however, use only one template parameter that would stand for the type of the argument:
+注意现在我们不再显式使用 \cii{U} 与 \cii{V} 名字。函数依旧需要作为模板（其处理的类型依然是“未知的二元类型组合”）。不过我们甚至可以只用一个模板参数来代表整个实参类型：
+
+\begin{code}
+template <typename T> auto swap12(const T& x) {
+  return std::make_pair(x.second, x.first);
+}
+\end{code}
+
+% There is a significant difference between these two variants---the last function template will have its type deduced successfully from any call with one argument, no matter the type of that argument. If that argument is not \cii{std::pair}, or, more generally, if the argument is not a class or a struct or it does not have the \cii{first} and \cii{second} data members, the deduction will still succeed, but the type substitution will fail. On the other hand, the previous version will not even be considered for arguments that are not a pair of some types. For any \cii{std::pair} argument, the pair types are deduced, and the substitution should proceed without a problem. Can we use the last declaration and still restrict the type \cii{T} to be a pair or another class with a similar interface? Yes, and we will see several ways to do so later in this book.
+这两种写法有重要区别——后一种（只用一个 \cii{T}）面对任何单参数调用几乎都会“推导成功”；即使该实参并不是 \cii{std::pair}（更一般地：不是拥有 \cii{first}/\cii{second} 成员的数据结构），推导阶段仍会成功，但在替换使用这些成员时会编译失败。前一种写法则在“实参不是 pair”时根本不会进入候选。对于真正的 \cii{std::pair}，前者能成功推导出两个类型并继续替换。如何在保持后一种简单声明的同时，限制 \cii{T} 必须是某种“具备 first/second 接口的类型”？答案是可以的，后续章节将介绍多种方式（如 Concepts 等）。
+
+% Member function templates are very similar to non-member function templates, and their arguments are similarly deduced. Member function templates can be used in classes or class templates, which we will review next.
+成员函数模板与非成员函数模板类似，其参数推导机制也一致。类或类模板中都可以定义成员函数模板，下面转到类模板继续。
+
+\subsection{Class templates}
+% Instantiation of class templates is similar to that of function templates---the use of a template to create a type implicitly instantiates the template. To use a class template, we need to specify the type arguments for the template parameters:
+类模板的实例化方式与函数模板相似——当我们“用它来生成类型”时会触发隐式实例化。要使用类模板，必须为它的所有模板形参提供具体类型实参：
+
+\begin{code}
+template <typename N, typename D> class Ratio {
+  public:
+  Ratio() : num_(), denom_() {}
+  Ratio(const N& num, const D& denom) :
+    num_(num), denom_(denom) {}
+  explicit operator double() const {
+    return double(num_)/double(denom_);
+  }
+  private:
+  N num_;
+  D denom_;
+};
+Ratio<int, double> r;
+\end{code}
+
+% The definition of the \cii{r} variable implicitly instantiates the \cii{Ratio} class template for the \cii{int} and \cii{double} types. It also instantiates the default constructor of this class. The second constructor is not used in this code and is not instantiated. It is this feature of class templates---instantiating a template instantiates all data members, but does not instantiate the methods until they are used---that allows us to write class templates where only some of the methods compile for certain types. If we use the second constructor to initialize the values of \cii{Ratio}, then that constructor is instantiated, and must be valid for the given types:
+对变量 \cii{r} 的定义会隐式实例化 \cii{Ratio<int,double>}，并实例化其默认构造函数。第二个构造函数当前未被用到，因此暂未被实例化。类模板的这一特性——“实例化类模板时所有数据成员被实例化，但成员函数只有在被首次使用时才实例化”——使我们可以编写：某些成员仅在特定类型组合下才有效的模板。若我们接下来调用了第二个构造，那么它才会被实例化并要求对这些类型可编译：
+
+\begin{code}
+Ratio<int, double> r(5, 0.1);
+\end{code}
+
+% In C++17, these constructors can be used to deduce the types of the class template from the constructor arguments:
+C++17 起可以利用构造函数实参推导类模板参数类型：
+
+\begin{code}
+Ratio r(5, 0.1);
+\end{code}
+
+% Of course, this works only if there are enough constructor arguments to deduce the types. For example, the default-constructed \cii{Ratio} object has to be instantiated with explicitly specified types; there is simply no other way to deduce them. Prior to C++17, a helper function template was often used to construct an object whose type can be deduced from the arguments. Similarly to \cii{std::make\_pair()}, which we looked at previously, we can implement a \cii{make\_ratio} function that will do the same thing as the C++17 constructor argument deduction:
+当然，仅当“构造实参提供足够信息”时才可推导。比如默认构造的 \cii{Ratio} 对象就无法推导出模板参数，只能显式写类型。C++17 之前常用“辅助函数模板”来达成类似效果，类似我们之前见到的 \cii{std::make_pair()}；可自定义 \cii{make_ratio} 来模拟 C++17 的构造实参推导：
+
+\begin{code}
+template <typename N, typename D>
+Ratio<N, D> make_ratio(const N& num, const D& denom) {
+  return { num, denom };
+}
+auto r(make_ratio(5, 0.1));
+\end{code}
+
+% The C++17 way of deducing template arguments should be preferred, if it is available: it does not require writing another function that essentially duplicates the class constructor, and does not make an additional call to the copy or move constructor to initialize the object (although in practice most compilers will perform return value optimization and optimize away the call to the copy or move constructor).
+若可用，优先使用 C++17 的“类模板实参推导”机制：无需再写一个与构造逻辑重复的辅助函数，也避免潜在的额外复制/移动（尽管理论上 RVO 可能消除额外开销）。
+
+% When a template is used to generate a type, it is instantiated implicitly. Both class and function templates can be explicitly instantiated as well. Doing so instantiates a template without using it:
+模板被用来生成类型时是“隐式实例化”的；同时类和函数模板也可以“显式实例化”，即在未直接使用处强制生成对应实体：
+
+\begin{code}
+template class Ratio<long, long>;
+template Ratio<long, long> make_ratio(const long&,
+                                      const long&);
+\end{code}
+
+% Explicit instantiations are rarely needed, and will not be used elsewhere in this book.
+显式实例化实际应用很少，本书其余地方不会再特意使用。
+
+% While instantiations of class templates with specific template parameters behave (mostly) like regular classes, static data members of class templates deserve special mention. First, let us recall the common challenge of static class data members: they must be defined somewhere, and only once:
+虽然带具体类型参数的类模板实例与普通类（大体）行为一致，但其“静态数据成员”有特殊注意点。先回顾普通类中 static 数据成员的常见问题：它们必须在某个翻译单元里且只出现一次定义：
+
+\begin{code}
+// In the header:
+class A {
+  static int n;
+};
+// In a C file:
+int A::n = 0;
+std::cout << A::n;
+\end{code}
+
+% Without such a definition, the program will not link: the name \cii{A::n} is not defined. But if the definition is moved into the header and the header is included in several compilation units, the program also will not link, this time the name \cii{A::n} is multiply defined.
+若缺省该定义，会链接失败（未定义符号）；若把定义写进头文件并被多个编译单元包含，又会因重复定义导致链接失败。
+
+% The requirement to define static data members exactly once is not feasible for class templates: we need them defined for every set of template parameters the template is instantiated with, and we can't do that in any one compilation unit (other compilation units may instantiate the same template with different types). Fortunately, this is not necessary. Static members of class templates can (and should) be defined together with the template itself:
+而对类模板来说“只定义一次”并不可行：不同翻译单元可能以不同类型实参实例化该模板，需要分别生成各自的静态成员。幸运的是标准允许：类模板的静态成员可以（也应当）直接在模板定义旁边提供定义：
+
+\begin{code}
+// In the header:
+template <typename T> class A {
+  static T n;
+};
+template <typename T> T A<T>::n {};
+\end{code}
+
+% While this technically results in multiple definitions, it is the job of the linker to consolidate them so we are left with a single definition (there is only one value of a static member variable for all objects of the same type).
+这在技术上会在不同翻译单元产生多个“相同实体”的定义，链接器会做合并，保证针对“同一具体实例类型”只有一个静态变量实体。
+
+% In C++17, inline variables offer a simpler solution:
+C++17 引入的 inline 变量让写法更简单：
+
+\begin{code}
+// In the header:
+template <typename T> class A {
+  static inline T n {};
+};
+\end{code}
+
+% This also works for non-template classes:
+非模板类同样可以使用 inline 变量：
+
+\begin{code}
+// In the header:
+class A {
+  static inline int n = 0;
+};
+\end{code}
+
+% If the static data member of a class template has a non-trivial constructor, this constructor is invoked once for every instantiation of this template (not for every object -- there is only one instance of a static member variable for all objects of the same type).
+若静态数据成员具有非平凡构造函数，则每个“类模板实例”调用一次（而非每个对象一次），因为同一类型共享一份静态成员。
+
+% Class templates, as we have used them so far, allow us to declare generic classes, that is, classes that can be instantiated with many different types. So far, all of these classes look exactly the same, except for the types, and generate the same code. This is not always desirable---different types may need to be handled somewhat differently.
+目前为止的类模板都只是“把类型占位填进去”，生成的代码结构一致；但在某些场景，不同类型需要不同实现策略，这时需要“特化”。
+
+% For example, let's say that we want to be able to represent not only a ratio of two numbers stored in the \cii{Ratio} object but also a ratio of two numbers stored elsewhere, with the \cii{Ratio} object containing pointers to these numbers. Clearly, some of the methods of the \cii{Ratio} object, such as the conversion operator to \cii{double}, need to be implemented differently if the object stores pointers to the numerator and denominator. In C++, this is accomplished by specializing the template, which we will do next.
+例如：我们既想表示“内部保存两个值的比”，也想表示“指向外部两个值的比”（对象内部保存指针）。这时诸如转换为 \cii{double} 的运算符实现就应与原版不同。C++ 通过“模板特化（specialization）”来实现，我们马上展开。
+
+\section{Template specializations}
+% Template specializations allow us to make the generated template code differently for some types---not just the same code with different types substituted, but completely different code. There are two kinds of template specializations in C++---explicit, or full, specializations and partial specialization. Let's start with the former.
+模板特化让我们可以针对特定类型“生成不同实现”的代码——不仅仅是把不同类型名替换进去，而是逻辑实现可完全不同。C++ 中有两类特化：显式（explicit / full）特化与偏特化（partial specialization）。先看显式特化。
+
+\subsection{Explicit specialization}
+% Explicit template specialization defines a special version of the template for a particular set of types. In an explicit specialization, all generic types are replaced by specific, concrete types. Since an explicit specialization is not a generic class or function, it does not need to be instantiated later. For the same reason, it is sometimes called \textbf{full specialization}. If the generic types are fully substituted, there is nothing generic left. An explicit specialization should not be confused with an explicit template instantiation---while both create an instantiation of a template for a given set of type arguments, an explicit instantiation creates an instantiation of the generic code, with the generic types substituted by the specific types. An explicit specialization creates an instantiation of the function or class with the same name but it overrides the implementation, so the resulting code can be completely different. An example should help us understand this distinction.
+显式模板特化：为“特定一组类型”定义该模板的专门版本。在显式特化里，所有泛型类型都被具体类型取代，因此这段代码本身不再是“泛型”，也无需再后续实例化——故也称“全特化（full specialization）”。不要把“显式特化”与“显式实例化”混淆：二者都针对给定类型集合生成实体，但显式实例化只是对“原通用实现”做替换生成；显式特化则提供全新实现（覆盖原逻辑），可以完全不同。
+
+% Let's start with a class template. Let's say that, if both the numerator and the denominator of \cii{Ratio} are \cii{double}, we want to compute the ratio and store it as a single number. The generic \cii{Ratio} code should remain the same, but for one particular set of types, we want the class to look entirely different. We can do this with an explicit specialization:
+先从类模板看例子：如果 \cii{Ratio} 的分子和分母都是 \cii{double}，希望直接计算结果并存成一个数；而对其他类型仍使用通用版本。这就可以用显式特化实现：
+
+\begin{code}
+template <> class Ratio<double, double> {
+  public:
+  Ratio() : value_() {}
+  template <typename N, typename D>
+    Ratio(const N& num, const D& denom) :
+      value_(double(num)/double(denom)) {}
+  explicit operator double() const { return value_; }
+  private:
+  double value_;
+};
+\end{code}
+
+% Both template type parameters are specified to be \cii{double}. The class implementation is totally unlike the generic version---instead of two data members, we have just one; the conversion operator simply returns the value, and the constructor now computes the ratio of the numerator and the denominator. But it is not even the same constructor---instead of the non-template constructor \cii{Ratio(const\ double\&,\ const\ double\&)} that the generic version would have if it was instantiated for two \cii{double} template arguments, we provided a template constructor that can take two arguments of any types as long as they are convertible to \cii{double}.
+两个模板参数都被指定为 \cii{double}。实现与通用版本完全不同：只保留一个存值成员；类型转换运算符直接返回该值；构造函数内部自行计算比值。并且这里提供的构造函数本身还是模板，可接收任意可转换为 \cii{double} 的类型参数（区别于通用版本中实例化后会得到的非模板构造 \cii{Ratio(const double&, const double&)}）。
+
+% Sometimes, we don't need to specialize the whole class template, because most of the generic code is still applicable. However, we may want to change the implementation of one or a few member functions. We can explicitly specialize the member function as well:
+有时无需全特化整个类——大部分通用实现仍然适用，只想替换少数成员函数实现。这时可以“显式特化某个成员函数”本身：
+
+\begin{code}
+template <> Ratio<float, float>::operator double() const {
+  return num_/denom_;
+}
+\end{code}
+
+% Template functions can be explicitly specialized as well. Again, unlike an explicit instantiation, we get to write the body of the function, and we can implement it any way we want:
+函数模板同样可以显式特化——与显式实例化不同，这里可重新写函数体，做完全自定义实现：
+
+\begin{code}
+template <typename T> T do_something(T x) {
+  return ++x;
+}
+template <> double do_something<double>(double x) {
+  return x/2;
+}
+do_something(3);        // 4
+do_something(3.0);    // 1.5
+\end{code}
+
+% We cannot, however, change the number or the types of arguments or the return type---they must match the result of the substitution of the generic types, so the following does not compile:
+但注意：不能改变参数个数、参数类型或返回类型——它们必须与“通用模板替换后”一致。所以下面这样会编译失败：
+
+\begin{code}
+template <> long do_something<int>(int x) { return x*x; }
+\end{code}
+
+% An explicit specialization must be declared before the first use of the template that would cause an implicit instantiation of the generic template for the same types. This makes sense---the implicit instantiation would create a class or a function with the same name and the same types as the explicit specialization. We would now have two versions of the same class or function in the program, and this violates the one definition rule and makes the program ill-formed (the exact rules can be found in the standard under \emph{{[}basic.def.odr{]}}).
+显式特化必须在第一次会触发“对同一组类型进行隐式实例化”的使用之前声明。这是为了避免出现：隐式实例化生成的实体与显式特化生成的实体同名而导致 ODR（单一定义规则）违规。
+
+% Explicit specializations are useful when we have one or a few types for which we need the template to behave very differently. However, this does not solve our problem with the ratio of pointers---we want a specialization that is still \emph{somewhat generic}, that is, it can handle pointers to any types, just not any other types. This is accomplished by a partial specialization, which we will look at next.
+显式特化适合“极少数特定类型”需要完全不同实现的情形。但它无法满足“指针比”这种：既想限制为指针，又想对任意指针类型生效（仍保持一定泛型性）的需求——此时应使用“偏特化”，见下一小节。
+
+\subsection{Partial specialization}
+% Now, we are getting to the really interesting part of C++ template programming---partial template specializations. When a class template is partially specialized, it remains as generic code, but \emph{less generic} than the original template. The simplest form of a partial template is one where some of the generic types are replaced by concrete types, but other types remain generic:
+下面来到 C++ 模板编程里非常有趣的部分：偏特化。类模板被“部分特化”后仍是泛型代码，但“比原版更窄一些”。最简单情形：只把部分模板参数换成具体类型，保留剩余依旧泛型：
+
+\begin{code}
+template <typename N, typename D> class Ratio {
+  .....
+};
+template <typename D> class Ratio<double, D> {
+  public:
+  Ratio() : value_() {}
+  Ratio(const double& num, const D& denom) :
+    value_(num/double(denom)) {}
+  explicit operator double() const { return value_; }
+  private:
+  double value_;
+};
+\end{code}
+
+% Here, we convert \cii{Ratio} to a \cii{double} value if the numerator is \cii{double}, regardless of the denominator type. More than one partial specialization can be defined for the same template. For example, we can also specialize for the case when the denominator is \cii{double} and the numerator is anything:
+此处：若分子为 \cii{double}，无论分母是什么类型，都将其存为一个 \cii{double}。同一个模板可以有多个偏特化。例如再写一个“分母为 \cii{double}”的偏特化：
+
+\begin{code}
+template <typename N> class Ratio<N, double> {
+  public:
+  Ratio() : value_() {}
+  Ratio(const N& num, const double& denom) :
+    value_(double(num)/denom) {}
+  explicit operator double() const { return value_; }
+  private:
+  double value_;
+};
+\end{code}
+
+% When the template is instantiated, the best specialization for the given set of types is selected. In our case, if neither the numerator nor the denominator is \cii{double}, then the general template has to be instantiated---there are no other choices. If the numerator is \cii{double}, then the first partial specialization is a better (more specific) match than the general template. If the denominator is \cii{double}, then the second partial specialization is a better match. But what happens if both terms are \cii{double}? In this case, the two partial specializations are equivalent; neither is more specific than the other. This situation is considered ambiguous and the instantiation fails. Note that only this particular instantiation, \cii{Ratio\textless{}double,\ double\textgreater{}}, fails---it is not an error (at least, not a syntax error) to define both specializations, but it is an error to request an instantiation that cannot be uniquely resolved to the narrowest specialization. To allow any instantiation of our template, we have to remove this ambiguity, and the only way to do that is to provide an even more narrow specialization that would be preferred over the other two. In our case, there is only one option---a full specialization for \cii{Ratio\textless{}double,\ double\textgreater{}}:
+实例化时编译器会选取“最匹配（最具体）”的特化：若分子/分母都不是 \cii{double}，只能走通用模板；若分子为 \cii{double} 选第一个偏特化；若分母为 \cii{double} 选第二个。那两者都为 \cii{double} 呢？两偏特化同等具体，出现“二义性”导致实例化失败。注意：失败仅发生在 \cii{Ratio<double,double>} 这一次具体实例请求上；同时存在两个偏特化本身不是语法错误。要消除歧义，只能再提供一个“更具体”的全特化，使其优先级最高：
+
+\begin{code}
+template <> class Ratio<double, double> {
+  public:
+  Ratio() : value_() {}
+  template <typename N, typename D>
+    Ratio(const N& num, const D& denom) :
+      value_(double(num)/double(denom)) {}
+  explicit operator double() const { return value_; }
+  private:
+  double value_;
+};
+\end{code}
+
+% Now, the fact that the partial specializations are ambiguous for the instantiation of \cii{Ratio\textless{}double,\ double\textgreater{}} is no longer relevant---we have a more specific version of the template than either of them, so that version is preferred over both.
+这样偏特化之间的歧义被全特化“覆盖”，由全特化接管该实例。
+
+% Partial specializations do not have to specify some of the generic types fully. Therefore, can keep all types generic, but impose some restrictions on them. For example, we still want a specialization where both the numerator and the denominator are pointers. They can be pointers to anything, so they are generic types, but \emph{less generic} than the arbitrary types of the general template:
+偏特化不一定要把某个参数固定成具体类型，也可以“继续保持泛型”但加结构性约束。例如我们想要一个“分子与分母都是指针”的版本——指向任何类型都行，因此仍然泛型，但比“任意类型”更窄：
+
+\begin{code}
+template <typename N, typename D> class Ratio<N*, D*> {
+  public:
+  Ratio(N* num, D* denom) : num_(num), denom_(denom) {}
+  explicit operator double() const {
+    return double(*num_)/double(*denom_);
+  }
+  private:
+  N* const num_;
+  D* const denom_;
+};
+int i = 5; double x = 10;
+auto r(make_ratio(&i, &x));        // Ratio<int*, double*>
+double(r);                    // 0.5
+x = 2.5;
+double(r);                    // 2
+\end{code}
+
+% This partial specialization still has two generic types, but they are both pointer types, \cii{N*} and \cii{D*}, for any \cii{N} and \cii{D} types. The implementation is totally unlike that of the general template. When instantiated with two pointer types, the partial specialization is \emph{more specific} than the general template and is considered a better match. Note that, in our example, the denominator is \cii{double}. So why isn't a partial specialization for the \cii{double} denominator considered? That is because, while the denominator is \cii{double} as far as the program logic is concerned, technically it is \cii{double*}, a completely different type, and we do not have a specialization for that.
+此偏特化仍有两个泛型参数，但形式为指针类型 \cii{N*}、\cii{D*}。实现与通用模板完全不同。实例化时若模板实参是两个指针类型，该偏特化比通用模板“更具体”被优先选中。注意例子里分母变量逻辑上引用的是一个 \cii{double} 值，但类型却是 \cii{double*}（指针）；我们并没有“分母为 double（非指针）”的特化，所以不会与之前的偏特化冲突。
+
+% To define a specialization, a general template must first be declared. It does not, however, need to be defined---it is possible to specialize a template that does not exist in the general case. To do so, we must forward-declare the general template, then define all the specializations we need:
+要编写一个特化，首先需要“声明”原始模板（可以不提供定义）。也就是说允许“只有特化，没有通用定义”——做法是先前向声明，再给出所有需要的（偏）特化：
+
+\begin{code}
+template <typename T> class Value; // Declaration 
+template <typename T> class Value<T*> {
+  public:
+  explicit Value(T* p) : v_(*p) {} private:
+  T v_;
+};
+template <typename T> class Value<T&> {
+  public:
+  explicit Value(T& p) : v_(p) {}
+  private:
+  T v_;
+};
+int i = 5; int* p = &i; int& r = i;
+Value<int*> v1(p); // T* specialization
+Value<int&> v2(r); // T& specialization
+\end{code}
+
+% Here, we have no general \cii{Value} template, but we have partial specializations for any pointer or reference types. If we try to instantiate the template on some other type, like \cii{int}, we will get an error stating that the \cii{Value\textless{}int\textgreater{}} type is incomplete---this is no different than trying to define an object with only a forward declaration of the class.
+此处没有通用 \cii{Value} 定义，只有指针与引用两种偏特化。若尝试实例化 \cii{Value<int>} 会报“类型不完全”错误，与只前向声明一个类就定义对象同样违规。
+
+% So far, we have seen only examples of partial specializations for class templates. Unlike the earlier discussion of full specializations, we have not seen a single function specialization here. There is a very good reason for that---a partial function template specialization does not exist in C++. What is sometimes incorrectly called a partial specialization is nothing more than overloading template functions. On the other hand, overloading template functions can get quite complex and is worth learning about---we will cover this next.
+目前展示的偏特化示例都针对“类模板”。函数模板不存在“偏特化”这一语言机制——常被误称为“偏特化”的，其实是“函数模板重载”。函数模板重载规则更复杂，下一节详述。
+
+\subsection{Template function overloading}
+% We are used to regular functions, or class methods, being overloaded---multiple functions with the same name have different parameter types. Each call invokes the function with the best match of the parameter types to the call arguments, as shown in the following example:
+我们熟悉普通函数或成员函数的“重载”——同名函数通过不同的参数类型区分。调用时编译器挑选形参与实参“最佳匹配”的那个，如下：
+
+\begin{code}
+// Example 07
+void whatami(int x) {
+  std::cout << x << " is int" << std::endl;
+}
+void whatami(long x) {
+  std::cout << x << " is long" << std::endl;
+}
+whatami(5);    // 5 is int
+whatami(5.0);    // Compilation error
+\end{code}
+
+% If the arguments are a perfect match for one of the overloaded functions with the given name, that function is called. Otherwise, the compiler considers conversions to the parameter types of the available functions. If one of the functions offers \emph{better} conversions, that function is selected. Otherwise, the call is ambiguous, just as in the last line of the preceding example. The precise definition of what constitutes the \emph{best} conversion can be found in the standard (see the section \emph{Overloading}, more specifically, subsection \emph{{[}over.match{]}}). Generally, the \emph{cheapest} conversions are the ones such as adding \cii{const} or removing a reference; then, there are conversions between built-in types, conversions from derived to base class pointers, and so on. In the case of multiple arguments, each argument for the chosen function must have the best conversion. There is no \emph{voting}---if a function has three arguments, and two are an exact match for the first overload, while the third one is an exact match for the second overload, then even if the remaining arguments are implicitly convertible to their corresponding parameter types, the overloaded call is ambiguous.
+若某个重载与实参完全匹配，就直接使用它；否则编译器考虑各候选所需的隐式转换，并挑选拥有“更好转换序列”的函数。如果不存在唯一最佳，则调用“二义”。“最佳转换”定义见标准 Overloading/[over.match]。通常“代价最低”如添加 const、去掉引用 优先；之后是内建类型之间、派生到基类指针等。多参数时，被选函数对“每个”实参都需是最佳；不存在“投票机制”。
+
+% The presence of templates makes the overload resolution much more complex. Multiple function templates with the same name and, possibly, the same number of arguments, can be defined, in addition to non-template functions. All of these functions are the candidates for an overloaded function call, but the function templates can generate functions with different parameter types, so how do we decide what the actual overloaded functions are? The exact rules are even more complex than the ones for non-template functions, but the basic idea is this---if there is a non-template function that is a near-perfect match to the call arguments, that function is selected. The standard, of course, uses much more precise terms than \emph{near-perfect}, but \emph{trivial} conversions, such as adding \cii{const}, fall under that category---you get them \emph{at no cost}. If there is no such function, the compiler will attempt to instantiate all function templates with the same name to a near-perfect match, using the template argument deduction. If exactly one of the templates was instantiated, the function created by this instantiation is called. Otherwise, overload resolution continues the usual way among the non-template functions.
+模板引入后重载决议更复杂：同名可存在多个函数模板与普通函数。函数模板经推导实例化后才加入候选。规则概要：若存在“非模板”近乎完美匹配（只需微小转换），直接选它；否则尝试对所有同名模板做类型推导，能得到“近似完美匹配”实例的模板加入候选，且只有唯一一个时就选它，否则继续与其它候选比较。
+
+% This is a very simplified description of a very complex process, but there are two important points---firstly, if there is an equally good match of a call to a template and a non-template function, the non-template function is preferred, and secondly, the compiler does not attempt to instantiate the function templates into something that might be convertible to the types we need. The template functions must match the call almost perfectly after the argument type deduction, or they are not called at all. Let's add a template to our previous example:
+总结：1) 模板与非模板同样匹配时优先非模板；2) 不会“为可能通过转换匹配”而实例化模板——推导后需要几乎完美匹配。添加一个模板重载：
+
+\begin{code}
+void whatami(int x); // Same as above
+void whatami(long x); // Same as above
+template <typename T> void whatami(T* x) {
+  std::cout << x << " is a pointer" << std::endl;
+}
+int i = 5;
+whatami(i);    // 5 is int
+whatami(&i);    // 0x???? is a pointer
+\end{code}
+
+% Here, we have what looks like a partial specialization of a function template. But it really isn't---it is just a function template---there is no general template for which it could be a specialization. Instead, it is simply a function template whose type parameter is deduced from the same arguments, but using different rules. The template can have its type deduced if the argument is a pointer of any kind. This includes a pointer to \cii{const}---\cii{T} could be a \cii{const} type, so if we call \cii{whatami(ptr)}, where \cii{ptr} is \cii{const\ int*}, that first template overload is a perfect match when \cii{T} is \cii{const\ int}. If the deduction succeeds, the function generated by the template, that is, the template instantiation, is added to the overload set.
+这个模板看似“偏特化”，其实只是普通函数模板。只要实参是任意指针（包括指向 const），即可推导。例如传 \cii{const int*} 时推导 \cii{T=const int}，该实例加入候选。
+
+% For the \cii{int*} argument, it is the only overload that works, so it is called. But what happens if more than one function template can match the call, and both instantiations are valid overloads? Let's add one more template:
+当实参为 \cii{int*} 时只有该模板适用。再添加一个更泛的重载看看冲突：
+
+\begin{code}
+void whatami(int x); // Same as above
+void whatami(long x); // Same as above
+template <typename T> void whatami(T* x); // Same as above
+template <typename T> void whatami(T&& x) {
+  std::cout << "Something weird" << std::endl;
+}
+class C {    };
+C c;
+whatami(c);    // Something weird
+whatami(&c);    // 0x???? is a pointer
+\end{code}
+
+% This template function accepts its arguments by the universal reference, so it can be instantiated for any call to \cii{whatami()} with one argument. The first call, \cii{whatami(c)}, is easy---the last overload, with \cii{T\&\&}, is the only one that can be called. There are no conversions from \cii{c} to a pointer or an integer. But the second call is tricky---we have not one, but two template instantiations that are a perfect match for the call, with no conversions needed. So why is this not an ambiguous overload? Because the rules for resolving overloaded function templates are different than the rules for non-template functions and resemble the rules for selecting the partial specialization of a class template (which is another reason why function template overloads are often confused with partial specializations). The template that is more specific is a better match.
+新增 \cii{T&&} 重载（转发引用）可以匹配任意单参数调用。第一次调用只有它适用；第二次调用与“指针参数版本”同时完美匹配，却不二义，因为规则优先更具体（仅接受指针）的模板。
+
+% In our case, the first template is more specific---it can accept any pointer argument, but only pointers. The second template can accept any argument at all, so any time the first template is a possible match, the second is too, but not the reverse. If a more specific template can be used to instantiate a function that is a valid overload, then this template is used.
+“指针版本”更具体：只接受指针；\cii{T&&} 更泛，涵盖所有情况。若具体模板适用则用它，否则回退。
+
+% Otherwise, we have to fall back to the more general template.
+若不适用则退回更泛模板。
+
+% The very general template functions in the overload set sometimes lead to unexpected results. Let's say we have the following three overloads for \cii{int}, \cii{double}, and anything:
+过度泛化的模板可能导致意外结果。设有对 int、double 及“任意类型”三个重载：
+
+\begin{code}
+void whatami(int x) {
+  std::cout << x << " is int" << std::endl;
+}
+void whatami(double x) {
+  std::cout << x << " is double" << std::endl;
+}
+template <typename T> void whatami(T&& x) {
+  std::cout << "Something weird" << std::endl;
+}
+int i = 5;
+float x = 4.2;
+whatami(i);    // i is int
+whatami(x);    // Something weird
+whatami(1.2);    // 1.2 is double
+\end{code}
+
+% The first call has an \cii{int} argument, so \cii{whatami(int)} is a perfect match. The second call would have gone to \cii{whatami(double)} if we did not have the template overload---the conversion from \cii{float} to \cii{double} is implicit (so is the conversion from \cii{float} to \cii{int}, but the conversion to \cii{double} is preferred). But it's still a conversion, so when the function template instantiates to a perfect match of \cii{whatami(float\&\&)}, that is the best match and the chosen overload. The last call has a \cii{double} argument, and again we have a perfect match to a non-template function \cii{whatami(double)}, so it is preferred over any alternative.
+第一次调用选 \cii{whatami(int)}；第二次若无模板会选 double 版本，但有了模板得到完美匹配 \cii{whatami(float&&)}，无需转换而胜出；第三次 double 直接匹配非模板重载。
+
+% It should be noted that overloading pass-by-value and pass-by-reference functions for the same parameter types often creates ambiguities in overload resolution. For example, these two functions are almost always ambiguous:
+针对同一模式同时提供“万能引用”和“值传递”版本极易造成二义：
+
+\begin{code}
+template <typename T> void whatami(T&& x) {
+  std::cout << "Something weird" << std::endl;
+}
+template <typename T> void whatami(T x) {
+  std::cout << "Something copyable" << std::endl;
+}
+class C {};
+C c;
+whatami(c);
+\end{code}
+
+% As long as the argument to the function can be copied (and our object \cii{c} is copyable), the overload is ambiguous and the call will not compile. The problem does not happen when a more specific function overloads a more general one (in all our previous examples, \cii{whatami(int)} used pass-by-value with no problems), but mixing the two types of parameter passing for similarly general functions is inadvisable.
+只要参数可复制，上述调用就二义失败。避免在“同等泛化”级别混用值传递与万能引用。
+
+% Finally, there is one more kind of function that has a special place in the overload resolution order---a variadic function.
+还有一种在决议序列中优先级最低的函数：C 风格可变参数函数。
+
+% A variadic function is declared with \cii{...} instead of arguments, and it can be called with any number of arguments of any type (\cii{printf} is one such function). This function is the overload of the last resort---it is called only if no other overloads can be used:
+可变参数函数用 \cii{...} 声明，可接受任意形态数量的实参（如 \cii{printf}）。它是“最后兜底”重载：
+
+\begin{code}
+void whatami(...) {
+  std::cout << "It's something or somethings" << std::endl;
+}
+\end{code}
+
+% As long as we have the overload \cii{whatami(T\&\&\ x)} available, a variadic function will never be the preferred overload, at least not for any calls to \cii{whatami()} with one argument. Without that template, \cii{whatami(...)} is called for any argument that is not a number or a pointer. The variadic functions were around since the days of C, and are not to be confused with variadic templates that were introduced in C++11, and this is what we'll talk about next.
+只要存在 \cii{whatami(T&&)}，单参数调用就不会落到可变参数函数上。若无该模板，所有既非数字也非指针的调用将使用 \cii{whatami(...)}。不要混淆它与 C++11 的可变参数模板——后面讨论。
+
+\section{Variadic templates}
+% Probably the greatest difference between generic programming in C and C++ is type safety. It is possible to write generic code in C---the standard function \cii{qsort()} is a perfect example---it can sort values of any type and they are passed in using a \cii{void*} pointer, which can really be a pointer to any type. Of course, the programmer has to know what the real type is and cast the pointer to the right type. In a generic C++ program, the types are either explicitly specified or deduced at the time of the instantiation, and the type system for generic types is as strong as it is for regular types. Unless we want a function with an unknown number of arguments, that is, prior to C++11, the only way was the old C-style variadic functions where the compiler had no idea what the argument types were; the programmer just had to know and unpack the variable arguments correctly.
+C 与 C++ 泛型编程最大的差异之一在“类型安全”。C 中也可写“泛型”代码（例如标准函数 \cii{qsort()}），其通过 \cii{void*} 传入任意类型数据，使用者需自己知道真实类型并做转换。C++ 泛型则通过模板在实例化时显式或推导出类型，类型系统约束与普通代码一样强。C++11 之前若想函数接收“不定数量参数”只能用 C 风格可变参数（类型不受编译器检查），开发者手动解析；C++11 引入了更安全的可变参数模板。
+
+% C++11 introduced the modern equivalent to a variadic function---a variadic template. We can now declare a generic function with any number of arguments:
+C++11 带来了现代化的变参机制——“可变参数模板”（variadic template）。可以声明接收任意参数个数/类型的泛型函数：
+
+\begin{code}
+template <typename ... T> auto sum(const T& ... x);
+\end{code}
+
+% This function takes one or more arguments, possibly of different types, and computes their sum. The return type is not easy to determine, but, fortunately, we can let the compiler figure it out---we just declare the return type as \cii{auto}. How do we actually implement the function to add up the unknown number of values whose types we can't name, not even as generic types? In C++17, it's easy, because it has fold expressions:
+这个函数接收一个或多个可能不同类型的参数并计算其和。返回类型可能比较复杂，交给编译器通过 \cii{auto} 推导即可。如何实现“对未知个数的参数求和”？C++17 引入“折叠表达式”（fold expression），让实现非常直接：
+
+\begin{code}
+// Example 08a
+template <typename ... T> auto sum(const T& ... x) {
+  return (x + ...);
+}
+sum(5, 7, 3);        // 15, int
+sum(5, 7L, 3);        // 15, long
+sum(5, 7L, 2.9);        // 14.9, double
+\end{code}
+
+% You can verify that the type of the result is what we say it is:
+可以用静态断言验证结果类型确为期望：
+
+\begin{code}
+static_assert(std::is_same_v<
+  decltype(sum(5, 7L, 2.9)), double>);
+\end{code}
+
+% In C++14, as well as in C++17, when a fold expression is not sufficient (and they are useful only in limited contexts, mostly when the arguments and combines using binary or unary operators), the standard technique is recursion, which is ever-popular in template programming:
+在 C++14 中（以及 C++17 中某些不适合折叠的情景）常用“递归”展开参数包。折叠表达式适用面有限（主要是参数用相同二元/一元运算组合时），其余情形仍靠递归分解：
+
+\begin{code}
+// Example 08b
+template <typename T1> auto sum(const T1& x1) {
+  return x1;
+}
+template <typename T1, typename ... T>
+auto sum(const T1& x1, const T& ... x) {
+  return x1 + sum(x ...);
+}
+\end{code}
+
+% The first overload (not a partial specialization!) is for the \cii{sum()} function with one argument of any type. That value is returned. The second overload is for more than one argument, and the first argument is explicitly added to the sum of the remaining arguments. The recursion continues until there is only one argument left, at which point the other overload is called and the recursion stops. This is the standard technique for unraveling the parameter packs in variadic templates, and we will see this many times in this book. The compiler will inline all the recursive function calls and generate straightforward code that adds all arguments together.
+第一个重载（注意不是“偏特化”！）处理只有一个参数的 \cii{sum()}：直接返回该值。第二个重载处理多个参数：把第一个参数加上对剩余参数递归调用 \cii{sum()} 的结果。递归不断展开，直到只剩一个参数，调用单参数版本结束递归。这是拆解可变参数包的典型技巧——本书后面会大量出现。编译器会内联所有递归调用，生成直接的加法链代码。
+
+% The class templates can also be variadic---they have an arbitrary number of type arguments and can build classes from a varying number of objects of different types. The declaration is similar to that of a function template. For example, let's build a class template, \cii{Group}, that can hold any number of objects of different types and return the right object when it's converted to one of the types it holds:
+类模板同样可以是可变参数的——拥有任意数量的类型参数，用以组合保存不同类型的对象。声明形式与函数模板类似。下面构造一个 \cii{Group} 类模板，可持有任意数量不同类型的对象，并在转换为所包含的某个类型时返回对应对象：
+
+\begin{code}
+// Example 09
+template <typename ... T> struct Group;
+\end{code}
+
+% The usual implementation of such templates is again recursive, using deeply nested inheritance, although a non-recursive implementation is sometimes possible. We will see one in the next section. The recursion has to be terminated when there is only one type parameter left. This is done using a partial specialization, so we will leave the general template we showed previously as a declaration only, and define a specialization for one type parameter:
+此类模板常见实现仍然是递归 + 分层继承（有时也能写成非递归实现，本章后面会见到一个）。当只剩一个类型参数时终止递归——通过偏特化完成：把前面的主模板只做声明，然后给“单类型参数”写一个偏特化定义：
+
+\begin{code}
+template <typename ... T> struct Group;
+template <typename T1> struct Group<T1> {
+  T1 t1_;
+  Group() = default;
+  explicit Group(const T1& t1) : t1_(t1) {}
+  explicit Group(T1&& t1) : t1_(std::move(t1)) {}
+  explicit operator const T1&() const { return t1_; }
+  explicit operator T1&() { return t1_; }
+};
+\end{code}
+
+% This class holds the value of one type, \cii{T1}, initializes it by copy or move and returns a reference to it when converted to the \cii{T1} type. The specialization for an arbitrary number of type parameters contains the first one as a data member, together with the corresponding initialization and conversion methods, and inherits from the \cii{Group} class template of the remaining types:
+这个单类型版本保存一个 \cii{T1} 值，可拷贝或移动初始化，并在显式转换为 \cii{T1} 时返回引用。处理多个类型参数的偏特化：保存第一个类型值（含对应的两种构造 + 转换运算符），并继承剩余类型组成的 \cii{Group}：
+
+\begin{code}
+template <typename T1, typename ... T>
+struct Group<T1, T ...> : Group<T ...> {
+  T1 t1_;
+  Group() = default;
+  explicit Group(const T1& t1, T&& ... t) :
+    Group<T ...>(std::forward<T>(t) ...), t1_(t1) {}
+  explicit Group(T1&& t1, T&& ... t) :
+    Group<T...>(std::forward<T>(t)...),
+                t1_(std::move(t1)) {}
+  explicit operator const T1&() const { return t1_; }
+  explicit operator T1&() { return t1_; }
+};
+\end{code}
+
+% For every type contained in a \cii{Group} class, there are two possible ways it can be initialized---copy or move. Fortunately, we do not have to spell out the constructors for every combination of copy and move operations. Instead, we have two versions of the constructor for the two ways to initialize the first argument (the one stored in the specialization); we use perfect forwarding for the remaining arguments.
+对 \cii{Group} 中每个类型，初始化方式都有“拷贝”或“移动”两种。我们无需穷举所有组合：仅为首个元素提供两种构造（拷贝 / 移动），其余参数使用完美转发（转发引用）继续下沉到基类。
+
+% Now, we can use our \cii{Group} class template to hold some values of different types (it cannot handle multiple values of the same type since the attempt to retrieve this type would be ambiguous):
+现在可以使用 \cii{Group} 保存不同类型的值（若含多个相同类型则转换检索将产生二义性，本实现不支持）：
+
+\begin{code}
+Group<int, long> g(3, 5);
+int(g);    // 3
+long(g);    // 5
+\end{code}
+
+% It is rather inconvenient to write all the group types explicitly and to make sure they match the argument types. In C++17, we can use a deduction guide to enable class template parameter deduction from the constructor:
+显式写出完整模板参数列表既冗长又容易出错。C++17 可用“类模板参数推导 + 推导指引”从构造实参中推导类型：
+
+\begin{code}
+template <typename ... T> Group(T&&... t) -> Group<T...>;
+Group g(3, 2.2, std::string("xyz"));
+int(g);            // 3
+double(g);            // 2.2
+std::string(g);        // "xyz"
+\end{code}
+
+% Before C++17, the usual solution to this problem is to use a helper function template (a variadic template, of course) to take advantage of the template argument deduction:
+C++17 之前常见做法：写一个帮助函数模板（也是可变参数模板）利用函数模板参数推导：
+
+\begin{code}
+template <typename ... T> auto makeGroup(T&& ... t) {
+  return Group<T ...>(std::forward<T>(t) ...);
+}
+auto g = makeGroup(3, 2.2, std::string("xyz"));
+\end{code}
+
+% Note that the C++ standard library contains a class template, \cii{std::tuple}, which is a much more complete and full-featured version of our \cii{Group}.
+注意标准库已有功能更强大的 \cii{std::tuple}，它是 \cii{Group} 的完整工业级版本。
+
+% Variadic templates can have non-type parameters as well; in this case, the \cii{makeGroup} template can be instantiated with an arbitrary number of arguments. Often, these non-type parameter packs are used in combination with \cii{auto} (deduced) types. For example, here is a template that holds a list of compile-time constant values of different types:
+可变参数模板也可包含“非类型参数”。此时 \cii{makeGroup} 能以任意数量实参实例化。非类型参数包常结合 \cii{auto}（推导）使用。下面这个模板保存一串不同类型的编译期常量：
+
+\begin{code}
+// Example 10
+template <auto... Values> struct value_list {};
+\end{code}
+
+% Without \cii{auto} (i.e., prior to C++17) it is almost impossible to declare such a template since the types must be explicitly specified. Note that this is the entire template: it holds the constant values as a part of its definition. To extract them, we need another variadic template:
+没有 \cii{auto}（即 C++17 之前）几乎写不出这种声明，因为需要显式给出所有类型。注意该模板本身即保存这些常量。要“取出”其中某个值需要再写一个可变参数模板：
+
+\begin{code}
+template <size_t N, auto... Values>
+struct nth_value_helper;
+template <size_t n, auto v1, auto... Values>
+struct nth_value_helper<n, v1, Values...> {
+  static constexpr auto value =
+    nth_value_helper<n - 1, Values...>::value;
+};
+template <auto v1, auto... Values>
+struct nth_value_helper<0, v1, Values...> {
+  static constexpr auto value = v1;
+};
+template <size_t N, auto... Values>
+constexpr auto nth_value(value_list<Values...>) {
+  return nth_value_helper<N, Values...>::value;
+}
+\end{code}
+
+% The template function \cii{nth\_value} deduces the parameter pack \cii{Values} from the type of the \cii{value\_list} argument (the argument itself contains no data and is of no interest except for its type). A recursive instantiation of partial class specializations is then used to iterate over the parameter pack until we get to the \cii{N}-th value. Note that to store floating-point constants in this manner, we need C++20.
+函数模板 \cii{nth\_value} 通过形参类型 \cii{value\_list<Values...>} 推导出参数包 \cii{Values}（对象本身无数据，仅其类型重要）。随后利用一系列递归偏特化迭代参数包直到定位到第 \cii{N} 个值。注意若想这样存放浮点常量需要 C++20（非类型模板参数的扩展）。
+
+% Variadic templates can be used in combination with template template parameters to resolve some of the problems created when, for example, standard library containers are used as arguments substituted for template template parameters. A simple solution is to declare the parameter as taking any number of types:
+可变参数模板还能与“模板模板参数”结合，缓解某些标准容器用作模板模板参数时的匹配问题。简单做法：把该模板模板参数声明为接受任意数量类型参数：
+
+\begin{code}
+template <template <typename...> class Container,
+         typename... T>
+void print(const Container<T...>& container);
+std::vector<int> v{ 鈥?};
+print(v);
+\end{code}
+
+% Note that the \cii{std::vector} template has two type parameters. In C++17, a standard change made this a valid match for the parameter pack specified in the \cii{Container} template template parameter. Most compilers allowed such matches even earlier.
+注意 \cii{std::vector} 模板有两个类型参数。C++17 标准修订明确允许它匹配这里的类型参数包（很多编译器更早已支持）。
+
+% The variadic templates, especially combined with perfect forwarding, are extremely useful for writing very general template classes---for example, a vector can contain objects of an arbitrary type, and, to construct these objects in place instead of copying them, we have to call constructors with a different number of arguments. When the vector template is written, there is no way to know how many arguments are needed to initialize the objects the vector will contain, so a variadic template has to be used (indeed, the in-place constructors of \cii{std::vector}, such as \cii{emplace\_back}, are variadic templates).
+可变参数模板（配合完美转发）对实现高度通用的容器 / 工厂类极其关键：例如 vector 需要原位构造任意类型对象，构造参数个数在模板编写时未知，因此其诸如 \cii{emplace\_back} 等原位构造接口本身就是可变参数模板。
+
+% There is one more kind of template-like entity in C++ that we have to mention, one that has the appearance of both a class and a function---a lambda expression. The next section is dedicated to this.
+C++ 里还有一种看似兼具“类”与“函数”特征的结构需要介绍——lambda 表达式。下一节将专门讨论。
+
+\section{Lambda expressions}
+
+In C++, the regular function syntax is extended with the concept of a \emph{callable}, short for \emph{callable entity}---a callable is something that can be called in the same way as a function. Some examples of callables are functions (of course), function pointers, or objects with the \cii{operator()}, also known as \textbf{functors}:
+
+\begin{code}
+void f(int i); struct G {
+  void operator()(int i);
+};
+f(5);            // Function
+G g; g(5);        // Functor
+\end{code}
+
+It is often useful to define a callable entity in a local context, right next to the place it is used. For example, to sort a sequence of objects, we may want to define a custom comparison function. We can use an ordinary function for this:
+
+\begin{code}
+bool compare(int i, int j) { return i < j; }
+void do_work() {
+  std::vector<int> v;
+  .....
+  std::sort(v.begin(), v.end(), compare);
+}
+\end{code}
+
+However, in C++, functions cannot be defined inside other functions, so our \cii{compare()} function may have to be defined quite far from the place it is used. If it is a single-use comparison function, such separation is inconvenient and reduces the readability and maintainability of the code.
+
+There is a way around this limitation---while we cannot declare functions inside functions, we can declare classes, and classes can be callable:
+
+\begin{code}
+void do_work() {
+  std::vector<int> v;
+  .....
+  struct compare {
+    bool operator()(int i, int j) const { return i < j; }
+  };
+  std::sort(v.begin(), v.end(), compare());
+}
+\end{code}
+
+This is compact and local, but rather verbose. We do not actually need to give this class a name, and we only ever want one instance of this class. In C++11, we have a much better option, the lambda expression:
+
+\begin{code}
+void do_work() {
+  std::vector<int> v;
+  .....
+  auto compare = [](int i, int j) { return i < j; };
+  std::sort(v.begin(), v.end(), compare);
+}
+\end{code}
+
+% If we use this comparison function for just one call to \cii{std::sort}, we don't even need to give it a name and can define it inside the call:
+若该比较器只使用一次，可以直接在 \cii{std::sort} 调用实参里内联定义，无需命名：
+
+\begin{code}
+  std::sort(v.begin(), v.end(),
+            [](int i, int j) { return i < j; });
+\end{code}
+
+% This is as compact as it gets. The return type can be specified, but can usually be deduced by the compiler. The lambda expression creates an object, so it has a type, but that type is generated by the compiler, so the object declaration must use \cii{auto}.
+这已是最紧凑写法。返回类型可显式写也可由编译器推导。lambda 生成一个匿名类的对象——类型由编译器合成，因而变量声明需用 \cii{auto}。
+
+% The lambda expressions are objects, so they can have data members. Of course, a local callable class can also have data members. Usually, they are initialized from the local variables in the containing scope:
+lambda 是对象，因此可隐式拥有成员（捕获变量）。本地可调用类同理有成员，只是需要显式写构造。成员通常由外层作用域变量初始化：
+
+\begin{code}
+// Example 11
+void do_work() {
+  std::vector<double> v;
+  .....
+  struct compare_with_tolerance {
+    const double tolerance;
+    explicit compare_with_tolerance(double tol) :
+      tolerance(tol) {}
+    bool operator()(double x, double y) const {
+      return x < y && std::abs(x - y) > tolerance;
+    }
+  };
+  double tolerance = 0.01;
+  std::sort(v.begin(), v.end(),
+            compare_with_tolerance(tolerance));
+}
+\end{code}
+
+% Again, this is a very verbose way to do something simple. We have to mention the tolerance variable three times---as a data member, a constructor argument, and in the member initialization list. A lambda expression makes this code simpler as well because it can capture local variables. In local classes, we are not allowed to reference variables from the containing scope, except by passing them through the constructor arguments, but for lambda expressions, the compiler automatically generates a constructor to capture all local variables mentioned in the body of the expression:
+再次说明：用局部结构体写法很啰嗦——\cii{tolerance} 要重复三次（成员、构造参数、初始化列表）。lambda 可直接“捕获”局部变量，编译器自动生成捕获构造函数；而普通局部类若想用外层变量只能显式传参。
+
+\begin{code}
+void do_work() {
+  std::vector<double> v;
+  .....
+  double tolerance = 0.01;
+  auto compare_with_tolerance = [=](auto x, auto y) {
+    return x < y && std::abs(x - y) > tolerance;
+  };
+  std::sort(v.begin(), v.end(), compare_with_tolerance);
+}
+\end{code}
+
+% Here, the name \cii{tolerance} inside the lambda expression refers to the local variable with the same name. The variable is captured by value, which is specified in the lambda expression's capture clause \cii{{[}={]}}. We could have captured by reference using \cii{{[}\&{]}} like this:
+此处 lambda 体内的 \cii{tolerance} 指向外部同名变量，因捕获列表 \cii{[=]} 表示“按值捕获所有使用到的外部变量”。若想按引用捕获可用 \cii{[&]}：
+
+\begin{code}
+auto compare_with_tolerance = [&](auto x, auto y) {
+  return x < y && std::abs(x - y) > tolerance;
+};
+\end{code}
+
+% The difference is that, when capturing by value, a copy of the captured variable is created inside the lambda object at the point where it is constructed. This local copy is \cii{const} by default, although we can declare the lambda mutable, which would let us change the captured values:
+区别：值捕获在 lambda 对象构造时复制一份内部副本（默认隐式 const）。使用 \cii{mutable} 关键字可允许修改这些副本：
+
+\begin{code}
+double tolerance = 0.01;
+size_t count = 0; // line 2
+auto compare_with_tolerance = [=](auto x, auto y) mutable {
+  std::cout << "called " << ++count << " times\n";
+  return x < y && std::abs(x - y) > tolerance;
+};
+std::vector<double> v;
+鈥?store values in v 鈥?
+// Counts calls but does not change the value on line 2
+std::sort(v.begin(), v.end(), compare_with_tolerance);
+\end{code}
+
+% On the other hand, capturing the variables from the outer scope by reference makes every mention of this variable inside the lambda a reference to the original variable. Values captured by reference can be changed:
+相反，引用捕获使 lambda 内使用的变量直接绑定外部原对象，可修改其值：
+
+\begin{code}
+double tolerance = 0.01;
+size_t count = 0;
+auto compare_with_tolerance = [&](auto x, auto y) mutable {
+  ++count; // Changes count above
+  return x < y && std::abs(x - y) > tolerance;
+};
+std::vector<double> v;
+鈥?store values in v 鈥?
+std::sort(v.begin(), v.end(), compare_with_tolerance);
+std::cout << "lambda called " << count << " times\n";
+\end{code}
+
+% It is also possible to explicitly capture some variables by value or by reference; for example, the capture \cii{{[}=,\ \&count{]}} captures everything by value except \cii{count}, which is captured by reference.
+还可精细指定：例如 \cii{[=,&count]} 表示其余按值捕获，\cii{count} 按引用捕获。
+
+% Instead of changing the arguments of the lambda expression from \cii{int} in the earlier example to \cii{double}, we can declare them as \cii{auto}, which effectively makes the \cii{operator()} of the lambda expression a template (this is a C++14 feature).
+相比写死参数类型，可用 \cii{auto} 形参（C++14），使生成的 \cii{operator()} 成为模板（泛型 lambda）。
+
+% Lambda expressions are most commonly used as local functions. However, they are not really functions; they are callable objects, and so they are missing one feature that functions have---the ability to overload them. The last trick we will learn in this section is how to work around that and create an overload set from lambda expressions.
+lambda 最常用作“局部函数”。本质上它是可调用对象，不是普通函数——缺少“重载集合”这一能力。下面展示如何组合多个 lambda 构成重载集合。
+
+% First, the main idea---it is indeed impossible to overload callable objects. On the other hand, it is very easy to overload several \cii{operator()} methods in the same object---methods are overloaded like any other function. Of course, the \cii{operator()} of a lambda expression object is generated by the compiler, not declared by us, so it is not possible to force the compiler to generate more than one \cii{operator()} in the same lambda expression. But classes have their own advantages, the main one being that we can inherit from them.
+核心思路：单个可调用对象本身无法“重载”，但一个类里可以重载多个 \cii{operator()}。lambda 的 \cii{operator()} 由编译器生成，我们不能让一个 lambda 生成多个不同签名。但可以借助“继承多个不同的 lambda 类型”组合成一个拥有多个 \cii{operator()} 的类。
+
+% Lambda expressions are objects---their types are classes, so we can inherit from them too. If a class inherits publicly from a base class, all public methods of the base class become public methods of the derived class. If a class inherits publicly from several base classes (multiple inheritance), its public interface is formed from all the public methods of all the base classes. If there are multiple methods with the same name in this set, they become overloaded and the usual overloading resolution rules apply (in particular, it is possible to create an ambiguous set of overloads, in which case the program will not compile).
+lambda 类型就是匿名类，故可被继承。多重继承将多个基类的公有 \cii{operator()} 聚合成“重载集合”。若签名集合产生二义性则编译失败。
+
+% So, we need to create a class that automatically inherits from any number of base classes. We have just seen the right tool for that---variadic templates. As we have learned in the previous section, the usual way to iterate over an arbitrary number of items in the parameter pack of a variadic template is through recursion:
+因此需要一个能从任意数量基类继承的类模板——可变参数模板配递归偏特化正合适：
+
+\begin{code}
+// Example 12a
+template <typename ... F> struct overload_set;
+template <typename F1>
+struct overload_set<F1> : public F1 {
+  overload_set(F1&& f1) : F1(std::move(f1)) {}
+  overload_set(const F1& f1) : F1(f1) {}
+  using F1::operator();
+};
+template <typename F1, typename ... F>
+struct overload_set<F1, F ...> :
+    public F1, public overload_set<F ...> {
+  overload_set(F1&& f1, F&& ... f) :
+    F1(std::move(f1)),
+    overload_set<F ...>(std::forward<F>(f) ...) {}
+  overload_set(const F1& f1, F&& ... f) :
+    F1(f1), overload_set<F ...>(std::forward<F>(f) ...) {}
+  using F1::operator();
+  using overload_set<F ...>::operator();
+};
+template <typename ... F> auto overload(F&& ... f) {
+  return overload_set<F ...>(std::forward<F>(f) ...);
+}
+\end{code}
+
+% The \cii{overload\_set} is a variadic class template; the general template has to be declared before we can specialize it, but it has no definition. The first definition is for the special case of only one lambda expression---the \cii{overload\_set} class inherits from the lambda expression and adds its \cii{operator()} to its public interface. The specialization for \cii{N} lambda expressions (\cii{N\textgreater{}1}) inherits from the first one and from the \cii{overload\_set} constructed from the remaining \cii{N-1} lambda expressions. Finally, we have a helper function that constructs the overload set from any number of lambda expressions---in our case, this is a necessity and not mere convenience since we cannot explicitly specify the types of the lambda expressions, but have to let the function template deduce them. Now, we can construct an overload set from any number of lambda expressions:
+	exttt{overload\_set} 是可变参数类模板：主模板仅声明；当只剩一个 lambda 类型时定义终止特化；多于一个时继承首类型与“剩余类型的 overload\_set”。辅助函数 \cii{overload()} 通过模板参数推导构造最终重载集合（无法直接写出 lambda 的类型）。
+
+\begin{code}
+int i = 5;
+double d = 7.3;
+auto l = overload(
+  [](int* i) { std::cout << "i=" << *i << std::endl; },
+  [](double* d) { std::cout << "d=" << *d << std::endl; }
+);
+l(&i);    // i=5
+l(&d);    // d=5.3
+\end{code}
+
+% This solution is not perfect, because it does not handle ambiguous overloads well. In C++17, we can do better, and it gives us a chance to demonstrate an alternative way of using a parameter pack that does not need recursion. Here is the C++17 version:
+该实现对处理“几近二义性”的重载不够简洁。C++17 可直接用参数包展开代替递归与偏特化，示例如下：
+
+\begin{code}
+// Example 12b
+template <typename ... F>
+struct overload_set : public F ... {
+  overload_set(F&& ... f) : F(std::forward<F>(f)) ... {}
+  using F::operator() ...;    // C++17
+};
+template <typename ... F> auto overload(F&& ... f) {
+  return overload_set<F ...>(std::forward<F>(f) ...);
+}
+\end{code}
+
+% The variadic template does not rely on partial specializations anymore; instead, it inherits directly from the parameter pack (this part of the implementation works in C++14 as well, but the \cii{using} declaration needs C++17). The template helper function is the same---it deduces the types of all lambda expressions and constructs an object from the \cii{overload\_set} instantiation with these types. The lambda expressions themselves are passed to the base classes using perfect forwarding, where they are used to initialize all the base objects of the \cii{overload\_set} objects (lambda expressions are movable). Without the need for recursion or partial specialization, this is a much more compact and straightforward template. Its use is identical to the previous version of \cii{overload\_set}, but it handles near-ambiguous overloads better.
+新版不再依赖偏特化——直接从参数包展开继承（C++14 也能写，唯独 \cii{using F::operator() ...} 需 C++17）。辅助函数保持不变，完美转发 lambda 初始化各基类。无递归结构，更紧凑直观，并改善“接近二义”情形的处理。
+
+% We can get rid of the template function as well and use template deduction guides:
+还可以去掉辅助函数，改用类模板参数推导与推导指引：
+
+\begin{code}
+// Example 12c
+template <typename ... F>
+struct overload : public F ... {
+  using F::operator() ...;
+};
+template <typename ... F> // Deduction guide
+overload(F&& ... ) -> overload<F ...>;
+\end{code}
+
+% The use of the \cii{overload} template remains largely unchanged; note the curly braces used to construct an object:
+使用方式基本不变（注意此处花括号构造）：
+
+\begin{code}
+int i = 5;
+double d = 7.3;
+auto l = overload{
+  [](int* i) { std::cout << "i=" << *i << std::endl; },
+  [](double* d) { std::cout << "d=" << *d << std::endl; },
+};
+l(&i);    // i=5
+l(&d);    // d=5.3
+\end{code}
+
+% We will see lambdas used extensively in later chapters of this book when we will need to write a fragment of code and attach it to an object so that it can be executed later.
+后续章节会大量使用 lambda：将一段可执行逻辑附着到对象以便延迟调用。
+
+% Next, we are going to learn about a new C++ feature that, in a way, does the opposite of what we were trying to do so far: it makes templates \emph{less} general. As we have seen already, it is easy to over-promise with a template: we can define templates whose definitions then do not compile in some cases. It would be better to make any restrictions on the template arguments to be a part of the declaration, so let us see how that is done.
+接下来要学习一个“让模板不那么泛化”的特性：概念（constraints + concepts）。模板易“过度承诺”——声明过宽导致某些实例化点内部实现不编译。若能在接口上声明约束则更清晰。
+
+\section{Concepts}
+
+% C++20 introduced a major enhancement to the C++ template machinery: concepts.
+C++20 为模板系统引入重大增强：概念（concept）。
+
+% In C++20, templates (both class and function templates), as well as non-template functions (members of class templates, usually) may use a constraint to specify the requirements on template arguments. These constraints are useful to produce better error messages, but they are truly indispensable when there is a need to select a function overload or a template specialization based on some properties of template arguments.
+C++20 中，类/函数模板以及模板类成员函数等均可使用“约束”声明对模板参数的要求。约束不仅改进错误信息，更能在重载/特化选择时基于类型性质进行裁决。
+
+% The basic syntax for a constraint is quite simple: a constraint is introduced by the keyword \cii{requires} which can be specified after the function declaration or before the return type (in this book, we use both ways interchangeably so the reader becomes familiar with different styles of writing code). The expression itself usually uses the template parameters and must evaluate to a boolean value, for example:
+最基本形式：在声明位置使用 \cii{requires} 关键字引入布尔表达式（可放返回类型前或形参列表后，本书两种写法都会示范），表达式使用模板参数并能在编译期求值：
+
+\begin{code}
+// Example 13a
+template <typename T> T copy(T&& t)
+  requires (sizeof(T) > 1)
+{
+  return std::forward<T>(t);
+}
+\end{code}
+
+% Here the function \cii{copy()} requires that the type of its argument has a size of at least two bytes. If we attempt to call this function with a \cii{char} argument, the call will not compile. Note that if a constraint is violated, it is as if the function did not exist for the purposes of a particular call: if there is another overload, it will be considered next even if, without the constraint, the overloads were ambiguous.
+此处 \cii{copy()} 要求参数类型 sizeof 至少 2。若传 \cii{char} 则该重载对该调用“视为不存在”，编译器继续尝试其他重载（即使原本会二义）。
+
+% Here is a more complex (and more useful) example:
+下面更实用些：
+
+\begin{code}
+template <typename T1, typename T2>
+std::common_type_t<T1, T2> min2(T1&& t1, T2&& t2)
+{
+  if (t1 < t2) return std::forward<T1>(t1);
+  return std::forward<T2>(t2);
+}
+\end{code}
+
+% This is a function similar to \cii{std::min}, except it takes two arguments of different types. This creates two potential issues: first, what is the return type? The return value is one of the two arguments, but there has to be a single return type. We can use the \cii{std::common\_type} trait from the \cii{\textless{}type\_traits\textgreater{}} header as a reasonable answer: for numeric types, it does the usual type promotion, for classes, it converts from base class to derived class if possible, and it respects implicit user-specified conversions. But there is a second problem: if the expression \cii{t1\ \textless{}\ t2} does not compile, we get an error in the body of the function. This is unfortunate because the error is hard to analyze and may be misleading: it suggests that the body of the function is implemented incorrectly. We can address the second concern by adding a static assert:
+该函数类似 \cii{std::min} 但允许不同类型，引出两个问题：1) 返回类型？可用 \cii{std::common_type} 统一；2) 若不存在 \cii{<} 则函数体内部报错，定位差。可用 \cii{static_assert} 显式表达约束：
+
+\begin{code}
+static_assert(sizeof(t1 < t2) > 0);
+\end{code}
+
+% This at least makes clear that we intended for the code to not compile if there is no matching \cii{operator\textless{}()}. Note the weird way we had to formulate the assert: the expression \cii{t1\ \textless{}\ t2} itself must, in general, evaluate at run time, and is just as likely to be false. We need a compile-time value, and we don't care which argument is less, just that they can be compared. So we assert something not about the result of the comparison but about the size of this result: \cii{sizeof()} is always a compile-time value and the size of anything is at least 1 in C++. The only way this assertion can fail is if the expression does not compile at all.
+这样至少让意图明确：若不存在 \cii{<} 就不应编译。之所以写 \cii{sizeof(t1 < t2)} 是因为比较结果运行期才知真假；我们只关心“表达式能否编译”，\cii{sizeof} 总是编译期值且结果 >=1，唯一失败方式是表达式非法。
+
+% This still does not solve the other part of the problem: the requirement on the argument types is not included in the interface of the function. The function can be called on any two types and then may or may not compile. With C++20 constraints, we can move the requirement from the implicit (compilation failure) or explicit (static assert) error in the function body to the function declaration and make it part of the function interface:
+但这仍未把“要求”转移到接口。借助 C++20 约束，可将条件前置到函数声明：
+
+\begin{code}
+// Example 13b
+template <typename T1, typename T2>
+std::common_type_t<T1, T2> min2(T1&& t1, T2&& t2)
+  requires (sizeof(t1 < t2) > 0)
+{
+  if (t1 < t2) return std::forward<T1>(t1);
+  return std::forward<T2>(t2);
+}
+\end{code}
+
+% As you learn to build more complex constraints, it is important to remember that the constraint expression must evaluate to a \cii{bool} value; no conversions whatsoever are permitted, which is why a very similar expression does not work:
+写更复杂约束时请记住：约束表达式必须产生 \cii{bool}，不可隐式转换；因此如下写法无效：
+
+\begin{code}
+template <typename T1, typename T2>
+std::common_type_t<T1, T2> min2(T1&& t1, T2&& t2)
+  requires (sizeof(t1 < t2));
+\end{code}
+
+% The integer value of \cii{sizeof()} is always non-zero and would have converted to \cii{true}, but not in this context. The good news is that we don't have to use the \cii{sizeof()} hack at all to write constraints. There is yet another type of constraint expression, a \emph{requires expression}, that is much more powerful and expresses our intent much clearer:
+这里 \cii{sizeof()} 产生整数可转真，但约束不允许转换。好消息是完全可以改用“requires 表达式”直接列出需能编译的语句：
+
+\begin{code}
+// Example 13b
+template <typename T1, typename T2>
+std::common_type_t<T1, T2> min2(T1&& t1, T2&& t2)
+  requires (requires { t1 < t2; });
+\end{code}
+
+% The requires expression begins with the \cii{requires} keyword followed by braces \cii{\{\}}; it can contain any number of expressions that have to compile, or the value of the entire requires expression is false (it does not matter what the results of these expressions are, they just have to be valid C++). You can also use types, type traits, and combinations of requirements of different kinds. By a quirk of the language, the parentheses around the requires expression are optional, which means you can see code like \cii{requires\ requires\ \{\ t1\ \textless{}\ t2\ \}} where the first and the second \cii{requires} are completely different keywords.
+requires 表达式形如 \cii{requires { ... }}：花括号里列出需成功编译的若干表达式（结果值不重要）。也可使用类型、类型萃取、嵌套的其它需求组合。外层括号可选，因此可能见到 \cii{requires requires { t1 < t2; }} 两个不同语义的 requires。
+
+% The requirements on template types can be quite complex; often, the same requirements apply in many different templates. Sets of such requirements can be given names and defined for later use; these named requirements are called concepts. Each concept is a condition that is evaluated at compile time when used in a constraint.
+多个模板常共用同一组约束，可将其命名复用——这就是 concept。每个 concept 在参与约束时于编译期求值为布尔条件。
+
+% The syntax for a constraint is similar to a template:
+声明 concept 的语法与模板类似：
+
+\begin{code}
+// Example 13c
+template <typename T1, typename T2> concept Comparable =
+  requires(T1 t1, T2 t2) { t1 < t2; };
+\end{code}
+
+% We are not going to cover the syntax in detail in this book -- for that, use a reference source such as cppreference.com. A concept can be used instead of the requirement it contains:
+本书不详述全部语法细节（可查 cppreference）。concept 可直接在约束位置取代其内部 requires 表达式：
+
+\begin{code}
+template <typename T1, typename T2>
+std::common_type_t<T1, T2> min2(T1&& t1, T2&& t2)
+  requires Comparable<T1, T2>;
+\end{code}
+
+% Concepts that constrain a single type can also be used as template parameter placeholders. Let us consider an example of a \cii{swap()} function. For integral types, there is a trick that allows us to swap two values without using a temporary variable. It relies on the properties of a bitwise XOR operation. Let us assume, for the purposes of this demonstration, that, on a particular hardware, this version is faster than the usual way of implementing swap. We would like to write a swap template function \cii{MySwap(T\&\ a,\ T\&\ b)} that automatically detects whether the type T supports an XOR operation and use it, if available; otherwise we fall back on the usual swap.
+约束一个类型的 concept 还能作为模板形参“占位符”。示例：自定义 \cii{MySwap}。对整数可用“异或”技巧无临时变量交换（假设目标硬件上更快）。我们希望自动判断类型是否支持 \cii{^}，支持则用 XOR 版本，否则回退普通交换。
+
+% First, we need a concept for a type that supports XOR:
+先定义支持 XOR 的概念：
+
+\begin{code}
+// Example 14a,b
+template <typename T> concept HasXOR =
+  requires(T a, T b) { a ^ b; };
+\end{code}
+
+% The concept has a requires expression; every expression inside the curly braces must compile, otherwise, the requirement of the concept is not met.
+该 concept 含一个 requires 表达式：花括号里的表达式需能编译，否则概念不满足。
+
+% Now, we can implement an XOR-based swap template. We could do it with a \cii{requires} constraint, but there is a more compact way:
+现在实现 XOR 版本 swap。可写 \cii{requires} 形式，也可直接用 concept 作为形参约束：
+
+\begin{code}
+template <HasXOR T> void MySwap(T& x, T& y) {
+     x = x ^ y;
+     y = x ^ y;
+     x = x ^ y;
+}
+\end{code}
+
+% The concept name \cii{HasXOR} can be used instead of the \cii{typename} keyword to declare the template parameter. This restricts our \cii{MySwap()} function to the types that have \cii{operator\^{}()}. But we need a general case overload, too. We should also note that \emph{general} does not mean \emph{any} in our case: the type has to support move assignment and move construction. We need another concept:
+使用概念名替代 \cii{typename} 声明形参即可将重载限定到支持 XOR 的类型。同时需要“通用”版本（但非任意类型——需可移动构造与移动赋值），再定义一个概念：
+
+\begin{code}
+template <typename T> concept Assignable =
+  requires(T a, T b) {
+    T(std::move(b));
+    b = std::move(a);
+  };
+\end{code}
+
+% This is a very similar concept, except we have two expressions; both must be valid for the concept to be true.
+该概念类似，只是包含两条需成功编译的表达式。
+
+% The second \cii{MySwap()} overload accepts all \cii{Assignable} types. However, we must explicitly exclude the types with XOR, or we will have ambiguous overloads. This is a perfect example to show that we can combine concepts as template placeholders with concepts in requirements:
+第二个 \cii{MySwap()} 适用于所有 \cii{Assignable} 类型，但需排除同时满足 HasXOR 的类型避免二义性 —— 展示了概念占位符与 requires 组合：
+
+\begin{code}
+template <Assignable T> void MySwap(T& x, T& y)
+  requires (!HasXOR<T>)
+{
+  T tmp(std::move(x));
+  x = std::move(y);
+  y = std::move(tmp);
+}
+\end{code}
+
+% Now a call to \cii{MySwap()} will select the XOR-based overload if possible, otherwise, it will use the general overload (swapping non-assignable types will not compile at all).
+调用 \cii{MySwap()} 时若类型支持 XOR 优先选 XOR 重载，否则走通用版本（不满足 Assignable 的类型根本无法编译）。
+
+% Finally, let us return to one of the first examples in this chapter: that of a class template \cii{ArrayOf2} in the section ``\emph{Class templates}.'' Recall that it has a member function sum() which has much more strict requirements on the template type than the rest of the class: it adds the values of the array elements. If the elements do not have \cii{operator+()}, there is no problem as long as we don't call \cii{sum()}, but if we do, we get a syntax error. It would have been better if this function was not a part of the class interface at all unless the type supports it. We can accomplish this with a constraint:
+最后回到章节早期的 \cii{ArrayOf2}。其成员 \cii{sum()} 对元素类型要求比其它成员严格（需要 \cii{+}）。若类型不支持 \cii{+} 而调用 \cii{sum()} 会报错；更理想是：不满足条件就不暴露该成员。可用约束实现：
+
+\begin{code}
+// Example 15
+template <typename T> class ArrayOf2 {
+  public:
+  T& operator[](size_t i) { return a_[i]; }
+  const T& operator[](size_t i) const { return a_[i]; }
+  T sum() const requires (requires (T a, T b) { a + b; }) {
+    return a_[0] + a_[1];
+  }
+  private:
+  T a_[2];
+};
+\end{code}
+
+% If the expression \cii{a\ +\ b} does not compile, the code behaves as if there was no member function \cii{sum()} declared in the class interface. Of course, we could also use a named concept for this.
+若 \cii{a + b} 无法编译，就好像类里根本没有 \cii{sum()}。也可改用命名 concept 提升复用性。
+
+% We will see more ways to manage requirements on template parameters in \emph{Chapter 7}. For now, let us review what we have learned and go on to use these tools to solve common C++ problems.
+第 7 章还会介绍更多管理模板参数约束的方式。现在先回顾并继续运用这些工具解决常见 C++ 问题。
+
+\section{Summary}
+
+% Templates, variadic templates, and lambda expressions are all powerful features of C++, offering simplicity in use, but are rich in complex details. The examples in this chapter should serve to prepare the reader for the later chapters of this book, where we use these techniques to implement design patterns, both classic and novel, with the tools of the modern C++ language. The reader wishing to learn the art of using these complex and powerful tools to their fullest potential is referred to other books that are dedicated to teaching these subjects, some of which can be found at the end of this chapter.
+模板、可变参数模板与 lambda 是现代 C++ 的核心强力特性：用法简洁而细节繁多。本章示例为后续设计模式（经典与新颖）实现做准备。若希望更深入掌握这些工具，可参考章末列出的专门著作。
+
+% The reader is now ready to learn common C++ idioms, starting with idioms for expressing memory ownership, in the next chapter.
+接下来读者已准备好学习常见 C++ 惯用法——下一章从内存所有权表达开始。
+
+% \section{Questions}
+\section{问题}
+
+% \begin{enumerate}
+\begin{enumerate}
+\item
+  % What is the difference between a type and a template?
+  类型与模板的区别是什么？
+\item
+  % What kind of templates does C++ have?
+  C++ 拥有哪些种类的模板？
+\item
+  % What kinds of template parameters do C++ templates have?
+  模板参数有哪几类（类型、非类型、模板模板参数、参数包等）？
+\item
+  % What is the difference between a template specialization and a template instantiation?
+  模板“特化”与“实例化”有何区别？
+\item
+  % How can you access the parameter pack of a variadic template?
+  如何展开访问可变参数模板的参数包？
+\item
+  % What are lambda expressions used for?
+  lambda 表达式通常用于哪些场景？
+\item
+  % How do concepts refine template interfaces?
+  concept 如何改进/收窄模板接口？
+\end{enumerate}
+
+% \section{Further reading}
+\section{进阶阅读}
+
+% \begin{itemize}
+\begin{itemize}
+\item
+  % \emph{C++} \emph{Fundamentals}: https://www.packtpub.com/product/c-fundamentals
+  \emph{C++ Fundamentals}（基础）：https://www.packtpub.com/product/c-fundamentals
+\item
+  % \emph{C++ Data Structures and} \emph{Algorithms}: https://www.packtpub.com/product/c-data-structures-and-algorithms
+  \emph{C++ Data Structures and Algorithms}（数据结构与算法）：https://www.packtpub.com/product/c-data-structures-and-algorithms
+\item
+  % \emph{Mastering C++} \emph{Programming}: https://www.packtpub.com/product/mastering-c-programming
+  \emph{Mastering C++ Programming}（精通 C++）：https://www.packtpub.com/product/mastering-c-programming
+\end{itemize}
+

@@ -1,0 +1,1600 @@
+% EN: ﻿\chapter{Patterns for Concurrency}
+\Trans{﻿\chapter{Patterns for Concurrency}}{}
+
+% EN: The last chapter is dedicated to a set of patterns for use in concurrent programs. Concurrency and C++ have a somewhat complex relationship. On the one hand, C++ is a performance-oriented language, and concurrency is almost always employed to improve performance, so the two are a natural fit. Certainly, C++ was used to develop concurrent programs since the earliest days of the language. On the other hand, for a language so often used for writing concurrent programs, C++ has a surprising dearth of constructs and features that directly address the needs of concurrent programming. These needs are mostly addressed by a wide range of community-developed libraries and, often, application-specific solutions. In this chapter, we will review common problems encountered in the development of concurrent programs and solutions that emerged from years of experience; together, these are the two sides of a design pattern.
+\Trans{The last chapter is dedicated to a set of patterns for use in concurrent programs. Concurrency and C++ have a somewhat complex relationship. On the one hand, C++ is a performance-oriented language, and concurrency is almost always employed to improve performance, so the two are a natural fit. Certainly, C++ was used to develop concurrent programs since the earliest days of the language. On the other hand, for a language so often used for writing concurrent programs, C++ has a surprising dearth of constructs and features that directly address the needs of concurrent programming. These needs are mostly addressed by a wide range of community-developed libraries and, often, application-specific solutions. In this chapter, we will review common problems encountered in the development of concurrent programs and solutions that emerged from years of experience; together, these are the two sides of a design pattern.}{}
+
+% EN: The following topics are covered in this chapter:
+\Trans{The following topics are covered in this chapter:}{}
+
+\begin{itemize}
+\item
+% EN:   What is the state of concurrency support in C++?
+\Trans{What is the state of concurrency support in C++?}{}
+\item
+% EN:   What are the main challenges of concurrency?
+\Trans{What are the main challenges of concurrency?}{}
+\item
+% EN:   The challenges of data synchronization and the C++ tools to meet them
+\Trans{The challenges of data synchronization and the C++ tools to meet them}{}
+\item
+% EN:   What is the design for concurrency?
+\Trans{What is the design for concurrency?}{}
+\item
+% EN:   What are common patterns for managing concurrent workloads in C++?
+\Trans{What are common patterns for managing concurrent workloads in C++?}{}
+\end{itemize}
+
+\section{Technical requirements}
+
+% EN: The example code for this chapter can be found on GitHub at the following link: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter18. Also, basic knowledge of concurrency in general as well as concurrency support in C++ are a pre-requisite.
+\Trans{The example code for this chapter can be found on GitHub at the following link: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter18. Also, basic knowledge of concurrency in general as well as concurrency support in C++ are a pre-requisite.}{}
+
+\section{C++ and concurrency}
+
+% EN: The concept of concurrency was introduced into the language in C++11, but concurrent programs were written in C++ long before that. This chapter is not meant to be an introduction to concurrency or even an introduction to concurrency in C++. This subject is well-covered in the literature (at the time of publication of this book, one of the works that are both general and up-to-date is the book \emph{C++ Concurrency in Action} by Anthony Williams). Also, while concurrency is almost always used to improve performance, we will not directly address performance and optimization issues here; for that, you can refer to my book \emph{The Art of Writing Efficient Programs}. We are going to focus on the problems that arise in the design of concurrent software.
+\Trans{The concept of concurrency was introduced into the language in C++11, but concurrent programs were written in C++ long before that. This chapter is not meant to be an introduction to concurrency or even an introduction to concurrency in C++. This subject is well-covered in the literature (at the time of publication of this book, one of the works that are both general and up-to-date is the book \emph{C++ Concurrency in Action} by Anthony Williams). Also, while concurrency is almost always used to improve performance, we will not directly address performance and optimization issues here; for that, you can refer to my book \emph{The Art of Writing Efficient Programs}. We are going to focus on the problems that arise in the design of concurrent software.}{}
+
+% EN: There are, broadly speaking, three types of challenges we encounter when developing concurrent programs. First, how to make sure the program is correct even when multiple threads operate on the same data concurrency? Second, how to execute the work of a program on multiple threads to improve the overall performance? Finally, how to design software in a way that allows us to reason about it, understand its functions, and maintain it, all with the added complexity of concurrency.
+\Trans{There are, broadly speaking, three types of challenges we encounter when developing concurrent programs. First, how to make sure the program is correct even when multiple threads operate on the same data concurrency? Second, how to execute the work of a program on multiple threads to improve the overall performance? Finally, how to design software in a way that allows us to reason about it, understand its functions, and maintain it, all with the added complexity of concurrency.}{}
+
+% EN: The first set of challenges broadly relates to data sharing and synchronization. We will examine the related patterns first: the program must be first and foremost correct, and great performance in a program that crashes or produces results that cannot be trusted is useless.
+\Trans{The first set of challenges broadly relates to data sharing and synchronization. We will examine the related patterns first: the program must be first and foremost correct, and great performance in a program that crashes or produces results that cannot be trusted is useless.}{}
+
+\section{Synchronization patterns}
+
+% EN: Synchronization patterns have one overarching purpose: to ensure correct operations on data shared by multiple threads. These patterns are critically important for the absolute majority of concurrent programs. The only programs that do not have any need for synchronization are the ones that execute several entirely independent tasks that do not involve any common data (except for, possibly, reading shared and immutable inputs) and produce separate results. For every other program, there is a need to manage some shared state, which exposes us to the danger of the dreaded data races. Formally, the C++ standard says that concurrent access to the same object (same memory location) without the appropriate synchronization that guarantees exclusive access for each thread results in undefined behavior. To be precise, the behavior is undefined if at least one thread can modify the shared data: if the data is never changed by any thread, then there is no possibility of a data race. There are design patterns that take advantage of that loophole, but let us start with the most widely known synchronization pattern. What comes to mind first when you hear about avoiding data races?
+\Trans{Synchronization patterns have one overarching purpose: to ensure correct operations on data shared by multiple threads. These patterns are critically important for the absolute majority of concurrent programs. The only programs that do not have any need for synchronization are the ones that execute several entirely independent tasks that do not involve any common data (except for, possibly, reading shared and immutable inputs) and produce separate results. For every other program, there is a need to manage some shared state, which exposes us to the danger of the dreaded data races. Formally, the C++ standard says that concurrent access to the same object (same memory location) without the appropriate synchronization that guarantees exclusive access for each thread results in undefined behavior. To be precise, the behavior is undefined if at least one thread can modify the shared data: if the data is never changed by any thread, then there is no possibility of a data race. There are design patterns that take advantage of that loophole, but let us start with the most widely known synchronization pattern. What comes to mind first when you hear about avoiding data races?}{}
+
+\subsection{Mutex and locking patterns}
+
+% EN: If there is one tool for writing concurrent programs, it is a mutex. A mutex is used to guarantee exclusive access to the shared data accessed by multiple threads:
+\Trans{If there is one tool for writing concurrent programs, it is a mutex. A mutex is used to guarantee exclusive access to the shared data accessed by multiple threads:}{}
+
+\begin{code}
+% EN: std::mutex m;
+MyData data;
+...
+// On several threads:
+m.lock();
+transmogrify(data);
+m.unlock();
+\Trans{std::mutex m; MyData data; ... // On several threads: m.lock(); transmogrify(data); m.unlock();}{}
+
+\end{code}
+
+% EN: The data-modifying operation \texttt{transmogrify()} must be guaranteed exclusive access to the shared data: only one thread may do this operation at any given time. The programmer uses a \textbf{mutex} (short for \textbf{mutual exclusion}) to ensure this: only one thread at a time can lock the mutex and enter the critical section (the code between \texttt{lock()} and \texttt{unlock()}).
+\Trans{The data-modifying operation \texttt{transmogrify()} must be guaranteed exclusive access to the shared data: only one thread may do this operation at any given time. The programmer uses a \textbf{mutex} (short for \textbf{mutual exclusion}) to ensure this: only one thread at a time can lock the mutex and enter the critical section (the code between \texttt{lock()} and \texttt{unlock()}).}{}
+
+% EN: The use of a mutex is sufficient to ensure correct access to the shared data, but this is hardly a good design. The first issue is that it is error-prone: if \texttt{transmogrify()} throws an exception, or if the programmer adds a check for the return value and exits the critical section early, the final \texttt{unlock()} is never executed and the mutex remains locked forever, thus blocking every other thread from ever accessing the data.
+\Trans{The use of a mutex is sufficient to ensure correct access to the shared data, but this is hardly a good design. The first issue is that it is error-prone: if \texttt{transmogrify()} throws an exception, or if the programmer adds a check for the return value and exits the critical section early, the final \texttt{unlock()} is never executed and the mutex remains locked forever, thus blocking every other thread from ever accessing the data.}{}
+
+% EN: This challenge is easily addressed by a particular application of the very general C++ pattern we have already seen in \emph{Chapter 5, A Comprehensive Look at RAII}. All we need is an object to lock and unlock the mutex, and the C++ standard library already provides one, \texttt{std::lock\_guard}:
+\Trans{This challenge is easily addressed by a particular application of the very general C++ pattern we have already seen in \emph{Chapter 5, A Comprehensive Look at RAII}. All we need is an object to lock and unlock the mutex, and the C++ standard library already provides one, \texttt{std::lock\_guard}:}{}
+
+\begin{code}
+% EN: // Example 01
+std::mutex m;
+int i = 0;
+void add() {
+  std::lock_guard<std::mutex> l(m);
+  ++i;
+\Trans{// Example 01 std::mutex m; int i = 0; void add() { std::lock_guard<std::mutex> l(m); ++i;}{}
+
+}
+% EN: ...
+std::thread t1(add);
+std::thread t2(add);
+t1.join();
+t2.join();
+std::cout << i << std::endl;
+\Trans{... std::thread t1(add); std::thread t2(add); t1.join(); t2.join(); std::cout << i << std::endl;}{}
+
+\end{code}
+
+% EN: The function \texttt{add()} modifies the shared variable \texttt{i} and, therefore, needs exclusive access; this is provided by the use of the mutex \texttt{m}. Note that if you run this example without the mutex, chances are you will get the correct result nonetheless because one of the threads will execute before the other. Sometimes the program will fail, and more often it won't. This doesn't make it correct, it just makes it hard to debug. You can see the race condition with the help of the \textbf{thread sanitizer} (\textbf{TSAN}). If you are using GCC or Clang, add \texttt{-\/-sanitize=address} to enable it. Remove the mutex from \texttt{add()} (\emph{Example 02}), compile with TSAN, run the program, and you will see this:
+\Trans{The function \texttt{add()} modifies the shared variable \texttt{i} and, therefore, needs exclusive access; this is provided by the use of the mutex \texttt{m}. Note that if you run this example without the mutex, chances are you will get the correct result nonetheless because one of the threads will execute before the other. Sometimes the program will fail, and more often it won't. This doesn't make it correct, it just makes it hard to debug. You can see the race condition with the help of the \textbf{thread sanitizer} (\textbf{TSAN}). If you are using GCC or Clang, add \texttt{-\/-sanitize=address} to enable it. Remove the mutex from \texttt{add()} (\emph{Example 02}), compile with TSAN, run the program, and you will see this:}{}
+
+\begin{code}
+% EN: WARNING: ThreadSanitizer: data race
+...
+Location is global 'i' of size 4 at <address>
+\Trans{WARNING: ThreadSanitizer: data race ... Location is global 'i' of size 4 at <address>}{}
+
+\end{code}
+
+% EN: There is a lot more information shown to help you figure out which threads have a data race and for which variable. This is a far more reliable way to test for data races than waiting for your program to fail.
+\Trans{There is a lot more information shown to help you figure out which threads have a data race and for which variable. This is a far more reliable way to test for data races than waiting for your program to fail.}{}
+
+% EN: In C++17, the use of \texttt{std::lock\_guard} is slightly simpler since the compiler figures out the template argument from the constructor:
+\Trans{In C++17, the use of \texttt{std::lock\_guard} is slightly simpler since the compiler figures out the template argument from the constructor:}{}
+
+\begin{code}
+% EN: // Example 03
+std::lock_guard l(m);
+\Trans{// Example 03 std::lock_guard l(m);}{}
+
+\end{code}
+
+% EN: In C++20, we can use \texttt{std::jthread} instead of calling \texttt{join()} explicitly:
+\Trans{In C++20, we can use \texttt{std::jthread} instead of calling \texttt{join()} explicitly:}{}
+
+\begin{code}
+% EN: // Example 03
+\Trans{// Example 03}{}
+{
+% EN:   std::jthread t1(add);
+  std::jthread t2(add);
+\Trans{std::jthread t1(add); std::jthread t2(add);}{}
+
+}
+% EN: std::cout << i << std::endl;
+\Trans{std::cout << i << std::endl;}{}
+\end{code}
+
+% EN: Note that care must be taken to destroy the threads before using the result of the computation since the destructor now joins the thread and waits for the calculation to complete. Otherwise, there is another data race: the main thread is reading the value of \texttt{i} while it is being incremented (TSAN finds this race as well).
+\Trans{Note that care must be taken to destroy the threads before using the result of the computation since the destructor now joins the thread and waits for the calculation to complete. Otherwise, there is another data race: the main thread is reading the value of \texttt{i} while it is being incremented (TSAN finds this race as well).}{}
+
+% EN: The use of RAII ensures that every time a mutex is locked it is also unlocked, but this does not avoid other errors that can happen when using mutexes. The most common one is forgetting to use the mutex in the first place. The synchronization guarantees apply only if every thread uses the same mechanism to ensure exclusive access to the data. If even one thread does not use the mutex, even if it's only to read the data, then the entire program is incorrect.
+\Trans{The use of RAII ensures that every time a mutex is locked it is also unlocked, but this does not avoid other errors that can happen when using mutexes. The most common one is forgetting to use the mutex in the first place. The synchronization guarantees apply only if every thread uses the same mechanism to ensure exclusive access to the data. If even one thread does not use the mutex, even if it's only to read the data, then the entire program is incorrect.}{}
+
+% EN: A pattern was developed to prevent unsynchronized access to the shared. This pattern usually goes by the name ``mutex-guarded'' or ``mutex-protected'' and it has two key elements: first, the data that needs to be protected and the mutex that is used to do so are combined in the same object. Second, the design ensures that every access to the data is protected by the mutex. Here is the basic mutex-guarded class template:
+\Trans{A pattern was developed to prevent unsynchronized access to the shared. This pattern usually goes by the name ``mutex-guarded'' or ``mutex-protected'' and it has two key elements: first, the data that needs to be protected and the mutex that is used to do so are combined in the same object. Second, the design ensures that every access to the data is protected by the mutex. Here is the basic mutex-guarded class template:}{}
+
+\begin{code}
+% EN: // Example 04
+template <typename T> class MutexGuarded {
+  std::mutex m_;
+  T data_ { };
+  public:
+  MutexGuarded() = default;
+  template <typename... Args>
+  explicit MutexGuarded(Args&&... args) :
+    data_(std::forward<Args>(args)...) { }
+  template <typename F> decltype(auto) operator()(F f) {
+    std::lock_guard<std::mutex> l(m_);
+    return f(data_);
+   }
+ };
+\Trans{// Example 04 template <typename T> class MutexGuarded { std::mutex m_; T data_ {}; public: MutexGuarded() = default; template <typename... Args> explicit MutexGuarded(Args&&... args) : data_(std::forward<Args>(args)...) {} template <typename F> decltype(auto) operator()(F f) { std::lock_guard<std::mutex> l(m_); return f(data_); } };}{}
+
+\end{code}
+
+% EN: As you can see, this template combines the mutex and the data guarded by it, and offers only one way to access the data: by invoking the \texttt{MutexGuarded} object with an arbitrary callable. This ensures that all data accesses are synchronized:
+\Trans{As you can see, this template combines the mutex and the data guarded by it, and offers only one way to access the data: by invoking the \texttt{MutexGuarded} object with an arbitrary callable. This ensures that all data accesses are synchronized:}{}
+
+\begin{code}
+% EN: // Example 04
+MutexGuarded<int> i_guarded(0);
+void add() {
+  i_guarded([](int& i) { ++i;  });
+\Trans{// Example 04 MutexGuarded<int> i_guarded(0); void add() { i_guarded([](int& i) { ++i; });}{}
+
+}
+% EN: ...
+// On many threads:
+std::thread t1(add);
+std::thread t2(add);
+t1.join();
+t2.join();
+i_guarded([](int i) { std::cout << i << std::endl;  });
+\Trans{... // On many threads: std::thread t1(add); std::thread t2(add); t1.join(); t2.join(); i_guarded([](int i) { std::cout << i << std::endl; });}{}
+
+\end{code}
+
+% EN: These are the most basic versions of the patterns for the correct and reliable use of mutexes. In practice, the needs are often more complex, and so are the solutions: there are much more efficient locks than \texttt{std::mutex} (for example, spinlocks for guarding short computations, which you can find in my book \emph{The Art of Writing Efficient Programs}), and there are also more complex locks such as shared and exclusive locks for efficient read-write access. Also, often we have to operate on several shared objects at the same time, which leads to the problem of safely locking multiple mutexes. Many of these problems are solved by more complex variations of the patterns we have just seen. Some call for an entirely different approach to the synchronization of data accesses, and we will see several of those later in this section. Finally, some data access challenges are better solved at a much higher level of the overall system design; this will also be illustrated in this chapter.
+\Trans{These are the most basic versions of the patterns for the correct and reliable use of mutexes. In practice, the needs are often more complex, and so are the solutions: there are much more efficient locks than \texttt{std::mutex} (for example, spinlocks for guarding short computations, which you can find in my book \emph{The Art of Writing Efficient Programs}), and there are also more complex locks such as shared and exclusive locks for efficient read-write access. Also, often we have to operate on several shared objects at the same time, which leads to the problem of safely locking multiple mutexes. Many of these problems are solved by more complex variations of the patterns we have just seen. Some call for an entirely different approach to the synchronization of data accesses, and we will see several of those later in this section. Finally, some data access challenges are better solved at a much higher level of the overall system design; this will also be illustrated in this chapter.}{}
+
+% EN: Let us next review different approaches to data sharing that go beyond the commonly used mutex.
+\Trans{Let us next review different approaches to data sharing that go beyond the commonly used mutex.}{}
+
+\subsection{No sharing is the best sharing}
+
+% EN: While protecting shared data with a mutex does not seem that complicated, in reality, data races are the most common bugs in any concurrent program. While it may seem a useless truism to state that you cannot have data races accessing data you do not share, not sharing is a frequently overlooked alternative to sharing. To put it another way, it is often possible to redesign a program to avoid sharing some of the variables or to restrict access to shared data to a smaller part of the code.
+\Trans{While protecting shared data with a mutex does not seem that complicated, in reality, data races are the most common bugs in any concurrent program. While it may seem a useless truism to state that you cannot have data races accessing data you do not share, not sharing is a frequently overlooked alternative to sharing. To put it another way, it is often possible to redesign a program to avoid sharing some of the variables or to restrict access to shared data to a smaller part of the code.}{}
+
+% EN: This idea is the basis of a design pattern that is simple to explain but often hard to apply because it requires thinking outside of the box -- the thread-specific data pattern. It is also known as ``thread-local data,'' but the name invites confusion with the C++ \texttt{thread\_local} keyword. To illustrate the idea, we consider this example: we need to count certain events that may be happening in multiple threads simultaneously (for this demonstration, it does not matter what is counted). We need the total count of these events in the entire program, so the straightforward approach is to have a shared count and increment it when a thread detects an event (in the demonstration, we count random numbers divisible by 10):
+\Trans{This idea is the basis of a design pattern that is simple to explain but often hard to apply because it requires thinking outside of the box -- the thread-specific data pattern. It is also known as ``thread-local data,'' but the name invites confusion with the C++ \texttt{thread\_local} keyword. To illustrate the idea, we consider this example: we need to count certain events that may be happening in multiple threads simultaneously (for this demonstration, it does not matter what is counted). We need the total count of these events in the entire program, so the straightforward approach is to have a shared count and increment it when a thread detects an event (in the demonstration, we count random numbers divisible by 10):}{}
+
+\begin{code}
+% EN: // Example 05
+MutexGuarded<size_t> count;
+void events(unsigned int s) {
+  for (size_t i = 1; i != 100; ++i) {
+    if ((rand_r(&s) % 10) == 0) { // Event!
+      count([](size_t& i) { ++i;  });
+     }
+   }
+\Trans{// Example 05 MutexGuarded<size_t> count; void events(unsigned int s) { for (size_t i = 1; i != 100; ++i) { if ((rand_r(&s) % 10) == 0) { // Event! count([](size_t& i) { ++i; }); } }}{}
+
+}
+\end{code}
+
+% EN: This is a straightforward design; it is not the best one. Notice that while each thread is counting events, it does not need to know how many events were counted by other threads. This is not to be confused with the fact that, in our implementation, each thread needs to know what the current value of the count is so it can correctly increment it. The distinction is subtle but important and suggests an alternative: each thread can count its own events using a thread-specific count, one for each thread. None of these counts are correct, but it doesn't matter as long as we can add all counts together when we need the correct total event count. There are several possible designs here. We can use a local count for the events and update the shared count once before the thread exits:
+\Trans{This is a straightforward design; it is not the best one. Notice that while each thread is counting events, it does not need to know how many events were counted by other threads. This is not to be confused with the fact that, in our implementation, each thread needs to know what the current value of the count is so it can correctly increment it. The distinction is subtle but important and suggests an alternative: each thread can count its own events using a thread-specific count, one for each thread. None of these counts are correct, but it doesn't matter as long as we can add all counts together when we need the correct total event count. There are several possible designs here. We can use a local count for the events and update the shared count once before the thread exits:}{}
+
+\begin{code}
+% EN: // Example 06
+MutexGuarded<size_t> count;
+void events(unsigned int s) {
+  size_t n = 0;
+  for (size_t i = 1; i != 100; ++i) {
+    if ((rand_r(&s) % 10) == 0) { // Event!
+      ++n;
+     }
+   }
+  if (n > 0) count([n](size_t& i) { i += n;  });
+\Trans{// Example 06 MutexGuarded<size_t> count; void events(unsigned int s) { size_t n = 0; for (size_t i = 1; i != 100; ++i) { if ((rand_r(&s) % 10) == 0) { // Event! ++n; } } if (n > 0) count([n](size_t& i) { i += n; });}{}
+
+}
+\end{code}
+
+% EN: Any local (stack-allocated) variable declared in a function that is being executed by one or more threads is specific to each thread: there is a unique copy of this variable on the stack of each thread, and each thread accesses its own variable when they all refer to the same name \texttt{n}.
+\Trans{Any local (stack-allocated) variable declared in a function that is being executed by one or more threads is specific to each thread: there is a unique copy of this variable on the stack of each thread, and each thread accesses its own variable when they all refer to the same name \texttt{n}.}{}
+
+% EN: We could also give each thread a unique count variable to increment and add them together in the main thread after all the counting threads are finished:
+\Trans{We could also give each thread a unique count variable to increment and add them together in the main thread after all the counting threads are finished:}{}
+
+\begin{code}
+% EN: // Example 07
+void events(unsigned int s, size_t& n) {
+  for (size_t i = 1; i != 100; ++i) {
+    if ((rand_r(&s) % 10) == 0) ++n;
+   }
+\Trans{// Example 07 void events(unsigned int s, size_t& n) { for (size_t i = 1; i != 100; ++i) { if ((rand_r(&s) % 10) == 0) ++n; }}{}
+
+}
+\end{code}
+
+% EN: When calling this counting function on multiple threads, we have to take some precautions. Obviously, we should give each thread its own variable for the count \texttt{n}. This is not enough: due to the hardware-related effect known as ``false sharing,'' we must also ensure that the thread-specific counts are not adjacent in memory (a detailed description of false sharing can be found in my book \emph{The Art of Writing} \emph{Efficient Programs}):
+\Trans{When calling this counting function on multiple threads, we have to take some precautions. Obviously, we should give each thread its own variable for the count \texttt{n}. This is not enough: due to the hardware-related effect known as ``false sharing,'' we must also ensure that the thread-specific counts are not adjacent in memory (a detailed description of false sharing can be found in my book \emph{The Art of Writing} \emph{Efficient Programs}):}{}
+
+\begin{code}
+% EN: // Example 07
+alignas(64) size_t n1 = 0;
+alignas(64) size_t n2 = 0;
+std::thread t1(events, 1, std::ref(n1));
+std::thread t2(events, 2, std::ref(n2));
+t1.join();
+t2.join();
+size_t count = n1 + n2;
+\Trans{// Example 07 alignas(64) size_t n1 = 0; alignas(64) size_t n2 = 0; std::thread t1(events, 1, std::ref(n1)); std::thread t2(events, 2, std::ref(n2)); t1.join(); t2.join(); size_t count = n1 + n2;}{}
+
+\end{code}
+
+% EN: The \texttt{alignas} attribute ensures 64-byte alignment for each count variable, thus ensuring that there is at least 64 bytes difference between the addresses of \texttt{n1} and \texttt{n2} (64 is the size of the cache line on most modern CPUs, including X86 and ARM). Note the \texttt{std::ref} wrapper that is needed for \texttt{std::thread} to invoke functions that use reference arguments.
+\Trans{The \texttt{alignas} attribute ensures 64-byte alignment for each count variable, thus ensuring that there is at least 64 bytes difference between the addresses of \texttt{n1} and \texttt{n2} (64 is the size of the cache line on most modern CPUs, including X86 and ARM). Note the \texttt{std::ref} wrapper that is needed for \texttt{std::thread} to invoke functions that use reference arguments.}{}
+
+% EN: The previous example reduces the need for shared data access to once per thread, while the last one does not have any shared data at all; the preferred solution depends on exactly when is the value of the total count needed.
+\Trans{The previous example reduces the need for shared data access to once per thread, while the last one does not have any shared data at all; the preferred solution depends on exactly when is the value of the total count needed.}{}
+
+% EN: The last example can be examined from a slightly different point of view; it would help to slightly rewrite it:
+\Trans{The last example can be examined from a slightly different point of view; it would help to slightly rewrite it:}{}
+
+\begin{code}
+% EN: // Example 08
+struct {
+  alignas(64) size_t n1 = 0;
+  alignas(64) size_t n2 = 0;
+ } counts;
+std::thread t1(events, 1, std::ref(counts.n1));
+std::thread t2(events, 2, std::ref(counts.n2));
+t1.join();
+t2.join();
+size_t count = counts.n1 + counts.n2;
+\Trans{// Example 08 struct { alignas(64) size_t n1 = 0; alignas(64) size_t n2 = 0; } counts; std::thread t1(events, 1, std::ref(counts.n1)); std::thread t2(events, 2, std::ref(counts.n2)); t1.join(); t2.join(); size_t count = counts.n1 + counts.n2;}{}
+
+\end{code}
+
+% EN: This does not change anything of substance, but we can view the thread-specific counts as parts of the same data structure rather than independent variables created for each thread. This way of thinking leads us to another variant of the thread-specific data pattern: sometimes, multiple threads must operate on the same data, but it may be possible to partition the data and give each thread its own subset to work on.
+\Trans{This does not change anything of substance, but we can view the thread-specific counts as parts of the same data structure rather than independent variables created for each thread. This way of thinking leads us to another variant of the thread-specific data pattern: sometimes, multiple threads must operate on the same data, but it may be possible to partition the data and give each thread its own subset to work on.}{}
+
+% EN: In the next example, we need to clamp each element in the vector (if an element exceeds the maximum value, it is replaced by this value, so the result is always in the range between zero and the maximum). The computation is implemented by this templated algorithm:
+\Trans{In the next example, we need to clamp each element in the vector (if an element exceeds the maximum value, it is replaced by this value, so the result is always in the range between zero and the maximum). The computation is implemented by this templated algorithm:}{}
+
+\begin{code}
+% EN: // Example 09
+template <typename IT, typename T>
+void clamp(IT from, IT to, T value) {
+  for (IT it = from; it != to; ++it) {
+    if (*it > value) *it = value;
+   }
+\Trans{// Example 09 template <typename IT, typename T> void clamp(IT from, IT to, T value) { for (IT it = from; it != to; ++it) { if (*it > value) *it = value; }}{}
+
+}
+\end{code}
+
+% EN: A production-quality implementation would ensure that the iterator arguments satisfy the iterator requirements and the maximum value is comparable with the iterator value type, but we omit all that for brevity (we had an entire chapter on concepts and other ways to restrict templates).
+\Trans{A production-quality implementation would ensure that the iterator arguments satisfy the iterator requirements and the maximum value is comparable with the iterator value type, but we omit all that for brevity (we had an entire chapter on concepts and other ways to restrict templates).}{}
+
+% EN: The \texttt{clamp()} function can be called on any sequence, and sometimes we will be lucky to have separate unrelated data structures we can process independently on multiple threads. But to continue this example, let us say that we have only one vector we need to clamp. All is not lost, however, as we can process non-overlapping parts of it on multiple threads with no risk of data races:
+\Trans{The \texttt{clamp()} function can be called on any sequence, and sometimes we will be lucky to have separate unrelated data structures we can process independently on multiple threads. But to continue this example, let us say that we have only one vector we need to clamp. All is not lost, however, as we can process non-overlapping parts of it on multiple threads with no risk of data races:}{}
+
+\begin{code}
+% EN: // Example 09
+std::vector<int> data = ... data ...;
+std::thread t1([&](){
+  clamp(data.begin(), data.begin() + data.size()/2, 42);
+ });
+std::thread t2([&](){
+  clamp(data.begin() + data.size()/2, data.end(), 42);
+ });
+...
+t1.join();
+t2.join();
+\Trans{// Example 09 std::vector<int> data = ... data ...; std::thread t1([&](){ clamp(data.begin(), data.begin() + data.size()/2, 42); }); std::thread t2([&](){ clamp(data.begin() + data.size()/2, data.end(), 42); }); ... t1.join(); t2.join();}{}
+
+\end{code}
+
+% EN: Even though the data structure in our program is shared between two threads and both threads modify it, this program is correct: for each vector element, there is only one thread that can modify it. But what about the vector object itself? Isn't it shared between all threads?
+\Trans{Even though the data structure in our program is shared between two threads and both threads modify it, this program is correct: for each vector element, there is only one thread that can modify it. But what about the vector object itself? Isn't it shared between all threads?}{}
+
+% EN: We have already highlighted that there is one case when data sharing is allowed without any synchronization: any number of threads can read the same variable as long as no other thread is modifying it. Our example takes advantage of this: all threads read the size of the vector and other data members of the vector object, but no threads change them.
+\Trans{We have already highlighted that there is one case when data sharing is allowed without any synchronization: any number of threads can read the same variable as long as no other thread is modifying it. Our example takes advantage of this: all threads read the size of the vector and other data members of the vector object, but no threads change them.}{}
+
+% EN: The application of the thread-specific data pattern must be carefully thought through and often requires a good understanding of the data structures. We must be absolutely certain that none of the threads attempt to modify the variables they do share, such as the size and the pointer to the data that are members of the vector object itself. For example, if one of the threads could resize the vector, that would be a data race even if no two threads access the same element: the size of the vector is a variable that is modified by one or more threads without a lock.
+\Trans{The application of the thread-specific data pattern must be carefully thought through and often requires a good understanding of the data structures. We must be absolutely certain that none of the threads attempt to modify the variables they do share, such as the size and the pointer to the data that are members of the vector object itself. For example, if one of the threads could resize the vector, that would be a data race even if no two threads access the same element: the size of the vector is a variable that is modified by one or more threads without a lock.}{}
+
+% EN: The last pattern we want to describe in this subsection applies when several threads need to modify the entire data set (so it cannot be partitioned) but the threads do not need to see the modifications done by other threads. Usually, this happens when the modifications are done as a part of the computation of some result, but the modified data itself is not the final result. In this case, sometimes the best approach is to create a thread-specific copy of the data for each thread. This pattern works best when such copy is a ``throw-away'' object: each thread needs to modify its copy but the result of the modifications does not need to be committed back to the original data structure.
+\Trans{The last pattern we want to describe in this subsection applies when several threads need to modify the entire data set (so it cannot be partitioned) but the threads do not need to see the modifications done by other threads. Usually, this happens when the modifications are done as a part of the computation of some result, but the modified data itself is not the final result. In this case, sometimes the best approach is to create a thread-specific copy of the data for each thread. This pattern works best when such copy is a ``throw-away'' object: each thread needs to modify its copy but the result of the modifications does not need to be committed back to the original data structure.}{}
+
+% EN: In the following example, we use an algorithm to count unique elements in a vector that sorts the vector in place:
+\Trans{In the following example, we use an algorithm to count unique elements in a vector that sorts the vector in place:}{}
+
+\begin{code}
+% EN: // Example 10
+void count_unique(std::vector<int> data, size_t& count) {
+  std::sort(data.begin(), data.end());
+  count = std::unique(data.begin(),
+                      data.end()) - data.begin();
+\Trans{// Example 10 void count_unique(std::vector<int> data, size_t& count) { std::sort(data.begin(), data.end()); count = std::unique(data.begin(), data.end()) - data.begin();}{}
+
+}
+\end{code}
+
+% EN: Also, when we need to count only elements that satisfy a predicate, we erase all other elements first (\texttt{std::erase\_if} is a C++20 addition, but is easy to implement in a prior version of C++):
+\Trans{Also, when we need to count only elements that satisfy a predicate, we erase all other elements first (\texttt{std::erase\_if} is a C++20 addition, but is easy to implement in a prior version of C++):}{}
+
+\begin{code}
+% EN: // Example 10
+void count_unique_even(std::vector<int> data, size_t& count) {
+  std::erase_if(data, [](int i) { return i & 1;  });
+  std::sort(data.begin(), data.end());
+  count = std::unique(data.begin(),
+                      data.end()) - data.begin();
+\Trans{// Example 10 void count_unique_even(std::vector<int> data, size_t& count) { std::erase_if(data, [](int i) { return i & 1; }); std::sort(data.begin(), data.end()); count = std::unique(data.begin(), data.end()) - data.begin();}{}
+
+}
+\end{code}
+
+% EN: Both are destructive operations on a vector, but they are only means to an end: the altered vector can be discarded once we have our count. The simplest, and often the most efficient, way to compute our counts on several threads simultaneously is to make thread-specific copies of the vector. Actually, we did this already: both counting functions take the vector argument by value and, therefore, make a copy. Usually, this would be a mistake, but in our case, it is intentional and allows both functions to operate on the same vector concurrently:
+\Trans{Both are destructive operations on a vector, but they are only means to an end: the altered vector can be discarded once we have our count. The simplest, and often the most efficient, way to compute our counts on several threads simultaneously is to make thread-specific copies of the vector. Actually, we did this already: both counting functions take the vector argument by value and, therefore, make a copy. Usually, this would be a mistake, but in our case, it is intentional and allows both functions to operate on the same vector concurrently:}{}
+
+\begin{code}
+% EN: // Example 10
+std::vector<int> data = ...;
+size_t unique_count = 0;
+size_t unique_even_count = 0;
+\Trans{// Example 10 std::vector<int> data = ...; size_t unique_count = 0; size_t unique_even_count = 0;}{}
+
+{
+% EN:   std::jthread t1(count_unique, data,
+                  std::ref(unique_count));
+  std::jthread t2(count_unique_even, data,
+                  std::ref(unique_even_count));
+\Trans{std::jthread t1(count_unique, data, std::ref(unique_count)); std::jthread t2(count_unique_even, data, std::ref(unique_even_count));}{}
+
+}
+\end{code}
+
+% EN: Of course, there is still concurrent access to the original data, and it is done without a lock: both threads need to make their thread-specific copies. However, this falls under the exception of read-only concurrent access and is safe.
+\Trans{Of course, there is still concurrent access to the original data, and it is done without a lock: both threads need to make their thread-specific copies. However, this falls under the exception of read-only concurrent access and is safe.}{}
+
+% EN: In principle, avoiding data sharing when possible and using mutexes otherwise is sufficient to arrange race-free access to data in any program. However, this may not be an efficient way to accomplish this goal, and good performance is almost always the goal of concurrency. We will now consider several other patterns for concurrent access to shared data that, when applicable, can offer superior performance. We are going to start with synchronization primitives that go beyond a mutex and are specifically designed to allow threads to efficiently wait for some event.
+\Trans{In principle, avoiding data sharing when possible and using mutexes otherwise is sufficient to arrange race-free access to data in any program. However, this may not be an efficient way to accomplish this goal, and good performance is almost always the goal of concurrency. We will now consider several other patterns for concurrent access to shared data that, when applicable, can offer superior performance. We are going to start with synchronization primitives that go beyond a mutex and are specifically designed to allow threads to efficiently wait for some event.}{}
+
+\subsection{Waiting patterns}
+
+% EN: Waiting is a problem that is frequently encountered in concurrent programs and takes many forms. We have already seen one: the mutex. Indeed, if two threads are trying to enter the critical section simultaneously, one of them will have to wait. But waiting is not the goal here, just an unfortunate side effect of exclusive access to the critical section. There are other situations where waiting is the primary objective. For example, we may have threads that are waiting for some event to happen. This could be a user interface thread waiting for input (little to no performance requirements) or a thread waiting on a network socket (moderate performance requirements) or even a high-performance thread such as a computing thread in a thread pool waiting for a task to execute (extremely high performance requirements). Not surprisingly, there are different implementations for these scenarios, but fundamentally there are two approaches: polling and notifications. We are going to look at notifications first.
+\Trans{Waiting is a problem that is frequently encountered in concurrent programs and takes many forms. We have already seen one: the mutex. Indeed, if two threads are trying to enter the critical section simultaneously, one of them will have to wait. But waiting is not the goal here, just an unfortunate side effect of exclusive access to the critical section. There are other situations where waiting is the primary objective. For example, we may have threads that are waiting for some event to happen. This could be a user interface thread waiting for input (little to no performance requirements) or a thread waiting on a network socket (moderate performance requirements) or even a high-performance thread such as a computing thread in a thread pool waiting for a task to execute (extremely high performance requirements). Not surprisingly, there are different implementations for these scenarios, but fundamentally there are two approaches: polling and notifications. We are going to look at notifications first.}{}
+
+% EN: The basic pattern for waiting for a notification is the \textbf{condition pattern}. It usually consists of a condition variable and a mutex. One or more threads are blocked waiting on the condition variable. During this time, there is one more thread that locks the mutex (thus guaranteeing exclusive access) and does the work whose completion the other threads are waiting for. Once the work is done, the thread that completed it must release the mutex (so other threads can access the shared data containing the results of this work) and notify the waiting threads that they can proceed.
+\Trans{The basic pattern for waiting for a notification is the \textbf{condition pattern}. It usually consists of a condition variable and a mutex. One or more threads are blocked waiting on the condition variable. During this time, there is one more thread that locks the mutex (thus guaranteeing exclusive access) and does the work whose completion the other threads are waiting for. Once the work is done, the thread that completed it must release the mutex (so other threads can access the shared data containing the results of this work) and notify the waiting threads that they can proceed.}{}
+
+% EN: For example, in a thread pool, the waiting threads are the pool worker threads that are waiting for tasks to be added to the pool. Since the pool task queue is a shared resource, a thread needs exclusive access to push or pop tasks. A thread that adds one or more tasks to the queue must hold the mutex while doing it and then notify the worker threads that there are tasks for them to execute.
+\Trans{For example, in a thread pool, the waiting threads are the pool worker threads that are waiting for tasks to be added to the pool. Since the pool task queue is a shared resource, a thread needs exclusive access to push or pop tasks. A thread that adds one or more tasks to the queue must hold the mutex while doing it and then notify the worker threads that there are tasks for them to execute.}{}
+
+% EN: Let us now see a very basic example of the notification pattern with just two threads. First, we have the main thread that starts a worker thread and then waits for it to produce some results:
+\Trans{Let us now see a very basic example of the notification pattern with just two threads. First, we have the main thread that starts a worker thread and then waits for it to produce some results:}{}
+
+\begin{code}
+% EN: // Example 11
+std::mutex m;
+std::condition_variable cv;
+size_t n = 0;               // Zero until work is done
+// Main thread
+void main_thread() {
+  std::unique_lock l(m);
+  std::thread t(produce);     // Start the worker
+  cv.wait(l, []{ return n != 0;  });
+  ... producer thread is done, we have the lock ...
+\Trans{// Example 11 std::mutex m; std::condition_variable cv; size_t n = 0; // Zero until work is done // Main thread void main_thread() { std::unique_lock l(m); std::thread t(produce); // Start the worker cv.wait(l, []{ return n != 0; }); ... producer thread is done, we have the lock ...}{}
+
+}
+\end{code}
+
+% EN: The locking in this case is provided by \texttt{std::unique\_lock}, an object that wraps around a mutex and has a mutex-like interface with \texttt{lock()} and \texttt{unlock()} member functions. The mutex is locked in the constructor and almost immediately unlocked by the \texttt{wait()} function when we start waiting on the condition. When the notification is received, \texttt{wait()} locks the mutex again before returning control to the caller.
+\Trans{The locking in this case is provided by \texttt{std::unique\_lock}, an object that wraps around a mutex and has a mutex-like interface with \texttt{lock()} and \texttt{unlock()} member functions. The mutex is locked in the constructor and almost immediately unlocked by the \texttt{wait()} function when we start waiting on the condition. When the notification is received, \texttt{wait()} locks the mutex again before returning control to the caller.}{}
+
+% EN: Many implementations of waiting and conditions suffer from what is known as spurious wake-up: wait can be interrupted even without notification. This is why we also check whether the results are ready, in our case, by checking the result count \texttt{n}: if it is still zero, there are no results, the main thread has been awakened in error and we can go back to waiting (note that the waiting thread must still acquire the mutex before \texttt{wait()} returns, so it must wait for the worker thread to release this mutex).
+\Trans{Many implementations of waiting and conditions suffer from what is known as spurious wake-up: wait can be interrupted even without notification. This is why we also check whether the results are ready, in our case, by checking the result count \texttt{n}: if it is still zero, there are no results, the main thread has been awakened in error and we can go back to waiting (note that the waiting thread must still acquire the mutex before \texttt{wait()} returns, so it must wait for the worker thread to release this mutex).}{}
+
+% EN: The worker thread must lock the same mutex before it can access the shared data, then unlock it before notifying the main thread that the work is done:
+\Trans{The worker thread must lock the same mutex before it can access the shared data, then unlock it before notifying the main thread that the work is done:}{}
+
+\begin{code}
+% EN: // Example 11
+// Worker thread
+void produce() {
+  {
+    std::lock_guard l(m);
+    ... compute results ...
+    n = ... result count ...
+   } // Mutex unlocked
+  cv.notify_one();          // Waiting thread notified
+\Trans{// Example 11 // Worker thread void produce() { { std::lock_guard l(m); ... compute results ... n = ... result count ... } // Mutex unlocked cv.notify_one(); // Waiting thread notified}{}
+
+}
+\end{code}
+
+% EN: It is not necessary to hold the mutex the entire time the worker thread is active: its only purpose is to protect the shared data such as the result count \texttt{n} in our example.
+\Trans{It is not necessary to hold the mutex the entire time the worker thread is active: its only purpose is to protect the shared data such as the result count \texttt{n} in our example.}{}
+
+% EN: The two synchronization primitives \texttt{std::conditional\_variable} and \texttt{std::unique\_lock} are standard C++ tools for implementing the waiting pattern with a condition. Just as with a mutex, there are many variations.
+\Trans{The two synchronization primitives \texttt{std::conditional\_variable} and \texttt{std::unique\_lock} are standard C++ tools for implementing the waiting pattern with a condition. Just as with a mutex, there are many variations.}{}
+
+% EN: The alternative to notifications is polling. In this pattern, the waiting thread repeatedly checks whether some condition is met. In C++20, we can implement a simple example of polling wait using \texttt{std::atomic\_flag} which is essentially an atomic boolean variable (prior to C++20 we could do the same with \texttt{std::atomic\textless{}bool\textgreater{}}):
+\Trans{The alternative to notifications is polling. In this pattern, the waiting thread repeatedly checks whether some condition is met. In C++20, we can implement a simple example of polling wait using \texttt{std::atomic\_flag} which is essentially an atomic boolean variable (prior to C++20 we could do the same with \texttt{std::atomic\textless{}bool\textgreater{}}):}{}
+
+\begin{code}
+% EN: // Example 12
+std::atomic_flag flag;
+// Worker thread:
+void produce() {
+  ... produce the results ...
+  flag.test_and_set(std::memory_order_release);
+\Trans{// Example 12 std::atomic_flag flag; // Worker thread: void produce() { ... produce the results ... flag.test_and_set(std::memory_order_release);}{}
+
+}
+% EN: // Waiting thread:
+void main_thread() {
+  flag.clear();
+  std::thread t(produce);
+  while (!flag.test(std::memory_order_acquire)) { } // Wait
+  ... results are ready ...
+\Trans{// Waiting thread: void main_thread() { flag.clear(); std::thread t(produce); while (!flag.test(std::memory_order_acquire)) {} // Wait ... results are ready ...}{}
+
+}
+\end{code}
+
+% EN: Atomic operations such as \texttt{test\_and\_set()} make use of \textbf{memory barriers}: a kind of global synchronization flag that ensures that all changes made to the memory before the flag is set (release) are visible to any operation on any other thread that is executed after the flag is tested (acquire). There is a lot more to these barriers, but it is outside of the scope of this book and can be found in many books dedicated to concurrency and efficiency.
+\Trans{Atomic operations such as \texttt{test\_and\_set()} make use of \textbf{memory barriers}: a kind of global synchronization flag that ensures that all changes made to the memory before the flag is set (release) are visible to any operation on any other thread that is executed after the flag is tested (acquire). There is a lot more to these barriers, but it is outside of the scope of this book and can be found in many books dedicated to concurrency and efficiency.}{}
+
+% EN: The most important difference between this and the previous example is the explicit polling loop for the waiting thread in \emph{Example 12}. If the wait is long, this is highly inefficient since the waiting thread is busy computing (reading from memory) the entire time it waits. Any practical implementation would introduce some sleep into the wait loop, but doing so also comes at a cost: the waiting thread will not wake up immediately after the worker thread sets the flag but must finish the sleep first. These efficiency concerns are outside of the scope of this book; here we want to show the overall structure and the components of these patterns.
+\Trans{The most important difference between this and the previous example is the explicit polling loop for the waiting thread in \emph{Example 12}. If the wait is long, this is highly inefficient since the waiting thread is busy computing (reading from memory) the entire time it waits. Any practical implementation would introduce some sleep into the wait loop, but doing so also comes at a cost: the waiting thread will not wake up immediately after the worker thread sets the flag but must finish the sleep first. These efficiency concerns are outside of the scope of this book; here we want to show the overall structure and the components of these patterns.}{}
+
+% EN: The boundary between polling and waiting is not always clear. For example, for all we know, \texttt{wait()} could be implemented by polling some internal state of the condition variable periodically. In fact, the same atomic flag we just saw can be used to wait for a notification:
+\Trans{The boundary between polling and waiting is not always clear. For example, for all we know, \texttt{wait()} could be implemented by polling some internal state of the condition variable periodically. In fact, the same atomic flag we just saw can be used to wait for a notification:}{}
+
+\begin{code}
+% EN: // Example 13
+std::atomic_flag flag;
+// Worker thread:
+void produce() {
+  ... produce the results ...
+  flag.test_and_set(std::memory_order_release);
+  flag.notify_one();
+\Trans{// Example 13 std::atomic_flag flag; // Worker thread: void produce() { ... produce the results ... flag.test_and_set(std::memory_order_release); flag.notify_one();}{}
+
+}
+% EN: // Waiting thread:
+void main_thread() {
+  flag.clear();
+  std::thread t(produce);
+  flag.wait(true, std::memory_order_acquire); // Wait
+  while (!flag.test(std::memory_order_acquire)) { }
+  ... results are ready ...
+\Trans{// Waiting thread: void main_thread() { flag.clear(); std::thread t(produce); flag.wait(true, std::memory_order_acquire); // Wait while (!flag.test(std::memory_order_acquire)) {} ... results are ready ...}{}
+
+}
+\end{code}
+
+% EN: The call to \texttt{wait()} requires a corresponding call to \texttt{notify\_one()} (or \texttt{notify\_all()} if we have more than one thread waiting on the flag). Its implementation is almost certainly more efficient than our simple polling loop. After the notification is received and the wait is over, we check the flag to make sure it was really set. The standard says that this is not necessary and \texttt{std::atomic\_flag::wait()} does not suffer from spurious wakeups, but TSAN in both GCC and Clang disagree (this could be a false positive in TSAN or a bug in the standard library implementation).
+\Trans{The call to \texttt{wait()} requires a corresponding call to \texttt{notify\_one()} (or \texttt{notify\_all()} if we have more than one thread waiting on the flag). Its implementation is almost certainly more efficient than our simple polling loop. After the notification is received and the wait is over, we check the flag to make sure it was really set. The standard says that this is not necessary and \texttt{std::atomic\_flag::wait()} does not suffer from spurious wakeups, but TSAN in both GCC and Clang disagree (this could be a false positive in TSAN or a bug in the standard library implementation).}{}
+
+% EN: There are many other situations where waiting is needed, and the conditions we need to wait for vary widely. Another common need is to wait for a certain number of events to occur. For example, we may have several threads producing results and we may need all of them to complete their share of the work before the main thread can proceed. This is accomplished by waiting on a barrier or a latch. Prior to C++20, we would need to implement these synchronization primitives ourselves or use a third-party library, but in C++20 they became standard:
+\Trans{There are many other situations where waiting is needed, and the conditions we need to wait for vary widely. Another common need is to wait for a certain number of events to occur. For example, we may have several threads producing results and we may need all of them to complete their share of the work before the main thread can proceed. This is accomplished by waiting on a barrier or a latch. Prior to C++20, we would need to implement these synchronization primitives ourselves or use a third-party library, but in C++20 they became standard:}{}
+
+\begin{code}
+% EN: // Example 14
+// Worker threads
+void produce(std::latch& latch) {
+  ... do the work ...
+  latch.count_down();     // One more thread is done
+\Trans{// Example 14 // Worker threads void produce(std::latch& latch) { ... do the work ... latch.count_down(); // One more thread is done}{}
+
+}
+% EN: void main_thread() {
+  constexpr size_t nthread = 4;
+  std::jthread t[nthread];
+  std::latch latch(nthread); // Wait for 4 count_down()
+  for (size_t i = 0; i != nthread; ++i) {
+    t[i] = std::jthread(std::ref(latch));
+   }
+  latch.wait();   // Wait for producers to finish
+  ... results are ready ...
+\Trans{void main_thread() { constexpr size_t nthread = 4; std::jthread t[nthread]; std::latch latch(nthread); // Wait for 4 count_down() for (size_t i = 0; i != nthread; ++i) { t[i] = std::jthread(std::ref(latch)); } latch.wait(); // Wait for producers to finish ... results are ready ...}{}
+
+}
+\end{code}
+
+% EN: The latch is initialized with the count of events to wait for. It will unlock when that many \texttt{count\_down()} calls have been done.
+\Trans{The latch is initialized with the count of events to wait for. It will unlock when that many \texttt{count\_down()} calls have been done.}{}
+
+% EN: There are many other applications of waiting, but almost all waiting patterns fall broadly into one of the categories we have seen in this section (a specific implementation can have a dramatic effect on performance in a particular case, which is you are far more likely to see custom application-specific versions of these synchronization constructs than you are to find non-standard containers or other basic data structures).
+\Trans{There are many other applications of waiting, but almost all waiting patterns fall broadly into one of the categories we have seen in this section (a specific implementation can have a dramatic effect on performance in a particular case, which is you are far more likely to see custom application-specific versions of these synchronization constructs than you are to find non-standard containers or other basic data structures).}{}
+
+% EN: We are now going to see several examples of very specialized and very efficient synchronization patterns. They are not for all situations, but when they fit the need, they often offer the best performance.
+\Trans{We are now going to see several examples of very specialized and very efficient synchronization patterns. They are not for all situations, but when they fit the need, they often offer the best performance.}{}
+
+\subsection{Lock-free synchronization patterns}
+
+% EN: Most of the time, safely accessing shared data relies on mutexes. C++ also supports another type of synchronizing concurrent threads: atomic operations. Again, a detailed explanation is outside of the scope of this book, and this section requires some prior knowledge of the atomics.
+\Trans{Most of the time, safely accessing shared data relies on mutexes. C++ also supports another type of synchronizing concurrent threads: atomic operations. Again, a detailed explanation is outside of the scope of this book, and this section requires some prior knowledge of the atomics.}{}
+
+% EN: The basic idea is this: some data types (usually integers) have special hardware instructions that allow a few simple operations such as reading or writing or incrementing the values to be done atomically, in a single event. During this atomic operation, other threads cannot access the atomic variable at all, so if one thread performs an atomic operation, all other threads can see the same variable as it was before the operation or after the operation but not in the middle of the operation. For example, an increment is a read-modify-write operation, but an atomic increment is a special hardware transaction such that once the read began, no other thread can access the variable until the write completes. These atomic operations are often accompanied by memory barriers; we have used them already to ensure that not just atomic but all other operations on all variables in the program are synchronized and free from data races.
+\Trans{The basic idea is this: some data types (usually integers) have special hardware instructions that allow a few simple operations such as reading or writing or incrementing the values to be done atomically, in a single event. During this atomic operation, other threads cannot access the atomic variable at all, so if one thread performs an atomic operation, all other threads can see the same variable as it was before the operation or after the operation but not in the middle of the operation. For example, an increment is a read-modify-write operation, but an atomic increment is a special hardware transaction such that once the read began, no other thread can access the variable until the write completes. These atomic operations are often accompanied by memory barriers; we have used them already to ensure that not just atomic but all other operations on all variables in the program are synchronized and free from data races.}{}
+
+% EN: The simplest but useful application of atomic operations is for counting. We often need to count something in programs, and in concurrent programs, we may need to count some events that can occur on multiple threads. If we are only interested in the total count after all threads are done, this is best handled by the ``non-sharing'' or thread-specific counter we saw earlier. But what if all threads need to know the current count as well? We can always use a mutex, but using a mutex to protect a simple increment of an integer is highly inefficient. C++ gives us a better way, the atomic counter:
+\Trans{The simplest but useful application of atomic operations is for counting. We often need to count something in programs, and in concurrent programs, we may need to count some events that can occur on multiple threads. If we are only interested in the total count after all threads are done, this is best handled by the ``non-sharing'' or thread-specific counter we saw earlier. But what if all threads need to know the current count as well? We can always use a mutex, but using a mutex to protect a simple increment of an integer is highly inefficient. C++ gives us a better way, the atomic counter:}{}
+
+\begin{code}
+% EN: // Example 15
+std::atomic<size_t> count;
+void thread_work() {
+  size_t current_count = 0;
+  if (... counted even ...) {
+    current_count =
+      count.fetch_add(1, std::memory_order_relaxed);
+   }
+\Trans{// Example 15 std::atomic<size_t> count; void thread_work() { size_t current_count = 0; if (... counted even ...) { current_count = count.fetch_add(1, std::memory_order_relaxed); }}{}
+
+}
+\end{code}
+
+% EN: There is only one shared variable in this example, \texttt{count} itself. Since we do not have any other shared data, we have no need for memory barriers (``relaxed'' memory order means there are no requirements on the order of accesses to other data). The \texttt{fetch\_add()} operation is an atomic increment, it increments \texttt{count} by one and returns the old value of \texttt{count}.
+\Trans{There is only one shared variable in this example, \texttt{count} itself. Since we do not have any other shared data, we have no need for memory barriers (``relaxed'' memory order means there are no requirements on the order of accesses to other data). The \texttt{fetch\_add()} operation is an atomic increment, it increments \texttt{count} by one and returns the old value of \texttt{count}.}{}
+
+% EN: The atomic count can also be used to let multiple threads work on the same data structure without any need for locking: to do this, we need to make sure there is only one thread working on each element of the data structure. When used in this manner, the pattern is often referred to as the atomic index. In the next example, we have an array of data that is shared between all threads:
+\Trans{The atomic count can also be used to let multiple threads work on the same data structure without any need for locking: to do this, we need to make sure there is only one thread working on each element of the data structure. When used in this manner, the pattern is often referred to as the atomic index. In the next example, we have an array of data that is shared between all threads:}{}
+
+\begin{code}
+% EN: // Example 16
+static constexpr size_t N = 1024;
+struct Data { ...  };
+Data data[N] { };
+\Trans{// Example 16 static constexpr size_t N = 1024; struct Data { ... }; Data data[N] {};}{}
+
+\end{code}
+
+% EN: We also have an atomic index that is used by all threads that need to store the results of their work in the array. To do so safely, each thread increments an atomic index and used the pre-increment value as the index into the array. No two atomic increment operations can produce the same value, therefore, each thread gets its own array elements to work on:
+\Trans{We also have an atomic index that is used by all threads that need to store the results of their work in the array. To do so safely, each thread increments an atomic index and used the pre-increment value as the index into the array. No two atomic increment operations can produce the same value, therefore, each thread gets its own array elements to work on:}{}
+
+\begin{code}
+% EN: // Example 16
+std::atomic<size_t> index(0);
+// Many producer threads
+void produce(size_t& n) {
+  while (... more work 鈥?) {
+    const size_t s =
+      index.fetch_add(1, std::memory_order_relaxed);
+    if (s >= N) return;     // No more space
+    data[s] = ... results ...
+   }
+\Trans{// Example 16 std::atomic<size_t> index(0); // Many producer threads void produce(size_t& n) { while (... more work 鈥?) { const size_t s = index.fetch_add(1, std::memory_order_relaxed); if (s >= N) return; // No more space data[s] = ... results ... }}{}
+
+}
+\end{code}
+
+% EN: Each thread gets to initialize however many array elements it can and stops when it (and all other threads) fill the entire array. The main thread has to wait until all the work is done before accessing any of the results. This cannot be done with just the atomic index since it is incremented when a thread starts working on a particular array element, not when that thread is done with the work. We have to use some other synchronization mechanism to make the main thread wait until all the work is done, such as a latch or, in a simple case, joining the producer threads:
+\Trans{Each thread gets to initialize however many array elements it can and stops when it (and all other threads) fill the entire array. The main thread has to wait until all the work is done before accessing any of the results. This cannot be done with just the atomic index since it is incremented when a thread starts working on a particular array element, not when that thread is done with the work. We have to use some other synchronization mechanism to make the main thread wait until all the work is done, such as a latch or, in a simple case, joining the producer threads:}{}
+
+\begin{code}
+% EN: // Example 16
+void main_thread() {
+  constexpr size_t nthread = 5;
+  std::thread t[nthread];
+  for (size_t i = 0; i != nthread; ++i) {
+    t[i] = std::thread(produce);
+   }
+  // Wait for producers. to finish.
+  for (size_t i = 0; i != nthread; ++i) {
+    t[i].join();
+   }
+  ... all work is done, data is ready ...
+\Trans{// Example 16 void main_thread() { constexpr size_t nthread = 5; std::thread t[nthread]; for (size_t i = 0; i != nthread; ++i) { t[i] = std::thread(produce); } // Wait for producers. to finish. for (size_t i = 0; i != nthread; ++i) { t[i].join(); } ... all work is done, data is ready ...}{}
+
+}
+\end{code}
+
+% EN: The atomic count is good when we don't rely on the value of the count to access the results that are already produced. In the last example, the producer threads did not need access to the array elements computed by other threads, and the main thread waits for all threads to complete before accessing the results. Often, this is not the case and we need to access data as it is being produced. This is where memory barriers come in.
+\Trans{The atomic count is good when we don't rely on the value of the count to access the results that are already produced. In the last example, the producer threads did not need access to the array elements computed by other threads, and the main thread waits for all threads to complete before accessing the results. Often, this is not the case and we need to access data as it is being produced. This is where memory barriers come in.}{}
+
+% EN: The simplest but surprisingly powerful lock-free pattern that relies on memory barriers is known as the publishing protocol. The pattern is applicable when one thread is producing some data that is going to be made accessible to one or more other threads when it is ready. The pattern looks like this:
+\Trans{The simplest but surprisingly powerful lock-free pattern that relies on memory barriers is known as the publishing protocol. The pattern is applicable when one thread is producing some data that is going to be made accessible to one or more other threads when it is ready. The pattern looks like this:}{}
+
+\begin{code}
+% EN: // Example 17
+std::atomic<Data*> data;
+void produce() {
+  Data* p = new Data;
+  ... complete *p object ...
+  data.store(p, std::memory_order_release);
+\Trans{// Example 17 std::atomic<Data*> data; void produce() { Data* p = new Data; ... complete *p object ... data.store(p, std::memory_order_release);}{}
+
+}
+% EN: void consume() {
+  Data* p = nullptr;
+  while (!(p = data.load(std::memory_order_acquire))) { }
+  ... safe to use *p ...
+\Trans{void consume() { Data* p = nullptr; while (!(p = data.load(std::memory_order_acquire))) {} ... safe to use *p ...}{}
+
+}
+\end{code}
+
+% EN: The shared variable is an atomic pointer to the data. It is often called the ``root'' pointer because the data itself may be a complex data structure with multiple pointers connecting its parts. The key requirement of this pattern is that there is only one way to access the entire data structure and this is through the root pointer.
+\Trans{The shared variable is an atomic pointer to the data. It is often called the ``root'' pointer because the data itself may be a complex data structure with multiple pointers connecting its parts. The key requirement of this pattern is that there is only one way to access the entire data structure and this is through the root pointer.}{}
+
+% EN: The producer thread builds all the data it needs to produce. It uses a thread-specific pointer, usually a local variable, to access the data. No other thread can see the data yet because the root pointer does not point to it and the local pointer of the producer thread is not shared with other threads.
+\Trans{The producer thread builds all the data it needs to produce. It uses a thread-specific pointer, usually a local variable, to access the data. No other thread can see the data yet because the root pointer does not point to it and the local pointer of the producer thread is not shared with other threads.}{}
+
+% EN: Finally, when the data is complete, the producer atomically stores the pointer to the data in the shared root pointer. It is often said that the producer atomically publishes the data, hence the name of the pattern, the publishing protocol.
+\Trans{Finally, when the data is complete, the producer atomically stores the pointer to the data in the shared root pointer. It is often said that the producer atomically publishes the data, hence the name of the pattern, the publishing protocol.}{}
+
+% EN: The consumers must wait for the data to be published: as long as the root pointer is null, there is nothing for them to do. They wait for the root pointer to become non-null (the wait does not have to use polling, a notification mechanism is also possible). Once the data is published, the consumer threads can access it through the root pointer. Because there is no other synchronization, no thread can modify the data once it's published (the data may contain a mutex or some other mechanism to allow parts of it to be modified safely).
+\Trans{The consumers must wait for the data to be published: as long as the root pointer is null, there is nothing for them to do. They wait for the root pointer to become non-null (the wait does not have to use polling, a notification mechanism is also possible). Once the data is published, the consumer threads can access it through the root pointer. Because there is no other synchronization, no thread can modify the data once it's published (the data may contain a mutex or some other mechanism to allow parts of it to be modified safely).}{}
+
+% EN: The atomic variable itself is insufficient for this pattern to guarantee no data races: all threads access not just the atomic pointer but the memory it points to. This is why we needed the specific memory barriers: when publishing the data, the producer uses the release barrier to not only initialize the pointer atomically but also ensure that all memory modifications that were done before the atomic write operations on the pointer become visible to anyone who reads the new value of the pointer. The consumer uses the acquire barrier to ensure that any operation on the shared data that is done after the new value of the pointer is read observes the latest state of the shared data as it existed at the moment the data was published. In other words, if you read the value of the pointer and then dereference it, you generally do not know if you will get the latest value of the data the pointer points to. But if you read the pointer with the acquire barrier (and the pointer was written with the release barrier), then you can be sure that you will read (acquire) the data as it was last written (released). Together, the release and acquire barriers guarantee that the consumer sees the shared data exactly as it was seen by the producer at the moment it published the address of the data in the root pointer.
+\Trans{The atomic variable itself is insufficient for this pattern to guarantee no data races: all threads access not just the atomic pointer but the memory it points to. This is why we needed the specific memory barriers: when publishing the data, the producer uses the release barrier to not only initialize the pointer atomically but also ensure that all memory modifications that were done before the atomic write operations on the pointer become visible to anyone who reads the new value of the pointer. The consumer uses the acquire barrier to ensure that any operation on the shared data that is done after the new value of the pointer is read observes the latest state of the shared data as it existed at the moment the data was published. In other words, if you read the value of the pointer and then dereference it, you generally do not know if you will get the latest value of the data the pointer points to. But if you read the pointer with the acquire barrier (and the pointer was written with the release barrier), then you can be sure that you will read (acquire) the data as it was last written (released). Together, the release and acquire barriers guarantee that the consumer sees the shared data exactly as it was seen by the producer at the moment it published the address of the data in the root pointer.}{}
+
+% EN: The same pattern can be used to publish completed elements of a larger data structure shared between threads. For example, we can have a producer thread publish how many array elements it initialized with the results:
+\Trans{The same pattern can be used to publish completed elements of a larger data structure shared between threads. For example, we can have a producer thread publish how many array elements it initialized with the results:}{}
+
+\begin{code}
+% EN: // Example 18
+constexpr size_t N = ...;
+Data data[N];     // Shared, not locked
+std::atomic<size_t> size;
+void produce() {
+  for (size_t n = 0; n != N; ++n) {
+    data[n] = ... results ...
+    size.store(n, std::memory_order_release);
+   }
+\Trans{// Example 18 constexpr size_t N = ...; Data data[N]; // Shared, not locked std::atomic<size_t> size; void produce() { for (size_t n = 0; n != N; ++n) { data[n] = ... results ... size.store(n, std::memory_order_release); }}{}
+
+}
+% EN: void consume() {
+  size_t n = 0;
+  do {
+    n = size.load(std::memory_order_acquire);
+    ... n elements are safe to access ...
+   } while (n < N - 1);
+\Trans{void consume() { size_t n = 0; do { n = size.load(std::memory_order_acquire); ... n elements are safe to access ... } while (n < N - 1);}{}
+
+}
+\end{code}
+
+% EN: The idea is exactly the same as in the previous example, only instead of the pointer we use the index into an array. In both cases, we have one producer thread that computes and publishes data, and one or more consumer threads that wait for the data to be published. If we need multiple producers, we must use some other synchronization mechanism to ensure that they don't work on the same data, such as the atomic index we just saw.
+\Trans{The idea is exactly the same as in the previous example, only instead of the pointer we use the index into an array. In both cases, we have one producer thread that computes and publishes data, and one or more consumer threads that wait for the data to be published. If we need multiple producers, we must use some other synchronization mechanism to ensure that they don't work on the same data, such as the atomic index we just saw.}{}
+
+% EN: In a program with multiple producer and consumer threads, we often have to combine several synchronization patterns. In the next example, we have a large shared data structure organized as an array of pointers to the individual elements. Several producer threads fill this data structure with results; we are going to use the atomic index to ensure that each element is handled by only one producer:
+\Trans{In a program with multiple producer and consumer threads, we often have to combine several synchronization patterns. In the next example, we have a large shared data structure organized as an array of pointers to the individual elements. Several producer threads fill this data structure with results; we are going to use the atomic index to ensure that each element is handled by only one producer:}{}
+
+\begin{code}
+% EN: // Example 19
+static constexpr size_t N = 1024;
+struct Data { ...  };
+std::atomic<Data*> data[N] { };
+std::atomic<size_t> size(0);     // Atomic index
+void produce() {
+  Data* p = new Data;
+  ... compute *p ...
+  const size_t s =
+    size.fetch_add(1, std::memory_order_relaxed);
+  data[s].store(p, std::memory_order_release);
+\Trans{// Example 19 static constexpr size_t N = 1024; struct Data { ... }; std::atomic<Data*> data[N] {}; std::atomic<size_t> size(0); // Atomic index void produce() { Data* p = new Data; ... compute *p ... const size_t s = size.fetch_add(1, std::memory_order_relaxed); data[s].store(p, std::memory_order_release);}{}
+
+}
+\end{code}
+
+% EN: Our producer computes the result, then fetches the current index value and, at the same time, increments the index so the next producer cannot get the same index value. The array slot \texttt{data{[}s{]}} is, therefore, uniquely reserved for this producer thread. This is enough to avoid sharing conflicts between producers, but the consumers cannot use the same index to know how many elements are already in the array: the index is incremented before the corresponding array element is initialized. For the consumers, we use the publishing protocol: each array element is an atomic pointer that remains null until the data is published. The consumers must wait for a pointer to become non-null before they can access the data:
+\Trans{Our producer computes the result, then fetches the current index value and, at the same time, increments the index so the next producer cannot get the same index value. The array slot \texttt{data{[}s{]}} is, therefore, uniquely reserved for this producer thread. This is enough to avoid sharing conflicts between producers, but the consumers cannot use the same index to know how many elements are already in the array: the index is incremented before the corresponding array element is initialized. For the consumers, we use the publishing protocol: each array element is an atomic pointer that remains null until the data is published. The consumers must wait for a pointer to become non-null before they can access the data:}{}
+
+\begin{code}
+% EN: // Example 19
+void consumer() {
+  for (size_t i = 0; i != N; ++i) {
+    const Data* p =
+      data[i].load(std::memory_order_acquire);
+    if (!p) break; // No more data
+    ... *p is safe to access ...
+   }
+\Trans{// Example 19 void consumer() { for (size_t i = 0; i != N; ++i) { const Data* p = data[i].load(std::memory_order_acquire); if (!p) break; // No more data ... *p is safe to access ... }}{}
+
+}
+\end{code}
+
+% EN: In this example, the consumer stops as soon as it finds a data element that is not ready. We could continue scanning the array: some of the subsequent elements may be ready because they were filled by another producer thread. If we do, we have to somehow remember to come back to handle the elements we missed. The right approach depends on the problem we need to solve, of course.
+\Trans{In this example, the consumer stops as soon as it finds a data element that is not ready. We could continue scanning the array: some of the subsequent elements may be ready because they were filled by another producer thread. If we do, we have to somehow remember to come back to handle the elements we missed. The right approach depends on the problem we need to solve, of course.}{}
+
+% EN: The literature on lock-free programming is extensive and full of (usually) very complex examples. The concurrency patterns we have demonstrated are only the basic building blocks for more complex data structures and data synchronization protocols.
+\Trans{The literature on lock-free programming is extensive and full of (usually) very complex examples. The concurrency patterns we have demonstrated are only the basic building blocks for more complex data structures and data synchronization protocols.}{}
+
+% EN: In the next section, we will see some of the much higher-level patterns that are applicable to the design of such data structures or even entire programs and their major components.
+\Trans{In the next section, we will see some of the much higher-level patterns that are applicable to the design of such data structures or even entire programs and their major components.}{}
+
+\section{Concurrent design patterns and guidelines}
+
+% EN: Designing and implementing concurrent software is hard. Even the basic patterns for controlling access to shared data, such as the ones we saw in the last section, are complex and full of subtle details. Failing to notice one of these details usually results in hard-to-debug data races. To simplify the task of writing concurrent programs, the programming community came up with several guidelines. All of them arise out of earlier disastrous experiences, so take these guidelines seriously. Central to these guidelines is the concept of thread safety guarantees.
+\Trans{Designing and implementing concurrent software is hard. Even the basic patterns for controlling access to shared data, such as the ones we saw in the last section, are complex and full of subtle details. Failing to notice one of these details usually results in hard-to-debug data races. To simplify the task of writing concurrent programs, the programming community came up with several guidelines. All of them arise out of earlier disastrous experiences, so take these guidelines seriously. Central to these guidelines is the concept of thread safety guarantees.}{}
+
+\subsection{Thread safety guarantees}
+
+% EN: While this is not a pattern, it is a concept that is much broader in scope and one of the key design principles for any concurrent software. Every class, function, module, or component of a concurrent program should specify the thread safety guarantees it provides, as well as the guarantees it requires from the components it uses.
+\Trans{While this is not a pattern, it is a concept that is much broader in scope and one of the key design principles for any concurrent software. Every class, function, module, or component of a concurrent program should specify the thread safety guarantees it provides, as well as the guarantees it requires from the components it uses.}{}
+
+% EN: In general, a software component can offer three levels of thread-safety guarantees:
+\Trans{In general, a software component can offer three levels of thread-safety guarantees:}{}
+
+\begin{itemize}
+\item
+  \textbf{Strong thread safety guarantee}: Any number of threads can access this component without restrictions and without encountering undefined behavior. For a function, it means that any number of threads can call this function at the same time (possibly, with some restrictions on parameters). For a class, it means that any number of threads can call member functions of this class concurrently. For a larger component, any number of threads can operate its interfaces (again, possibly with some restrictions). Such components, classes, and data structures are sometimes called thread-safe.
+\item
+  \textbf{Weak thread safety guarantee}: Any number of threads can access this component for operations that are specified to not alter the state of the component (for a class, this is usually \texttt{const} member functions). Only one thread can modify the state of the component at any time, and the locking or another way of ensuring such exclusive access is the responsibility of the caller. Such components, classes, and data structures are sometimes called thread-compatible because you can build a concurrent program from them using the appropriate synchronization mechanisms. All STL containers offer this level of guarantee.
+\item
+  \textbf{No thread-safety guarantee}: Such components cannot be used in a concurrent program at all and are sometimes called thread-hostile. These classes and functions often have hidden global states that cannot be accessed in a thread-safe manner.
+\end{itemize}
+
+% EN: By designing each component to provide certain thread safety guarantees, we can divide the intractable problem of making the entire program thread-safe into a hierarchy of design challenges where the more complex components take advantage of the guarantees provided by the simpler ones. Central to this process is the notion of the transactional interface.
+\Trans{By designing each component to provide certain thread safety guarantees, we can divide the intractable problem of making the entire program thread-safe into a hierarchy of design challenges where the more complex components take advantage of the guarantees provided by the simpler ones. Central to this process is the notion of the transactional interface.}{}
+
+\subsection{Transactional interface design}
+
+% EN: The idea of the transactional interface design is very simple: every component should have an interface such that every operation is an atomic transaction. From the point of view of the rest of the program, the operation either has not happened yet or is done. No other thread can observe the state of the component during the operation. This can be accomplished using mutexes or any other synchronization scheme that fits the need -- the particular implementation can influence performance but is not essential for correctness as long as the interface guarantees transaction processing.
+\Trans{The idea of the transactional interface design is very simple: every component should have an interface such that every operation is an atomic transaction. From the point of view of the rest of the program, the operation either has not happened yet or is done. No other thread can observe the state of the component during the operation. This can be accomplished using mutexes or any other synchronization scheme that fits the need -- the particular implementation can influence performance but is not essential for correctness as long as the interface guarantees transaction processing.}{}
+
+% EN: This guideline is most useful for designing data structures for concurrent programs. Here, it is so important that it is generally accepted that one cannot design a thread-safe data structure that does not offer a transactional interface (at least not a useful data structure). For example, we can consider a queue. The C++ standard library offers a \texttt{std::queue} template. As with any other STL container, it offers the weak guarantee: any number of threads can call \texttt{const} methods of the queue as long as no thread calls any non-\texttt{const} methods. Alternatively, any one thread can call a non-\texttt{const} method. To ensure the latter, we have to lock all accesses to the queue with an external mutex. If we want to pursue this approach, we should combine the queue and the mutex in a new class:
+\Trans{This guideline is most useful for designing data structures for concurrent programs. Here, it is so important that it is generally accepted that one cannot design a thread-safe data structure that does not offer a transactional interface (at least not a useful data structure). For example, we can consider a queue. The C++ standard library offers a \texttt{std::queue} template. As with any other STL container, it offers the weak guarantee: any number of threads can call \texttt{const} methods of the queue as long as no thread calls any non-\texttt{const} methods. Alternatively, any one thread can call a non-\texttt{const} method. To ensure the latter, we have to lock all accesses to the queue with an external mutex. If we want to pursue this approach, we should combine the queue and the mutex in a new class:}{}
+
+\begin{code}
+% EN: template <typename T> class ts_queue {
+  std::mutex m_;
+  std::queue<T> q_;
+  public:
+  ts_queue() = default;
+  ...
+ };
+\Trans{template <typename T> class ts_queue { std::mutex m_; std::queue<T> q_; public: ts_queue() = default; ... };}{}
+
+\end{code}
+
+% EN: To push another element onto a queue, we need to lock the mutex, since the \texttt{push()} member function modifies the queue:
+\Trans{To push another element onto a queue, we need to lock the mutex, since the \texttt{push()} member function modifies the queue:}{}
+
+\begin{code}
+% EN: template <typename T> class ts_queue {
+  public:
+  void push(const T& t) {
+    std::lock_guard l(m_);
+    q_.push(t);
+   }
+ };
+\Trans{template <typename T> class ts_queue { public: void push(const T& t) { std::lock_guard l(m_); q_.push(t); } };}{}
+
+\end{code}
+
+% EN: This works exactly as we want it to: any number of threads can call \texttt{push()} and every element will be added to the queue exactly once (the order is going to be arbitrary if multiple calls happen simultaneously, but this is the nature of concurrency). We have successfully provided the strong thread safety guarantee!
+\Trans{This works exactly as we want it to: any number of threads can call \texttt{push()} and every element will be added to the queue exactly once (the order is going to be arbitrary if multiple calls happen simultaneously, but this is the nature of concurrency). We have successfully provided the strong thread safety guarantee!}{}
+
+% EN: The triumph is going to be short-lived, unfortunately. Let us see what it takes to pop an element from the queue. There is a member function \texttt{pop()} that removes the element from the queue, so we can protect it with the same mutex:
+\Trans{The triumph is going to be short-lived, unfortunately. Let us see what it takes to pop an element from the queue. There is a member function \texttt{pop()} that removes the element from the queue, so we can protect it with the same mutex:}{}
+
+\begin{code}
+% EN: template <typename T> class ts_queue {
+  public:
+  void pop() {
+    std::lock_guard l(m_);
+    q_.pop();
+   }
+ };
+\Trans{template <typename T> class ts_queue { public: void pop() { std::lock_guard l(m_); q_.pop(); } };}{}
+
+\end{code}
+
+% EN: Notice that this function does not return anything: it removes the oldest element in the queue and destroys it, but that's not what we need to find out what that element is (or was). For that, we need to use the function \texttt{front()} which returns a reference to the oldest element but does not modify the queue. It is a \texttt{const} member function, so we need to lock it only if we call any non-\texttt{const} functions at the same time; we are going to ignore this optimization possibility for now and always lock this call as well:
+\Trans{Notice that this function does not return anything: it removes the oldest element in the queue and destroys it, but that's not what we need to find out what that element is (or was). For that, we need to use the function \texttt{front()} which returns a reference to the oldest element but does not modify the queue. It is a \texttt{const} member function, so we need to lock it only if we call any non-\texttt{const} functions at the same time; we are going to ignore this optimization possibility for now and always lock this call as well:}{}
+
+\begin{code}
+% EN: template <typename T> class ts_queue {
+  public:
+  T& front() const {
+    std::lock_guard l(m_);
+    return q_.front();
+   }
+ };
+\Trans{template <typename T> class ts_queue { public: T& front() const { std::lock_guard l(m_); return q_.front(); } };}{}
+
+\end{code}
+
+% EN: If we call \texttt{front()} from multiple threads and don't call any other functions, this implementation is sub-optimal, but it is not wrong.
+\Trans{If we call \texttt{front()} from multiple threads and don't call any other functions, this implementation is sub-optimal, but it is not wrong.}{}
+
+% EN: There is one special case we have neglected to mention: if the queue is empty, you should not call \texttt{pop()} or \texttt{front()} -- doing so leads to undefined behavior, according to the standard. How do you know if it is safe to pop an element from the queue? You can check if the queue is empty. This is another \texttt{const} member function, and again we are going to over-protect it and lock every call to it:
+\Trans{There is one special case we have neglected to mention: if the queue is empty, you should not call \texttt{pop()} or \texttt{front()} -- doing so leads to undefined behavior, according to the standard. How do you know if it is safe to pop an element from the queue? You can check if the queue is empty. This is another \texttt{const} member function, and again we are going to over-protect it and lock every call to it:}{}
+
+\begin{code}
+% EN: template <typename T> class ts_queue {
+  public:
+  bool empty() const {
+    std::lock_guard l(m_);
+    return q_.empty();
+   }
+ };
+\Trans{template <typename T> class ts_queue { public: bool empty() const { std::lock_guard l(m_); return q_.empty(); } };}{}
+
+\end{code}
+
+% EN: Now every member function of the underlying \texttt{std::queue} is protected by a mutex. We can call any of them from any number of threads and be guaranteed that only one thread can access the queue at any time. Technically, we have achieved the strong guarantee. Unfortunately, it is not very useful.
+\Trans{Now every member function of the underlying \texttt{std::queue} is protected by a mutex. We can call any of them from any number of threads and be guaranteed that only one thread can access the queue at any time. Technically, we have achieved the strong guarantee. Unfortunately, it is not very useful.}{}
+
+% EN: To see why, let us consider the process of removing an element from the queue:
+\Trans{To see why, let us consider the process of removing an element from the queue:}{}
+
+\begin{code}
+% EN: ts_queue<int> q;
+int i = 0;
+if (!q.empty()) {
+  i = q.front();
+  q.pop();
+\Trans{ts_queue<int> q; int i = 0; if (!q.empty()) { i = q.front(); q.pop();}{}
+
+}
+\end{code}
+
+% EN: This works fine on one thread, but we didn't need a mutex for that. It still (mostly) works when we have two threads, one of which is pushing new elements onto the queue and the other one is taking them from the queue. Let us consider what happens when two threads try to pop one element each. First, they both call \texttt{empty()}. Let us assume that the queue is not empty and both calls return \texttt{true}. Then, they both call \texttt{front()}. Since neither thread did a \texttt{pop()} yet, both threads get the same front element. This is not what was supposed to happen if we want each thread to pop an element from the queue. Finally, both threads call \texttt{pop()}, and two elements are removed from the queue. One of these elements we have never seen and will never see again, so we lost some of the data that was enqueued.
+\Trans{This works fine on one thread, but we didn't need a mutex for that. It still (mostly) works when we have two threads, one of which is pushing new elements onto the queue and the other one is taking them from the queue. Let us consider what happens when two threads try to pop one element each. First, they both call \texttt{empty()}. Let us assume that the queue is not empty and both calls return \texttt{true}. Then, they both call \texttt{front()}. Since neither thread did a \texttt{pop()} yet, both threads get the same front element. This is not what was supposed to happen if we want each thread to pop an element from the queue. Finally, both threads call \texttt{pop()}, and two elements are removed from the queue. One of these elements we have never seen and will never see again, so we lost some of the data that was enqueued.}{}
+
+% EN: But this isn't the only way it can go wrong. What happens if there is only one element on the queue? Both calls to \texttt{empty()} still return true -- a queue with one element is not empty. Both calls to \texttt{front()} still return the (same) front element. The first call to \texttt{pop()} succeeds but the second one is undefined behavior because the queue is now empty. It is also possible that one thread calls \texttt{pop()} before the other thread calls \texttt{front()} but after it calls \texttt{empty()}. In this case, the second call to \texttt{front()} is also undefined.
+\Trans{But this isn't the only way it can go wrong. What happens if there is only one element on the queue? Both calls to \texttt{empty()} still return true -- a queue with one element is not empty. Both calls to \texttt{front()} still return the (same) front element. The first call to \texttt{pop()} succeeds but the second one is undefined behavior because the queue is now empty. It is also possible that one thread calls \texttt{pop()} before the other thread calls \texttt{front()} but after it calls \texttt{empty()}. In this case, the second call to \texttt{front()} is also undefined.}{}
+
+% EN: We have a perfectly safe and a perfectly useless data structure. Clearly, a thread safety guarantee is not enough. We also need an interface that does not expose us to undefined behavior, and the only way to do this is to perform all three steps of the pop operation (\texttt{empty()}, \texttt{front()}, and \texttt{pop()}) in a single critical section, i.e., without releasing the mutex between the calls. Unless we want the caller to supply their own mutex, the only way to do this is to change the interface of our \texttt{ts\_queue} class:
+\Trans{We have a perfectly safe and a perfectly useless data structure. Clearly, a thread safety guarantee is not enough. We also need an interface that does not expose us to undefined behavior, and the only way to do this is to perform all three steps of the pop operation (\texttt{empty()}, \texttt{front()}, and \texttt{pop()}) in a single critical section, i.e., without releasing the mutex between the calls. Unless we want the caller to supply their own mutex, the only way to do this is to change the interface of our \texttt{ts\_queue} class:}{}
+
+\begin{code}
+% EN: // Example 20
+template <typename T> class ts_queue {
+  std::queue<T> q_;
+  std::mutex m_;
+  public:
+  ts_queue() = default;
+  template <typename U> void push(U&& u) {
+    std::lock_guard l(m_);
+    q_.push(std::forward<U>(u));
+   }
+  std::optional<T> pop() {
+    std::lock_guard l(m_);
+    if (q_.empty()) return { };
+    std::optional<T> res(std::move(q_.front()));
+    q_.pop();
+    return res;
+  }
+ };
+\Trans{// Example 20 template <typename T> class ts_queue { std::queue<T> q_; std::mutex m_; public: ts_queue() = default; template <typename U> void push(U&& u) { std::lock_guard l(m_); q_.push(std::forward<U>(u)); } std::optional<T> pop() { std::lock_guard l(m_); if (q_.empty()) return {}; std::optional<T> res(std::move(q_.front())); q_.pop(); return res; } };}{}
+
+\end{code}
+
+% EN: The \texttt{push()} function is the same as it was before (we made the argument type more flexible, but this is not related to thread safety). The reason we did not need to change the push operation is that it is already transactional: at the end, the queue has one more element than it had at the beginning of the operation, and the state of the queue is otherwise identical. We just made it atomic by protecting it with a mutex (no other thread that also uses the same mutex correctly can observe our queue in its transitional non-invariant state).
+\Trans{The \texttt{push()} function is the same as it was before (we made the argument type more flexible, but this is not related to thread safety). The reason we did not need to change the push operation is that it is already transactional: at the end, the queue has one more element than it had at the beginning of the operation, and the state of the queue is otherwise identical. We just made it atomic by protecting it with a mutex (no other thread that also uses the same mutex correctly can observe our queue in its transitional non-invariant state).}{}
+
+% EN: The \texttt{pop()} operation is where the transactional interface looks very different. In order to provide a meaningful thread safety guarantee, we have to provide an operation that returns the front element to the caller and removes it from the queue atomically: no other thread should be able to see the same front element, therefore, we have to lock both \texttt{front()} and \texttt{pop()} on the original queue with the same mutex. We also have to consider the possibility that the queue is empty and we have no front element to return to the caller. What do we return in this case? If we decided to return the front element by value, we would have to default-construct this value (or return some other agreed-upon value that means ``no element''). In C++17, a better way is to return a \texttt{std::optional} that holds the front element if there is one.
+\Trans{The \texttt{pop()} operation is where the transactional interface looks very different. In order to provide a meaningful thread safety guarantee, we have to provide an operation that returns the front element to the caller and removes it from the queue atomically: no other thread should be able to see the same front element, therefore, we have to lock both \texttt{front()} and \texttt{pop()} on the original queue with the same mutex. We also have to consider the possibility that the queue is empty and we have no front element to return to the caller. What do we return in this case? If we decided to return the front element by value, we would have to default-construct this value (or return some other agreed-upon value that means ``no element''). In C++17, a better way is to return a \texttt{std::optional} that holds the front element if there is one.}{}
+
+% EN: Now both \texttt{pop()} and \texttt{push()} are atomic and transactional: we can call both methods from as many threads as we want, and the results are always well-defined.
+\Trans{Now both \texttt{pop()} and \texttt{push()} are atomic and transactional: we can call both methods from as many threads as we want, and the results are always well-defined.}{}
+
+% EN: You may wonder why didn't \texttt{std::queue} offer this transactional interface, to begin with. First, STL was designed long before threads made it into the standard. But the other, very important, reason is that the queue interface was influenced by the need to provide exception safety. Exception safety is the guarantee that the object remains in a well-defined state if an exception is thrown. Here, the original queue interface does very well: \texttt{empty()} just returns the size and cannot throw an exception, \texttt{front()} returns the reference to the front element and also cannot throw, and finally \texttt{pop()} calls the destructor of the front element, which normally does not throw either. Of course, when accessing the front element, the caller's code may throw (for example, if the caller needs to copy the front element to another object) but the caller is expected to handle that. In any case, the queue itself remains in a well-defined state.
+\Trans{You may wonder why didn't \texttt{std::queue} offer this transactional interface, to begin with. First, STL was designed long before threads made it into the standard. But the other, very important, reason is that the queue interface was influenced by the need to provide exception safety. Exception safety is the guarantee that the object remains in a well-defined state if an exception is thrown. Here, the original queue interface does very well: \texttt{empty()} just returns the size and cannot throw an exception, \texttt{front()} returns the reference to the front element and also cannot throw, and finally \texttt{pop()} calls the destructor of the front element, which normally does not throw either. Of course, when accessing the front element, the caller's code may throw (for example, if the caller needs to copy the front element to another object) but the caller is expected to handle that. In any case, the queue itself remains in a well-defined state.}{}
+
+% EN: Our thread-safe queue, however, has an exception safety problem: the code that copies the front element of the queue to return it to the caller is now inside \texttt{pop()}. If the copy constructor throws during the construction of the local \texttt{std::optional} variable \texttt{res}, we are probably OK. However, if an exception is thrown when the result is returned to the caller (which can happen by move or copy), then \texttt{pop()} was already done, so we are going to lose the element we just popped from the queue.
+\Trans{Our thread-safe queue, however, has an exception safety problem: the code that copies the front element of the queue to return it to the caller is now inside \texttt{pop()}. If the copy constructor throws during the construction of the local \texttt{std::optional} variable \texttt{res}, we are probably OK. However, if an exception is thrown when the result is returned to the caller (which can happen by move or copy), then \texttt{pop()} was already done, so we are going to lose the element we just popped from the queue.}{}
+
+% EN: This tension between thread safety and exception safety is often unavoidable and has to be considered when designing thread-safe data structures for concurrent programs. Regardless, it must be reiterated that the only way to design thread-safe data structures or larger modules is to ensure that every interface call is a complete transaction: any steps that are conditionally defined must be packaged into a single transactional call together with the operations that are needed to ensure that such conditions are met. Then, the entire call should be guarded by a mutex or some other way to ensure race-free exclusive access.
+\Trans{This tension between thread safety and exception safety is often unavoidable and has to be considered when designing thread-safe data structures for concurrent programs. Regardless, it must be reiterated that the only way to design thread-safe data structures or larger modules is to ensure that every interface call is a complete transaction: any steps that are conditionally defined must be packaged into a single transactional call together with the operations that are needed to ensure that such conditions are met. Then, the entire call should be guarded by a mutex or some other way to ensure race-free exclusive access.}{}
+
+% EN: Designing thread-safe data structures is generally very hard, especially if we want good performance (and what is the point of concurrency if we don't?). That is why it is very important to take advantage of any use restrictions or special requirements that allow us to impose restrictions on how these data structures are used. In the next section, we will see one common case of such restrictions.
+\Trans{Designing thread-safe data structures is generally very hard, especially if we want good performance (and what is the point of concurrency if we don't?). That is why it is very important to take advantage of any use restrictions or special requirements that allow us to impose restrictions on how these data structures are used. In the next section, we will see one common case of such restrictions.}{}
+
+\subsection{Data structures with access limitations}
+
+% EN: Designing thread-safe data structures is so hard that one should look for any opportunity to simplify the requirements and the implementation. If there is any scenario you don't need right now, think if you can make your code simpler if you do not support that scenario. One obvious case is a data structure that is built by a single thread (no thread safety guarantees needed) then becomes immutable and is accessed by many threads that act as readers (a weak guarantee is sufficient). Any STL container, for example, can operate in this mode as-is. We still need to ensure that no reader can access the container while it's still being filled with data, but that can be easily done with a barrier or a condition. This is a very useful but rather trivial case. Are there any other restrictions we can make use of?
+\Trans{Designing thread-safe data structures is so hard that one should look for any opportunity to simplify the requirements and the implementation. If there is any scenario you don't need right now, think if you can make your code simpler if you do not support that scenario. One obvious case is a data structure that is built by a single thread (no thread safety guarantees needed) then becomes immutable and is accessed by many threads that act as readers (a weak guarantee is sufficient). Any STL container, for example, can operate in this mode as-is. We still need to ensure that no reader can access the container while it's still being filled with data, but that can be easily done with a barrier or a condition. This is a very useful but rather trivial case. Are there any other restrictions we can make use of?}{}
+
+% EN: In this section, we consider a particular use case that occurs quite frequently and allows for much simpler data structures. Specifically, we examine the situation when a particular data structure is accessed by only two threads. One thread is the producer, it adds data to the data structure. The other thread is the consumer, it removes the data. Both threads do modify the data structure but in different ways. This situation occurs rather frequently and often allows for very specialized and very efficient data structure implementations. It probably deserves recognition as a design pattern for concurrent designs, and it already has a commonly recognized name: ``single-producer single-consumer data structure.''
+\Trans{In this section, we consider a particular use case that occurs quite frequently and allows for much simpler data structures. Specifically, we examine the situation when a particular data structure is accessed by only two threads. One thread is the producer, it adds data to the data structure. The other thread is the consumer, it removes the data. Both threads do modify the data structure but in different ways. This situation occurs rather frequently and often allows for very specialized and very efficient data structure implementations. It probably deserves recognition as a design pattern for concurrent designs, and it already has a commonly recognized name: ``single-producer single-consumer data structure.''}{}
+
+% EN: In this section, we are going to see an example of a single-producer single-consumer queue. It is a data structure that is frequently used with one producer and one consumer thread, but the ideas we explore here can be used to design other data structures as well. The main distinguishing feature of this queue is going to be that it is lock-free: there are no mutexes in it at all, so we can expect much higher performance from it.
+\Trans{In this section, we are going to see an example of a single-producer single-consumer queue. It is a data structure that is frequently used with one producer and one consumer thread, but the ideas we explore here can be used to design other data structures as well. The main distinguishing feature of this queue is going to be that it is lock-free: there are no mutexes in it at all, so we can expect much higher performance from it.}{}
+
+% EN: The queue is built on an array of a fixed size, so, unlike a regular queue, it cannot grow indefinitely (this is another common restriction used to simplify lock-free data structures):
+\Trans{The queue is built on an array of a fixed size, so, unlike a regular queue, it cannot grow indefinitely (this is another common restriction used to simplify lock-free data structures):}{}
+
+\begin{code}
+% EN: // Example 21
+template <typename T, size_t N> class ts_queue {
+  T buffer_[N];
+  std::atomic<size_t> back_{0 };
+  std::atomic<size_t> front_{N - 1 };
+  ...
+ };
+\Trans{// Example 21 template <typename T, size_t N> class ts_queue { T buffer_[N]; std::atomic<size_t> back_{0}; std::atomic<size_t> front_{N - 1}; ... };}{}
+
+\end{code}
+
+% EN: In our example, we default-construct elements in the array. If this is undesirable, we can also use a properly aligned uninitialized buffer. All accesses to the queue are determined by two atomic variables, \texttt{back\_} and \texttt{front\_}. The former is the index of the array element that we will write into when we push a new element onto the queue. The latter is the index of the array element we will read from when we need to pop an element from the queue. All array elements in the range {[}\texttt{front\_}, \texttt{back\_}) are filled with elements currently on the queue. Note that this range can wrap over the end of the buffer: after using the element \texttt{buffer\_{[}N-1{]}} the queue does not run out of space but starts again from \texttt{buffer\_{[}0{]}}. This is known as a \textbf{circular buffer}.
+\Trans{In our example, we default-construct elements in the array. If this is undesirable, we can also use a properly aligned uninitialized buffer. All accesses to the queue are determined by two atomic variables, \texttt{back\_} and \texttt{front\_}. The former is the index of the array element that we will write into when we push a new element onto the queue. The latter is the index of the array element we will read from when we need to pop an element from the queue. All array elements in the range {[}\texttt{front\_}, \texttt{back\_}) are filled with elements currently on the queue. Note that this range can wrap over the end of the buffer: after using the element \texttt{buffer\_{[}N-1{]}} the queue does not run out of space but starts again from \texttt{buffer\_{[}0{]}}. This is known as a \textbf{circular buffer}.}{}
+
+% EN: How do we use these indices to manage the queue? Let us start with the push operation:
+\Trans{How do we use these indices to manage the queue? Let us start with the push operation:}{}
+
+\begin{code}
+% EN: // Example 21
+template <typename T, size_t N> class ts_queue {
+  public:
+  template <typename U> bool push(U&& u) {
+    const size_t front =
+      front_.load(std::memory_order_acquire);
+    size_t back = back_.load(std::memory_order_relaxed);
+    if (back == front) return false;
+    buffer_[back] = std::forward<U>(u);
+    back_.store((back + 1) % N, std::memory_order_release);
+    return true;
+   }
+ };
+\Trans{// Example 21 template <typename T, size_t N> class ts_queue { public: template <typename U> bool push(U&& u) { const size_t front = front_.load(std::memory_order_acquire); size_t back = back_.load(std::memory_order_relaxed); if (back == front) return false; buffer_[back] = std::forward<U>(u); back_.store((back + 1) % N, std::memory_order_release); return true; } };}{}
+
+\end{code}
+
+% EN: We need to read the current value of \texttt{back\_}, of course: this is the index of the array element we are about to write. We support only one producer, and only the producer thread can increment \texttt{back\_}, so we do not need any particular precautions here. We do, however, need to be careful to avoid overwriting any elements already in the queue. To do this we must check the current value of \texttt{front\_} (we can read it before or after reading \texttt{back\_}, it makes no difference). If the element \texttt{buffer\_{[}back{]}} that we are about to overwrite is also the front element, then the queue is full and the \texttt{push()} operation fails (note that there is another solution to this problem that is often used in real-time systems: if the queue is full, the oldest element is silently overwritten and lost). After the new element is stored, we atomically increment the \texttt{back\_} value to signal to the consumer that this slot is now available for reading. Because we are publishing this memory location, we must use the release barrier. Also note the modular arithmetic: after reaching the array element \texttt{N-1}, we're looping back to element 0.
+\Trans{We need to read the current value of \texttt{back\_}, of course: this is the index of the array element we are about to write. We support only one producer, and only the producer thread can increment \texttt{back\_}, so we do not need any particular precautions here. We do, however, need to be careful to avoid overwriting any elements already in the queue. To do this we must check the current value of \texttt{front\_} (we can read it before or after reading \texttt{back\_}, it makes no difference). If the element \texttt{buffer\_{[}back{]}} that we are about to overwrite is also the front element, then the queue is full and the \texttt{push()} operation fails (note that there is another solution to this problem that is often used in real-time systems: if the queue is full, the oldest element is silently overwritten and lost). After the new element is stored, we atomically increment the \texttt{back\_} value to signal to the consumer that this slot is now available for reading. Because we are publishing this memory location, we must use the release barrier. Also note the modular arithmetic: after reaching the array element \texttt{N-1}, we're looping back to element 0.}{}
+
+% EN: Next, let us see the \texttt{pop()} operation:
+\Trans{Next, let us see the \texttt{pop()} operation:}{}
+
+\begin{code}
+% EN: // Example 21
+template <typename T, size_t N> class ts_queue {
+  public:
+  std::optional<T> pop() {
+    const size_t back =
+      back_.load(std::memory_order_acquire);
+    const size_t front =
+     (front_.load(std::memory_order_relaxed) + 1) % N;
+    if (front == back) return { };
+    std::optional<T> res(std::move(buffer_[front]));
+    front_.store(front, std::memory_order_release);
+    return res;
+   }
+ };
+\Trans{// Example 21 template <typename T, size_t N> class ts_queue { public: std::optional<T> pop() { const size_t back = back_.load(std::memory_order_acquire); const size_t front = (front_.load(std::memory_order_relaxed) + 1) % N; if (front == back) return {}; std::optional<T> res(std::move(buffer_[front])); front_.store(front, std::memory_order_release); return res; } };}{}
+
+\end{code}
+
+% EN: Again, we need to read both \texttt{front\_} and \texttt{back\_}: \texttt{front\_} is the index of the element we are about to read, and only the consumer can advance this index. On the other hand, \texttt{back\_} is needed to make sure we actually have an element to read: if the front and back are the same, the queue is empty; again, we use \texttt{std::optional} to return a value that might not exist. We must use acquire barrier when reading \texttt{back\_} to make sure we see the element values that were written into the array by the producer thread. Finally, we advance \texttt{front\_} to ensure that we don't read the same element again and to make this array slot available to the producer thread.
+\Trans{Again, we need to read both \texttt{front\_} and \texttt{back\_}: \texttt{front\_} is the index of the element we are about to read, and only the consumer can advance this index. On the other hand, \texttt{back\_} is needed to make sure we actually have an element to read: if the front and back are the same, the queue is empty; again, we use \texttt{std::optional} to return a value that might not exist. We must use acquire barrier when reading \texttt{back\_} to make sure we see the element values that were written into the array by the producer thread. Finally, we advance \texttt{front\_} to ensure that we don't read the same element again and to make this array slot available to the producer thread.}{}
+
+% EN: There are several subtle details here that must be pointed out. Reading \texttt{back\_} and \texttt{front\_} is not done in a single transaction (it is not atomic). In particular, if the producer reads \texttt{front\_} first, it is possible that, by the time it reads \texttt{back\_} and compares the two, the consumer has already advanced \texttt{front\_}. That does not make our data structure incorrect, though. At worst, the producer can report that the queue is full when in fact, it is no longer full. We could read both values atomically, but this will only degrade the performance, and the caller still has to handle the case when the queue is full. Similarly, when \texttt{pop()} reports that the queue is empty, it may no longer be so by the time the call completes. Again, these are the inevitable complexities of concurrency: each operation reflects the state of the data at some point in time. By the time the caller gets the return value and can analyze it, the data may have changed already.
+\Trans{There are several subtle details here that must be pointed out. Reading \texttt{back\_} and \texttt{front\_} is not done in a single transaction (it is not atomic). In particular, if the producer reads \texttt{front\_} first, it is possible that, by the time it reads \texttt{back\_} and compares the two, the consumer has already advanced \texttt{front\_}. That does not make our data structure incorrect, though. At worst, the producer can report that the queue is full when in fact, it is no longer full. We could read both values atomically, but this will only degrade the performance, and the caller still has to handle the case when the queue is full. Similarly, when \texttt{pop()} reports that the queue is empty, it may no longer be so by the time the call completes. Again, these are the inevitable complexities of concurrency: each operation reflects the state of the data at some point in time. By the time the caller gets the return value and can analyze it, the data may have changed already.}{}
+
+% EN: Another note-worthy detail is the careful management of the queue elements' lifetime. We default-construct all elements in the array, so the proper way to transfer the data from the caller into the queue during \texttt{push()} is by copy or move assignment (\texttt{std::forward} does both). On the other hand, once a value is returned to the caller by \texttt{pop()}, we never need that value again, so the right operation here is move, first into the optional and then into the caller's return value object. Note that moving an object is not the same as destroying it; indeed, the moved-from array elements are not destroyed until the queue itself is. If an array element is reused, it is copy- or move-assigned a new value, and assignments are two of the three operations that are safe to do on a moved-from object (the third one is the destructor, which we will also call eventually).
+\Trans{Another note-worthy detail is the careful management of the queue elements' lifetime. We default-construct all elements in the array, so the proper way to transfer the data from the caller into the queue during \texttt{push()} is by copy or move assignment (\texttt{std::forward} does both). On the other hand, once a value is returned to the caller by \texttt{pop()}, we never need that value again, so the right operation here is move, first into the optional and then into the caller's return value object. Note that moving an object is not the same as destroying it; indeed, the moved-from array elements are not destroyed until the queue itself is. If an array element is reused, it is copy- or move-assigned a new value, and assignments are two of the three operations that are safe to do on a moved-from object (the third one is the destructor, which we will also call eventually).}{}
+
+% EN: The single-producer single-consumer pattern is a common pattern that allows a programmer to greatly simplify their concurrent data structures. There are others, you can find them in books and papers dedicated to concurrent data structures. All these patterns are ultimately designed to help you write data structures that perform correctly and efficiently when accessed by multiple threads. We, however, must move on and finally tackle the problem of using these threads to get some useful work done.
+\Trans{The single-producer single-consumer pattern is a common pattern that allows a programmer to greatly simplify their concurrent data structures. There are others, you can find them in books and papers dedicated to concurrent data structures. All these patterns are ultimately designed to help you write data structures that perform correctly and efficiently when accessed by multiple threads. We, however, must move on and finally tackle the problem of using these threads to get some useful work done.}{}
+
+\section{Concurrent execution patterns}
+
+% EN: The next group of patterns for concurrency we must learn are execution patterns. These patterns are used to organize the computations done on multiple threads. You will find out that, just as with the synchronization patterns we saw earlier, all of these are low-level patterns: most solutions for practical problems must combine these patterns into larger, more complex, designs. This is not because C++ is ill-suited for such larger designs; if anything, it is the opposite: there are so many ways to implement, for example, a thread pool, in C++, that for every concrete application, there is a version that is ideally suited in terms of performance and features. This is why it is hard to describe these more complete solutions as patterns: while the problems they address are common, the solutions vary a great deal. But all of these designs have a number of challenges to resolve, and the solutions to those challenges usually use the same tools over and over, so we can at least describe these more basic challenges and their common solutions as design patterns.
+\Trans{The next group of patterns for concurrency we must learn are execution patterns. These patterns are used to organize the computations done on multiple threads. You will find out that, just as with the synchronization patterns we saw earlier, all of these are low-level patterns: most solutions for practical problems must combine these patterns into larger, more complex, designs. This is not because C++ is ill-suited for such larger designs; if anything, it is the opposite: there are so many ways to implement, for example, a thread pool, in C++, that for every concrete application, there is a version that is ideally suited in terms of performance and features. This is why it is hard to describe these more complete solutions as patterns: while the problems they address are common, the solutions vary a great deal. But all of these designs have a number of challenges to resolve, and the solutions to those challenges usually use the same tools over and over, so we can at least describe these more basic challenges and their common solutions as design patterns.}{}
+
+\subsection{Active object}
+
+% EN: The first concurrent execution pattern we are going to see is the Active Object. An active object usually encapsulates the code to be executed, the data needed for the execution, and the flow of control needed to execute the code asynchronously. This flow of control could be as simple as a separate thread that the object starts and joins. In most cases, we do not start a new thread for every task, so an active object would have some way to run its code on a multi-threaded executor such as a thread pool. From the caller's point of view, an active object is an object that the caller constructs, initializes with the data, then tells the object to execute itself, and the execution happens asynchronously.
+\Trans{The first concurrent execution pattern we are going to see is the Active Object. An active object usually encapsulates the code to be executed, the data needed for the execution, and the flow of control needed to execute the code asynchronously. This flow of control could be as simple as a separate thread that the object starts and joins. In most cases, we do not start a new thread for every task, so an active object would have some way to run its code on a multi-threaded executor such as a thread pool. From the caller's point of view, an active object is an object that the caller constructs, initializes with the data, then tells the object to execute itself, and the execution happens asynchronously.}{}
+
+% EN: The basic active object looks like this:
+\Trans{The basic active object looks like this:}{}
+
+\begin{code}
+% EN: // Example 22
+class Job {
+  ... data ...
+  std::thread t_;
+  bool done_ { };
+  public:
+  Job(... args ...) { ... initialize data ...  }
+  void operator()() {
+    t_ = std::thread([this](){ ... computations ...  }
+  );
+   }
+  void wait() {
+    if (done_) return;
+    t_.join();
+    done_ = true;
+   }
+  ~Job() { wait();  }
+  auto get() { this->wait(); return ... results ...;  }
+ };
+Job j(... args ...);
+j();     // Execute code on a thread
+... do other work ...
+std::cout << j.get();  // Wait for results and print them
+\Trans{// Example 22 class Job { ... data ... std::thread t_; bool done_ {}; public: Job(... args ...) { ... initialize data ... } void operator()() { t_ = std::thread([this](){ ... computations ... } ); } void wait() { if (done_) return; t_.join(); done_ = true; } ~Job() { wait(); } auto get() { this->wait(); return ... results ...; } }; Job j(... args ...); j(); // Execute code on a thread ... do other work ... std::cout << j.get(); // Wait for results and print them}{}
+
+\end{code}
+
+% EN: In the simplest case shown here, the active object contains a thread that is used to execute the code asynchronously. In most practical cases you would use an executor that schedules the work on one of the threads it manages, but this gets us into implementation-specific details. The execution starts when \texttt{operator()} is called; we can also make the object execute as soon as it is constructed by calling \texttt{operator()} from the constructor. At some point, we have to wait for the results. If we use a separate thread, we can join the thread at that time (and take care to not attempt to join it twice if the caller calls \texttt{wait()} again). If the object represents not a thread but a task in a thread pool or some other executor, we would do the cleanup necessary for that case.
+\Trans{In the simplest case shown here, the active object contains a thread that is used to execute the code asynchronously. In most practical cases you would use an executor that schedules the work on one of the threads it manages, but this gets us into implementation-specific details. The execution starts when \texttt{operator()} is called; we can also make the object execute as soon as it is constructed by calling \texttt{operator()} from the constructor. At some point, we have to wait for the results. If we use a separate thread, we can join the thread at that time (and take care to not attempt to join it twice if the caller calls \texttt{wait()} again). If the object represents not a thread but a task in a thread pool or some other executor, we would do the cleanup necessary for that case.}{}
+
+% EN: As you can see, once we settle on a particular way to execute code asynchronously, writing active objects with different data and code is a rather repetitive task. Nobody writes active objects the way we just did, we always use some generic reusable framework. There are two general approaches to implementing such a framework. The first one uses inheritance: the base class does the boilerplate work, and the derived class contains the unique task-specific data and code. Staying with our simple approach to active objects, we could write the base class as follows:
+\Trans{As you can see, once we settle on a particular way to execute code asynchronously, writing active objects with different data and code is a rather repetitive task. Nobody writes active objects the way we just did, we always use some generic reusable framework. There are two general approaches to implementing such a framework. The first one uses inheritance: the base class does the boilerplate work, and the derived class contains the unique task-specific data and code. Staying with our simple approach to active objects, we could write the base class as follows:}{}
+
+\begin{code}
+% EN: // Example 23
+class Job {
+  std::thread t_;
+  bool done_ { };
+  virtual void operator()() = 0;
+  public:
+  void wait() {
+    if (done_) return;
+    t_.join();
+    done_ = true;
+   }
+  void run() {
+    t_ = std::thread([this](){ (*this)();  });
+   }
+  virtual ~Job() { wait();  }
+ };
+\Trans{// Example 23 class Job { std::thread t_; bool done_ {}; virtual void operator()() = 0; public: void wait() { if (done_) return; t_.join(); done_ = true; } void run() { t_ = std::thread([this](){ (*this)(); }); } virtual ~Job() { wait(); } };}{}
+
+\end{code}
+
+% EN: The base object \texttt{Job} contains everything needed to implement the asynchronous control flow: the thread and the state flag needed to join the thread only once. It also defines the way to execute the code by calling the non-virtual function \texttt{run()}. The code that is executed on the thread must be provided by the derived object by overriding \texttt{operator()}. Note that only \texttt{run()} is public, and \texttt{operator()} is not: this is the non-virtual idiom in action (we saw it in \emph{Chapter 14, The Template Method Pattern and the} \emph{Non-Virtual Idiom}).
+\Trans{The base object \texttt{Job} contains everything needed to implement the asynchronous control flow: the thread and the state flag needed to join the thread only once. It also defines the way to execute the code by calling the non-virtual function \texttt{run()}. The code that is executed on the thread must be provided by the derived object by overriding \texttt{operator()}. Note that only \texttt{run()} is public, and \texttt{operator()} is not: this is the non-virtual idiom in action (we saw it in \emph{Chapter 14, The Template Method Pattern and the} \emph{Non-Virtual Idiom}).}{}
+
+% EN: The derived object is problem-specific, of course, but generally looks like this:
+\Trans{The derived object is problem-specific, of course, but generally looks like this:}{}
+
+\begin{code}
+% EN: // Example 23
+class TheJob final : public Job {
+  ... data ...
+  void operator()() override { ... work ...  }
+  public:
+  TheJob(... args ...) {
+    ... initialize data ...
+    this->run();
+   }
+  auto get() { this->wait(); return ... results ...;  }
+ };
+\Trans{// Example 23 class TheJob final : public Job { ... data ... void operator()() override { ... work ... } public: TheJob(... args ...) { ... initialize data ... this->run(); } auto get() { this->wait(); return ... results ...; } };}{}
+
+\end{code}
+
+% EN: The only subtlety here is the call to \texttt{run()} done at the end of the constructor of the derived object. It is not necessary (we can execute the active object later ourselves) but if we do want the constructor to run it, it has to be done in the derived class. If we start the thread and the asynchronous execution in the base class constructor, then we will have a race between the execution on the thread -- \texttt{operator()} -- and the rest of the initialization which continues in the derived class constructor. For the same reason, an active object that starts executing from the constructor should not be derived from again; we ensure that by making the object final.
+\Trans{The only subtlety here is the call to \texttt{run()} done at the end of the constructor of the derived object. It is not necessary (we can execute the active object later ourselves) but if we do want the constructor to run it, it has to be done in the derived class. If we start the thread and the asynchronous execution in the base class constructor, then we will have a race between the execution on the thread -- \texttt{operator()} -- and the rest of the initialization which continues in the derived class constructor. For the same reason, an active object that starts executing from the constructor should not be derived from again; we ensure that by making the object final.}{}
+
+% EN: The use of our active object is very simple: we create it, the object starts executing the code in the background (on a separate thread), and when we need the result we ask for it (this may involve waiting):
+\Trans{The use of our active object is very simple: we create it, the object starts executing the code in the background (on a separate thread), and when we need the result we ask for it (this may involve waiting):}{}
+
+\begin{code}
+% EN: // Example 23
+TheJob j1(... args ...);
+TheJob j2(... args ...);
+... do other stuff ...
+std::cout << "Results: " << j1.get() << " " << j2.get();
+\Trans{// Example 23 TheJob j1(... args ...); TheJob j2(... args ...); ... do other stuff ... std::cout << "Results: " << j1.get() << " " << j2.get();}{}
+
+\end{code}
+
+% EN: If you've written any concurrent code in C++ at all, you will have definitely used an active object already: \texttt{std::thread} is an active object, it lets us execute arbitrary code on a separate thread. There are concurrency libraries for C++ where a thread is a base object and all concrete threads are derived from it. But this is not the approach chosen for the C++ standard thread. It follows the second way to implement a reusable active object: type erasure. If you need to familiarize yourself with it, reread \emph{Chapter 6, Understanding Type Erasure}. Even though \texttt{std::thread} itself is a type-erased active object, we're going to implement our own just to demonstrate the design (the standard library code is rather hard to read). This time, there is no base class. The framework is provided by a single class:
+\Trans{If you've written any concurrent code in C++ at all, you will have definitely used an active object already: \texttt{std::thread} is an active object, it lets us execute arbitrary code on a separate thread. There are concurrency libraries for C++ where a thread is a base object and all concrete threads are derived from it. But this is not the approach chosen for the C++ standard thread. It follows the second way to implement a reusable active object: type erasure. If you need to familiarize yourself with it, reread \emph{Chapter 6, Understanding Type Erasure}. Even though \texttt{std::thread} itself is a type-erased active object, we're going to implement our own just to demonstrate the design (the standard library code is rather hard to read). This time, there is no base class. The framework is provided by a single class:}{}
+
+\begin{code}
+% EN: // Example 24
+class Job {
+  bool done_ { };
+  std::function<void()> f_;
+  std::thread t_;
+  public:
+  template <typename F> explicit Job(F&& f) :
+    f_(f), t_(f_) { }
+  void wait() {
+     if (done_) return;
+     t_.join();
+     done_ = true;
+   }
+  ~Job() { wait();  }
+ };
+\Trans{// Example 24 class Job { bool done_ {}; std::function<void()> f_; std::thread t_; public: template <typename F> explicit Job(F&& f) : f_(f), t_(f_) {} void wait() { if (done_) return; t_.join(); done_ = true; } ~Job() { wait(); } };}{}
+
+\end{code}
+
+% EN: To implement the type-erased callable, we use \texttt{std::function} (we could also use one of the more efficient implementations from \emph{Chapter 6, Understanding Type Erasure}, or implement type erasure ourselves following the same approach). The code supplied by the caller to be executed on a thread comes from the callable \texttt{f} in the constructor argument. Note that the order of the class members is very important: the asynchronous execution starts as soon as the thread \texttt{t\_} is initialized, so other data members, in particular, the callable \texttt{f\_}, must be initialized before that happens.
+\Trans{To implement the type-erased callable, we use \texttt{std::function} (we could also use one of the more efficient implementations from \emph{Chapter 6, Understanding Type Erasure}, or implement type erasure ourselves following the same approach). The code supplied by the caller to be executed on a thread comes from the callable \texttt{f} in the constructor argument. Note that the order of the class members is very important: the asynchronous execution starts as soon as the thread \texttt{t\_} is initialized, so other data members, in particular, the callable \texttt{f\_}, must be initialized before that happens.}{}
+
+% EN: To use the active object of this style, we need to supply a callable. It could be a lambda expression or a named object, for example:
+\Trans{To use the active object of this style, we need to supply a callable. It could be a lambda expression or a named object, for example:}{}
+
+\begin{code}
+% EN: // Example 24
+class TheJob {
+  ... data ...
+  public:
+  TheJob(... args ...) { ... initialize data ...  }
+  void operator()() { // Callable!
+    ... do the work ...
+   }
+ };
+Job j(TheJob(... args ...));
+j.wait();
+\Trans{// Example 24 class TheJob { ... data ... public: TheJob(... args ...) { ... initialize data ... } void operator()() { // Callable! ... do the work ... } }; Job j(TheJob(... args ...)); j.wait();}{}
+
+\end{code}
+
+% EN: Note that, in this design, there is no easy way to access the data members of the callable \texttt{TheJob}, unless it was created as a named object. For this reason, the results are usually returned through arguments passed to the constructor by reference (the same as we do with \texttt{std::thread}):
+\Trans{Note that, in this design, there is no easy way to access the data members of the callable \texttt{TheJob}, unless it was created as a named object. For this reason, the results are usually returned through arguments passed to the constructor by reference (the same as we do with \texttt{std::thread}):}{}
+
+\begin{code}
+% EN: // Example 24
+class TheJob {
+  ... data ...
+  double& res_; // Result
+  public:
+  TheJob(double& res, ... args ...) : res_(res) {
+    ... initialize data ...
+   }
+  void operator()() { // Callable!
+    ... do the work ...
+    res_ = ... result ...
+   }
+ };
+double res = 0;
+Job j(TheJob(res, ... args ...));
+j.wait();
+std::cout << res;
+\Trans{// Example 24 class TheJob { ... data ... double& res_; // Result public: TheJob(double& res, ... args ...) : res_(res) { ... initialize data ... } void operator()() { // Callable! ... do the work ... res_ = ... result ... } }; double res = 0; Job j(TheJob(res, ... args ...)); j.wait(); std::cout << res;}{}
+
+\end{code}
+
+% EN: Active objects can be found in every concurrent C++ program, but some uses of them are common and specialized, and so are recognized as concurrent design patterns in their own right. We will now see several of these patterns.
+\Trans{Active objects can be found in every concurrent C++ program, but some uses of them are common and specialized, and so are recognized as concurrent design patterns in their own right. We will now see several of these patterns.}{}
+
+\subsection{Reactor Object pattern}
+
+% EN: The Reactor pattern often uses for event handling or responding to service requests. It solves a specific problem where we have multiple requests for certain actions that are issued by multiple threads; however, the nature of these actions is such that at least part of them must be executed on one thread or otherwise synchronized. The reactor object is the object that services these requests: it accepts requests from multiple threads and executes them.
+\Trans{The Reactor pattern often uses for event handling or responding to service requests. It solves a specific problem where we have multiple requests for certain actions that are issued by multiple threads; however, the nature of these actions is such that at least part of them must be executed on one thread or otherwise synchronized. The reactor object is the object that services these requests: it accepts requests from multiple threads and executes them.}{}
+
+% EN: Here is an example of a reactor that can accept requests to perform a specific computation with caller-supplied inputs and store the results. The requests can come from any number of threads. Each request is allocated a slot in the array of results -- that is the part that must be synchronized across all threads. After the slot is allocated, we can do the computations concurrently. To implement this reactor, we are going to use the atomic index to allocate unique array slots to each request:
+\Trans{Here is an example of a reactor that can accept requests to perform a specific computation with caller-supplied inputs and store the results. The requests can come from any number of threads. Each request is allocated a slot in the array of results -- that is the part that must be synchronized across all threads. After the slot is allocated, we can do the computations concurrently. To implement this reactor, we are going to use the atomic index to allocate unique array slots to each request:}{}
+
+\begin{code}
+% EN: // Example 25
+class Reactor {
+  static constexpr size_t N = 1024;
+  Data data_[N] { };
+  std::atomic<size_t> size_{0 };
+  public:
+  bool operator()(... args ...) {
+    const size_t s =
+      size_.fetch_add(1, std::memory_order_acq_rel);
+    if (s >= N) return false;  // Array is full
+    data_[s] = ... result ...;
+    return true;
+   }
+  void print_results() { ...  }
+ };
+\Trans{// Example 25 class Reactor { static constexpr size_t N = 1024; Data data_[N] {}; std::atomic<size_t> size_{0}; public: bool operator()(... args ...) { const size_t s = size_.fetch_add(1, std::memory_order_acq_rel); if (s >= N) return false; // Array is full data_[s] = ... result ...; return true; } void print_results() { ... } };}{}
+
+\end{code}
+
+% EN: The calls to \texttt{operator()} are thread-safe: any number of threads can call this operator simultaneously, and each call will add the result of the computation to the next array slot without overwriting any data produced by other calls. To retrieve the results from the object, we can either wait until all requests are done or implement another synchronization mechanism such as the publishing protocol to make calls to \texttt{operator()} and \texttt{print\_results()} thread-safe with respect to each other.
+\Trans{The calls to \texttt{operator()} are thread-safe: any number of threads can call this operator simultaneously, and each call will add the result of the computation to the next array slot without overwriting any data produced by other calls. To retrieve the results from the object, we can either wait until all requests are done or implement another synchronization mechanism such as the publishing protocol to make calls to \texttt{operator()} and \texttt{print\_results()} thread-safe with respect to each other.}{}
+
+% EN: Note that usually, a reactor object processes requests asynchronously: it has a separate thread to execute the computations and a queue to channel all the requests to a single thread. We can build such a reactor by combining several patterns we saw earlier, for example, we can add a thread-safe queue to our basic reactor to get an asynchronous reactor (we are about to see an example of such a design).
+\Trans{Note that usually, a reactor object processes requests asynchronously: it has a separate thread to execute the computations and a queue to channel all the requests to a single thread. We can build such a reactor by combining several patterns we saw earlier, for example, we can add a thread-safe queue to our basic reactor to get an asynchronous reactor (we are about to see an example of such a design).}{}
+
+% EN: So far, we focused on starting and executing jobs, and then we wait for the work to complete. The next pattern focuses on handling the completion of asynchronous tasks.
+\Trans{So far, we focused on starting and executing jobs, and then we wait for the work to complete. The next pattern focuses on handling the completion of asynchronous tasks.}{}
+
+\subsection{Proactor Object pattern}
+
+% EN: The Proactor pattern is used to execute asynchronous tasks, usually long-running, by requests from one or more threads. This sounds a lot like the Reactor, but the difference is what happens when a task is done: in the case of the Reactor, we just have to wait for the work to get done (the wait can be blocking or non-blocking, but in all cases, the caller initiates the check for completion). The Proactor object associates each task with a callback, and the callback is executed asynchronously when the task is done. The Reactor and the Proactor are the synchronous and asynchronous solutions to the same problem: handling the completion of concurrent tasks.
+\Trans{The Proactor pattern is used to execute asynchronous tasks, usually long-running, by requests from one or more threads. This sounds a lot like the Reactor, but the difference is what happens when a task is done: in the case of the Reactor, we just have to wait for the work to get done (the wait can be blocking or non-blocking, but in all cases, the caller initiates the check for completion). The Proactor object associates each task with a callback, and the callback is executed asynchronously when the task is done. The Reactor and the Proactor are the synchronous and asynchronous solutions to the same problem: handling the completion of concurrent tasks.}{}
+
+% EN: A proactor object typically has a queue of tasks to be executed asynchronously or uses another executor to schedule these tasks. Each task is submitted with a callback, usually a callable. The callback is executed when the task is done; often, the same thread that executed the task will also invoke the callback. Since the callback is always asynchronous, care must be taken if it needs to modify any shared data (for example, any data that is accessed by the thread that submitted the task to the proactor). If there is any data shared between the callback and other threads, it must be accessed in a thread-safe way.
+\Trans{A proactor object typically has a queue of tasks to be executed asynchronously or uses another executor to schedule these tasks. Each task is submitted with a callback, usually a callable. The callback is executed when the task is done; often, the same thread that executed the task will also invoke the callback. Since the callback is always asynchronous, care must be taken if it needs to modify any shared data (for example, any data that is accessed by the thread that submitted the task to the proactor). If there is any data shared between the callback and other threads, it must be accessed in a thread-safe way.}{}
+
+% EN: Here is an example of a proactor object that uses the thread-safe queue from the previous section. In this example, each task takes one integer as input and computes a \texttt{double} result:
+\Trans{Here is an example of a proactor object that uses the thread-safe queue from the previous section. In this example, each task takes one integer as input and computes a \texttt{double} result:}{}
+
+\begin{code}
+% EN: // Example 26
+class Proactor {
+  using callback_t = std::function<void(size_t, double)>;
+  struct op_task {
+    size_t n;
+    callback_t f;
+   };
+  std::atomic<bool> done_{false }; // Must come before t_
+  ts_queue<op_task> q_;           // Must come before t_
+  std::thread t_;
+  public:
+  Proactor() : t_([this]() {
+    while (true) {
+      auto task = q_.pop();
+      if (!task) {                // Queue is empty
+        if (done_.load(std::memory_order_relaxed)) {
+          return;                 // Work is done
+         }
+        continue;                 // Wait for more work
+       }
+      ... do the work ...
+      double x = ... result ...
+      task->f(n, x);
+     } // while (true)
+   }) { }
+  template <typename F>
+  void operator()(size_t n, F&& f) {
+    q_.push(op_task{n, std::forward<F>(f) });
+   }
+  ~Proactor() {
+    done_.store(true, std::memory_order_relaxed);
+    t_.join();
+   }
+ };
+\Trans{// Example 26 class Proactor { using callback_t = std::function<void(size_t, double)>; struct op_task { size_t n; callback_t f; }; std::atomic<bool> done_{false}; // Must come before t_ ts_queue<op_task> q_; // Must come before t_ std::thread t_; public: Proactor() : t_([this]() { while (true) { auto task = q_.pop(); if (!task) { // Queue is empty if (done_.load(std::memory_order_relaxed)) { return; // Work is done } continue; // Wait for more work } ... do the work ... double x = ... result ... task->f(n, x); } // while (true) }) {} template <typename F> void operator()(size_t n, F&& f) { q_.push(op_task{n, std::forward<F>(f)}); } ~Proactor() { done_.store(true, std::memory_order_relaxed); t_.join(); } };}{}
+
+\end{code}
+
+% EN: The queue stores the work requests which consist of the input and the callable; any number of threads can call \texttt{operator()} to add requests to the queue. A more generic proactor might take a callable for the work request instead of having the computation coded into the concrete proactor object. The proactor executes all the requests in order on a single thread. When the requested computation is done, the thread invokes the callback and passes the result to it. This is how we may use such a proactor object:
+\Trans{The queue stores the work requests which consist of the input and the callable; any number of threads can call \texttt{operator()} to add requests to the queue. A more generic proactor might take a callable for the work request instead of having the computation coded into the concrete proactor object. The proactor executes all the requests in order on a single thread. When the requested computation is done, the thread invokes the callback and passes the result to it. This is how we may use such a proactor object:}{}
+
+\begin{code}
+% EN: // Example 26
+Proactor p;
+for (size_t n : ... all inputs ...) {
+  p(n, [](double x) { std::cout << x << std::endl;  });
+\Trans{// Example 26 Proactor p; for (size_t n : ... all inputs ...) { p(n, [](double x) { std::cout << x << std::endl; });}{}
+
+}
+\end{code}
+
+% EN: Note that our proactor executes all callbacks on one thread, and the main thread does not do any output. Otherwise, we would have to protect \texttt{std::cout} with a mutex.
+\Trans{Note that our proactor executes all callbacks on one thread, and the main thread does not do any output. Otherwise, we would have to protect \texttt{std::cout} with a mutex.}{}
+
+% EN: The Proactor pattern is used to both execute asynchronous events and perform additional actions (callbacks) when these events happen. The last pattern we explore in this section does not execute anything but is used to react to external events.
+\Trans{The Proactor pattern is used to both execute asynchronous events and perform additional actions (callbacks) when these events happen. The last pattern we explore in this section does not execute anything but is used to react to external events.}{}
+
+\subsection{Monitor pattern}
+
+% EN: The Monitor pattern is used when we need to observe, or monitor, some conditions and respond to certain events. Usually, a monitor runs on its own thread that is sleeping or waiting most of the time. The thread is awakened either by a notification or simply by the passage of time. Once awakened, the monitor object examines the state of the system it is tasked to observe. It may take certain actions if the specified conditions are met, then the thread goes back to waiting.
+\Trans{The Monitor pattern is used when we need to observe, or monitor, some conditions and respond to certain events. Usually, a monitor runs on its own thread that is sleeping or waiting most of the time. The thread is awakened either by a notification or simply by the passage of time. Once awakened, the monitor object examines the state of the system it is tasked to observe. It may take certain actions if the specified conditions are met, then the thread goes back to waiting.}{}
+
+% EN: We are going to see a monitor implementation that uses a timeout; a monitor with a condition variable can be implemented using the same approach but with the waiting on notification pattern as seen earlier in this chapter.
+\Trans{We are going to see a monitor implementation that uses a timeout; a monitor with a condition variable can be implemented using the same approach but with the waiting on notification pattern as seen earlier in this chapter.}{}
+
+% EN: First, we need something to monitor. Let us say that we have several producer threads that do some computations and store results in an array using an atomic index:
+\Trans{First, we need something to monitor. Let us say that we have several producer threads that do some computations and store results in an array using an atomic index:}{}
+
+\begin{code}
+% EN: // Example 27
+static constexpr size_t N = 1UL << 16;
+struct Data {... data ...  };
+Data data[N] { };
+std::atomic<size_t> index(0);
+void produce(std::atomic<size_t>& count) {
+  for (size_t n = 0; ; ++n) {
+    const size_t s =
+      index.fetch_add(1, std::memory_order_acq_rel);
+    if (s >= N) return;
+    const int niter = 1 << (8 + data[s].n);
+    data[s] = ... result ...
+    count.store(n + 1, std::memory_order_relaxed);
+   }
+\Trans{// Example 27 static constexpr size_t N = 1UL << 16; struct Data {... data ... }; Data data[N] {}; std::atomic<size_t> index(0); void produce(std::atomic<size_t>& count) { for (size_t n = 0; ; ++n) { const size_t s = index.fetch_add(1, std::memory_order_acq_rel); if (s >= N) return; const int niter = 1 << (8 + data[s].n); data[s] = ... result ... count.store(n + 1, std::memory_order_relaxed); }}{}
+
+}
+\end{code}
+
+% EN: Our producer also stores the count of results computed by the thread in the \texttt{count} variable passed to it. Here is how we launch the producer threads:
+\Trans{Our producer also stores the count of results computed by the thread in the \texttt{count} variable passed to it. Here is how we launch the producer threads:}{}
+
+\begin{code}
+% EN: // Example 27
+std::thread t[nthread];
+std::atomic<size_t> work_count[nthread] = { };
+for (size_t i = 0; i != nthread; ++i) {
+  t[i] = std::thread(produce, std::ref(work_count[i]));
+\Trans{// Example 27 std::thread t[nthread]; std::atomic<size_t> work_count[nthread] = {}; for (size_t i = 0; i != nthread; ++i) { t[i] = std::thread(produce, std::ref(work_count[i]));}{}
+
+}
+\end{code}
+
+% EN: We have one result count per thread, so each producer has its own count to increment. Why, then, did we make the counts atomic? Because the counts are also what we are going to monitor: our monitor thread will periodically report on how much work is done. Thus, each work count is accessed by two threads, the producer and the monitor, and we need to either use atomic operations or a mutex to avoid data races.
+\Trans{We have one result count per thread, so each producer has its own count to increment. Why, then, did we make the counts atomic? Because the counts are also what we are going to monitor: our monitor thread will periodically report on how much work is done. Thus, each work count is accessed by two threads, the producer and the monitor, and we need to either use atomic operations or a mutex to avoid data races.}{}
+
+% EN: The monitor is going to be a separate thread that wakes up every now and then, reads the values of the result counts, and reports the progress of the work:
+\Trans{The monitor is going to be a separate thread that wakes up every now and then, reads the values of the result counts, and reports the progress of the work:}{}
+
+\begin{code}
+% EN: // Example 27
+std::atomic<bool> done {false };
+std::thread monitor([&]() {
+  auto print = [&]() { ... print work_count[] ...  };
+  std::cout << "work counts:" << std::endl;
+  while (!done.load(std::memory_order_relaxed)) {
+    std::this_thread::sleep_for(
+      std::chrono::duration<double, std::milli>(500));
+    print();
+   }
+  print();
+ });
+\Trans{// Example 27 std::atomic<bool> done {false}; std::thread monitor([&]() { auto print = [&]() { ... print work_count[] ... }; std::cout << "work counts:" << std::endl; while (!done.load(std::memory_order_relaxed)) { std::this_thread::sleep_for( std::chrono::duration<double, std::milli>(500)); print(); } print(); });}{}
+
+\end{code}
+
+% EN: The monitor can be started before the producer threads, or at any time we need to monitor the progress of the work, and it will report how many results are computed by each producer thread, for example:
+\Trans{The monitor can be started before the producer threads, or at any time we need to monitor the progress of the work, and it will report how many results are computed by each producer thread, for example:}{}
+
+\begin{code}
+% EN: work counts:
+1096 1083 957 1046 1116 -> 5298/65536
+2286 2332 2135 2242 2335 -> 11330/65536
+...
+13153 13061 13154 12979 13189 -> 65536/65536
+13153 13061 13154 12979 13189 -> 65536/65536
+\Trans{work counts: 1096 1083 957 1046 1116 -> 5298/65536 2286 2332 2135 2242 2335 -> 11330/65536 ... 13153 13061 13154 12979 13189 -> 65536/65536 13153 13061 13154 12979 13189 -> 65536/65536}{}
+
+\end{code}
+
+% EN: Here we used five threads to compute the total of 64K results, and the monitor reports the counts for each thread and the total result count. To shut down the monitor, we need to set the \texttt{done} flag and join the monitor thread:
+\Trans{Here we used five threads to compute the total of 64K results, and the monitor reports the counts for each thread and the total result count. To shut down the monitor, we need to set the \texttt{done} flag and join the monitor thread:}{}
+
+\begin{code}
+% EN: // Example 27
+done.store(true, std::memory_order_relaxed);
+monitor.join();
+\Trans{// Example 27 done.store(true, std::memory_order_relaxed); monitor.join();}{}
+
+\end{code}
+
+% EN: The other common variant of the Monitor pattern is the one where, instead of waiting on a timer, we wait on a condition. This monitor is a combination of the basic monitor and the pattern for waiting on a notification that we saw earlier in this chapter.
+\Trans{The other common variant of the Monitor pattern is the one where, instead of waiting on a timer, we wait on a condition. This monitor is a combination of the basic monitor and the pattern for waiting on a notification that we saw earlier in this chapter.}{}
+
+% EN: The concurrent programming community has come up with many other patterns for solving common problems related to concurrency; most of these can be used in C++ programs but they are not specific to C++. There are C++-specific features such as atomic variables that influence the way we implement and use these patterns. The examples from this chapter should give you enough guidance to be able to adapt any other concurrent pattern to C++.
+\Trans{The concurrent programming community has come up with many other patterns for solving common problems related to concurrency; most of these can be used in C++ programs but they are not specific to C++. There are C++-specific features such as atomic variables that influence the way we implement and use these patterns. The examples from this chapter should give you enough guidance to be able to adapt any other concurrent pattern to C++.}{}
+
+% EN: The description of execution patterns mostly concludes the brief study of C++ patterns for concurrency. Before you turn the last page, I want to show you a totally different type of concurrent pattern that is just coming to C++.
+\Trans{The description of execution patterns mostly concludes the brief study of C++ patterns for concurrency. Before you turn the last page, I want to show you a totally different type of concurrent pattern that is just coming to C++.}{}
+
+\section{Coroutine patterns in C++}
+
+% EN: Coroutines are a very recent addition to C++: they were introduced in C++20, and their present state is a foundation for building libraries and frameworks as opposed to features you should use in the application code directly. It is a complex feature with many subtle details, and it would take an entire chapter to explain what it does (there is a chapter like that in my book \emph{The Art of Writing Efficient Programs}). Briefly, coroutines are functions that can suspend and resume themselves. They cannot be forced to suspend, a coroutine continues to execute until it suspends itself. They are used to implement what is known as cooperative multitasking, where multiple streams of execution voluntarily yield control to each other rather than being forcibly preempted by the OS.
+\Trans{Coroutines are a very recent addition to C++: they were introduced in C++20, and their present state is a foundation for building libraries and frameworks as opposed to features you should use in the application code directly. It is a complex feature with many subtle details, and it would take an entire chapter to explain what it does (there is a chapter like that in my book \emph{The Art of Writing Efficient Programs}). Briefly, coroutines are functions that can suspend and resume themselves. They cannot be forced to suspend, a coroutine continues to execute until it suspends itself. They are used to implement what is known as cooperative multitasking, where multiple streams of execution voluntarily yield control to each other rather than being forcibly preempted by the OS.}{}
+
+% EN: Every execution pattern we saw in this chapter, and many more, can be implemented using coroutines. It is, however, too early to say whether this is going to become a common use of coroutines in C++, so we cannot say whether a ``proactor coroutine'' will ever become a pattern. One application of coroutines, however, is well on the way to becoming a new pattern in C++: the coroutine generator.
+\Trans{Every execution pattern we saw in this chapter, and many more, can be implemented using coroutines. It is, however, too early to say whether this is going to become a common use of coroutines in C++, so we cannot say whether a ``proactor coroutine'' will ever become a pattern. One application of coroutines, however, is well on the way to becoming a new pattern in C++: the coroutine generator.}{}
+
+% EN: This pattern comes into play when we want to take some computation that is normally done with a complex loop and rewrite it as an iterator. For example, let us say that we have a 3D array and we want to iterate over all its elements and do some computation on them. This is easy enough to do with a loop:
+\Trans{This pattern comes into play when we want to take some computation that is normally done with a complex loop and rewrite it as an iterator. For example, let us say that we have a 3D array and we want to iterate over all its elements and do some computation on them. This is easy enough to do with a loop:}{}
+
+\begin{code}
+% EN: size_t*** a; // 3D array
+for (size_t i = 0; i < N1; ++i) {
+  for (size_t j = 0; j < N2; ++j) {
+    for (size_t k = 0; k < N3; ++k) {
+      ... do work with a[i][j][k] ...
+     }
+   }
+\Trans{size_t*** a; // 3D array for (size_t i = 0; i < N1; ++i) { for (size_t j = 0; j < N2; ++j) { for (size_t k = 0; k < N3; ++k) { ... do work with a[i][j][k] ... } }}{}
+
+}
+\end{code}
+
+% EN: But it's hard to write reusable code this way: if we need to customize the work we do on each array element, we have to modify the inner loop. It would be much easier if we had an iterator that runs over the entire 3D array. Unfortunately, to implement this iterator we have to turn the loops inside out: first, we increment \texttt{k} until it reaches \texttt{N3}; then, we increment \texttt{j} by one and go back to incrementing \texttt{k}, and so on. The result is a very convoluted code that reduced many a programmer to counting on their fingers to avoid one-off errors:
+\Trans{But it's hard to write reusable code this way: if we need to customize the work we do on each array element, we have to modify the inner loop. It would be much easier if we had an iterator that runs over the entire 3D array. Unfortunately, to implement this iterator we have to turn the loops inside out: first, we increment \texttt{k} until it reaches \texttt{N3}; then, we increment \texttt{j} by one and go back to incrementing \texttt{k}, and so on. The result is a very convoluted code that reduced many a programmer to counting on their fingers to avoid one-off errors:}{}
+
+\begin{code}
+% EN: // Example 28
+class Iterator {
+  const size_t N1, N2, N3;
+  size_t*** const a;
+  size_t i = 0, j = 0, k = 0;
+  bool done = false;
+  public:
+  Iterator(size_t*** a, size_t N1, size_t N2, size_t N3) :
+    N1(N1), N2(N2), N3(N3), a(a) { }
+  bool next(size_t& x) {
+    if (done) return false;
+    x = a[i][j][k];
+    if (++k == N3) {
+      k = 0;
+      if (++j == N2) {
+        j = 0;
+        if (++i == N1) return (done = true);
+       }
+     }
+    return true;
+   }
+ };
+\Trans{// Example 28 class Iterator { const size_t N1, N2, N3; size_t*** const a; size_t i = 0, j = 0, k = 0; bool done = false; public: Iterator(size_t*** a, size_t N1, size_t N2, size_t N3) : N1(N1), N2(N2), N3(N3), a(a) {} bool next(size_t& x) { if (done) return false; x = a[i][j][k]; if (++k == N3) { k = 0; if (++j == N2) { j = 0; if (++i == N1) return (done = true); } } return true; } };}{}
+
+\end{code}
+
+% EN: We even took a shortcut and gave our iterator a non-standard interface:
+\Trans{We even took a shortcut and gave our iterator a non-standard interface:}{}
+
+\begin{code}
+% EN: // Example 28
+Iterator it(a, N1, N2, N3);
+size_t val;
+while (it.next(val)) {
+  ... val is the current array element ...
+\Trans{// Example 28 Iterator it(a, N1, N2, N3); size_t val; while (it.next(val)) { ... val is the current array element ...}{}
+
+}
+\end{code}
+
+% EN: The implementation is even more convoluted if we want to conform to the STL iterator interface.
+\Trans{The implementation is even more convoluted if we want to conform to the STL iterator interface.}{}
+
+% EN: Problems such as this, where a complex function such as our nested loop must be suspended in the middle of the execution so the caller can execute some arbitrary code and resume the suspended function, are an ideal fit for coroutines. Indeed, a coroutine that produces the same sequence as our iterator looks very simple and natural:
+\Trans{Problems such as this, where a complex function such as our nested loop must be suspended in the middle of the execution so the caller can execute some arbitrary code and resume the suspended function, are an ideal fit for coroutines. Indeed, a coroutine that produces the same sequence as our iterator looks very simple and natural:}{}
+
+\begin{code}
+% EN: // Example 28
+generator<size_t>
+coro(size_t*** a, size_t N1, size_t N2, size_t N3) {
+  for (size_t i = 0; i < N1; ++i) {
+    for (size_t j = 0; j < N2; ++j) {
+      for (size_t k = 0; k < N3; ++k) {
+        co_yield a[i][j][k];
+       }
+     }
+   }
+\Trans{// Example 28 generator<size_t> coro(size_t*** a, size_t N1, size_t N2, size_t N3) { for (size_t i = 0; i < N1; ++i) { for (size_t j = 0; j < N2; ++j) { for (size_t k = 0; k < N3; ++k) { co_yield a[i][j][k]; } } }}{}
+
+}
+\end{code}
+
+% EN: That's it; we have a function that takes the parameters necessary to loop over a 3D array, a regular nested loop, and we do something to each element. The secret is in that innermost line where ``something'' happens: the C++20 keyword \texttt{co\_yield} suspends the coroutine and returns the value \texttt{a{[}i{]}{[}j{]}{[}k{]}} to the caller. It is very similar to the \texttt{return} operator, except \texttt{co\_yield} does not exit the coroutine permanently: the caller can resume the coroutine, and the execution continues from the next line after \texttt{co\_yield}.
+\Trans{That's it; we have a function that takes the parameters necessary to loop over a 3D array, a regular nested loop, and we do something to each element. The secret is in that innermost line where ``something'' happens: the C++20 keyword \texttt{co\_yield} suspends the coroutine and returns the value \texttt{a{[}i{]}{[}j{]}{[}k{]}} to the caller. It is very similar to the \texttt{return} operator, except \texttt{co\_yield} does not exit the coroutine permanently: the caller can resume the coroutine, and the execution continues from the next line after \texttt{co\_yield}.}{}
+
+% EN: The use of this coroutine is also straightforward:
+\Trans{The use of this coroutine is also straightforward:}{}
+
+\begin{code}
+% EN: // Example 28
+auto gen = coro(a, N1, N2, N3);
+while (true) {
+  const size_t val = gen();
+  if (!gen) break;
+  ... val is the current array element ...
+\Trans{// Example 28 auto gen = coro(a, N1, N2, N3); while (true) { const size_t val = gen(); if (!gen) break; ... val is the current array element ...}{}
+
+}
+\end{code}
+
+% EN: The coroutine magic happens inside the generator object that is returned by the coroutine. Its implementation is anything but simple, and, if you want to write one yourself, you have to become an expert on C++ coroutines (and do so by reading another book or article). You can find a very minimal implementation in \emph{Example 28}, and, with the help of a good reference for coroutines, you can understand its inner working line by line. Fortunately, if all you want is to write code like that shown previously, you don't really have to learn the details of the coroutines: there are several open-source libraries that provide utility types such as the generator (with slightly different interfaces), and in C++23 \texttt{std::generator} will be added to the standard library.
+\Trans{The coroutine magic happens inside the generator object that is returned by the coroutine. Its implementation is anything but simple, and, if you want to write one yourself, you have to become an expert on C++ coroutines (and do so by reading another book or article). You can find a very minimal implementation in \emph{Example 28}, and, with the help of a good reference for coroutines, you can understand its inner working line by line. Fortunately, if all you want is to write code like that shown previously, you don't really have to learn the details of the coroutines: there are several open-source libraries that provide utility types such as the generator (with slightly different interfaces), and in C++23 \texttt{std::generator} will be added to the standard library.}{}
+
+% EN: While it is certainly easier to write the coroutine with a loop and \texttt{co\_yield} than the convoluted inverted loop of the iterator, what is the price of this convenience? Obviously, you have to either write a generator or find one in a library, but once that is done, are there any more disadvantages to the coroutines? In general, a coroutine involves more work than a regular function, but the performance of the resulting code depends greatly on the compiler and can vary with seemingly insignificant changes to the code (as is the case for any compiler optimizations). The coroutines are still quite new and the compilers do not have comprehensive optimizations for them. That being said, the performance of coroutines can be comparable to that of the hand-crafted iterator. For our \emph{Example 28}, the current (at the moment of this writing) release of Clang 17 gives the following results:
+\Trans{While it is certainly easier to write the coroutine with a loop and \texttt{co\_yield} than the convoluted inverted loop of the iterator, what is the price of this convenience? Obviously, you have to either write a generator or find one in a library, but once that is done, are there any more disadvantages to the coroutines? In general, a coroutine involves more work than a regular function, but the performance of the resulting code depends greatly on the compiler and can vary with seemingly insignificant changes to the code (as is the case for any compiler optimizations). The coroutines are still quite new and the compilers do not have comprehensive optimizations for them. That being said, the performance of coroutines can be comparable to that of the hand-crafted iterator. For our \emph{Example 28}, the current (at the moment of this writing) release of Clang 17 gives the following results:}{}
+
+\begin{code}
+% EN: Iterator time: 9.20286e-10 s/iteration
+Generator time: 6.39555e-10 s/iteration
+\Trans{Iterator time: 9.20286e-10 s/iteration Generator time: 6.39555e-10 s/iteration}{}
+
+\end{code}
+
+% EN: On the other hand, GCC 13 gives an advantage to the iterator:
+\Trans{On the other hand, GCC 13 gives an advantage to the iterator:}{}
+
+\begin{code}
+% EN: Iterator time: 6.46543e-10 s/iteration
+Generator time: 1.99748e-09 s/iteration
+\Trans{Iterator time: 6.46543e-10 s/iteration Generator time: 1.99748e-09 s/iteration}{}
+
+\end{code}
+
+% EN: We can expect the compilers to get better at optimizing coroutines in the future.
+\Trans{We can expect the compilers to get better at optimizing coroutines in the future.}{}
+
+% EN: Another variant of the coroutine generator is useful when the sequence of values that we want to produce is not limited in advance and we want to generate new elements only when they are needed (lazy generator). Again, the advantage of coroutines is the simplicity of returning results to the caller from inside of the loop.
+\Trans{Another variant of the coroutine generator is useful when the sequence of values that we want to produce is not limited in advance and we want to generate new elements only when they are needed (lazy generator). Again, the advantage of coroutines is the simplicity of returning results to the caller from inside of the loop.}{}
+
+% EN: Here is a simple random number generator implemented as a coroutine:
+\Trans{Here is a simple random number generator implemented as a coroutine:}{}
+
+\begin{code}
+% EN: // Example 29
+generator<size_t> coro(size_t i) {
+  while (true) {
+    constexpr size_t m = 1234567890, k = 987654321;
+    for (size_t j = 0; j != 11; ++j) {
+      if (1) i = (i + k) % m; else ++i;
+     }
+    co_yield i;
+   }
+\Trans{// Example 29 generator<size_t> coro(size_t i) { while (true) { constexpr size_t m = 1234567890, k = 987654321; for (size_t j = 0; j != 11; ++j) { if (1) i = (i + k) % m; else ++i; } co_yield i; }}{}
+
+}
+\end{code}
+
+% EN: This coroutine never ends: it suspends itself to return the next pseudo-random number \texttt{i}, and every time it is resumed, the execution jumps back into the infinite loop. Again, the generator is a rather complex object with a lot of boilerplate code that you would be better off getting from a library (or waiting until C++23). But once that's done, the use of the generator is very simple:
+\Trans{This coroutine never ends: it suspends itself to return the next pseudo-random number \texttt{i}, and every time it is resumed, the execution jumps back into the infinite loop. Again, the generator is a rather complex object with a lot of boilerplate code that you would be better off getting from a library (or waiting until C++23). But once that's done, the use of the generator is very simple:}{}
+
+\begin{code}
+% EN: // Example 29
+auto gen = coro(42);
+size_t random_number = gen();
+\Trans{// Example 29 auto gen = coro(42); size_t random_number = gen();}{}
+
+\end{code}
+
+% EN: Every time you call \texttt{gen()}, you get a new random number (of rather poor quality since we have implemented one of the oldest and simplest pseudo-random number generators, so consider this example useful for illustration only). The generator can be called as many times as you need; when it is finally destroyed, so is the coroutine.
+\Trans{Every time you call \texttt{gen()}, you get a new random number (of rather poor quality since we have implemented one of the oldest and simplest pseudo-random number generators, so consider this example useful for illustration only). The generator can be called as many times as you need; when it is finally destroyed, so is the coroutine.}{}
+
+% EN: We will likely see more design patterns that take advantage of coroutines develop in the coming years. For now, the generator is the only established one, and just recently at that, so it is fitting to conclude the last chapter of the book on C++ design patterns with the newest addition to our pattern toolbox.
+\Trans{We will likely see more design patterns that take advantage of coroutines develop in the coming years. For now, the generator is the only established one, and just recently at that, so it is fitting to conclude the last chapter of the book on C++ design patterns with the newest addition to our pattern toolbox.}{}
+
+\section{Summary}
+
+% EN: In this chapter, we explored common C++ solutions to the problems of developing concurrent software. This is a very different type of problem compared to everything we studied before. Our main concerns here are correctness, specifically, by avoiding data races, and performance. Synchronization patterns are standard ways to control access to shared data to avoid undefined behavior. Execution patterns are the basic building blocks of thread schedulers and asynchronous executors. Finally, the high-level patterns and guidelines for the concurrent design are the ways we, the programmers, keep our sanity while trying to think about all the things that could happen before, after, or at the same time as one another.
+\Trans{In this chapter, we explored common C++ solutions to the problems of developing concurrent software. This is a very different type of problem compared to everything we studied before. Our main concerns here are correctness, specifically, by avoiding data races, and performance. Synchronization patterns are standard ways to control access to shared data to avoid undefined behavior. Execution patterns are the basic building blocks of thread schedulers and asynchronous executors. Finally, the high-level patterns and guidelines for the concurrent design are the ways we, the programmers, keep our sanity while trying to think about all the things that could happen before, after, or at the same time as one another.}{}
+
+\section{Questions}
+
+\begin{enumerate}
+\item
+% EN:   What is concurrency?
+\Trans{What is concurrency?}{}
+\item
+% EN:   How does C++ support concurrency?
+\Trans{How does C++ support concurrency?}{}
+\item
+% EN:   What are synchronization design patterns?
+\Trans{What are synchronization design patterns?}{}
+\item
+% EN:   What are execution design patterns?
+\Trans{What are execution design patterns?}{}
+\item
+% EN:   What overall guidelines for the design and the architecture of concurrent programs should be followed?
+\Trans{What overall guidelines for the design and the architecture of concurrent programs should be followed?}{}
+\item
+% EN:   What is a transactional interface?
+\Trans{What is a transactional interface?}{}
+\end{enumerate}
+

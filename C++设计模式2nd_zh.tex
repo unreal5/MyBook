@@ -1,0 +1,42 @@
+% Chinese edition assembly file
+\documentclass[10pt,openright,oneside,CJKmath]{MyBook}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=wineRed,urlcolor=blue,citecolor=wineRed}
+% Translation macro policy:
+%   \Trans{EN}{ZH}
+% Choose ONE of the following render policies by uncommenting.
+% 1) Show only Chinese if provided, else fallback English
+\newcommand{\Trans}[2]{\if\relax\detokenize{#2}\relax #1\else #2\fi}
+% 2) (Alternative) Show Chinese then small gray English for reference
+%\renewcommand{\Trans}[2]{\if\relax\detokenize{#2}\relax #1\else #2\\\small\color{gray}#1\fi}
+
+\begin{document}
+\mainmatter
+% Include translated chapter files produced under chapters_cn
+% Run:  python scripts/latex_translation_helper.py --source chapters_new --target chapters_cn
+% Then manually / semi-automatically fill the second argument of each \Trans.
+
+% Includes for all chapters (auto inserted)
+\include{chapters_cn/000-Preamble}
+\include{chapters_cn/01-An_Introduction_to_Inheritance_and_Polymorphism}
+\include{chapters_cn/02-Class_and_Function_Templates}
+\include{chapters_cn/03-Memory_and_Ownership}
+\include{chapters_cn/04-Swap_--_from_Simple_to_Subtle}
+\include{chapters_cn/05-A_Comprehensive_Look_at_RAII}
+\include{chapters_cn/06-Understanding_Type_Erasure}
+\include{chapters_cn/07-SFINAE,_Concepts,_and_Overload_Resolution_Management}
+\include{chapters_cn/08-The_Curiously_Recurring_Template_Pattern}
+\include{chapters_cn/09-Named_Arguments,_Method_Chaining,_and_the_Builder_Pattern}
+\include{chapters_cn/10-Local_Buffer_Optimization}
+\include{chapters_cn/11-ScopeGuard}
+\include{chapters_cn/12-Friend_Factory}
+\include{chapters_cn/13-Virtual_Constructors_and_Factories}
+\include{chapters_cn/14-The_Template_Method_Pattern_and_the_Non-Virtual_Idiom}
+\include{chapters_cn/15-Policy-Based_Design}
+\include{chapters_cn/16-Adapters_and_Decorators}
+\include{chapters_cn/17-The_Visitor_Pattern_and_Multiple_Dispatch}
+\include{chapters_cn/18-Patterns_for_Concurrency}
+
+\end{document}

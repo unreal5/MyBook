@@ -1,0 +1,771 @@
+% EN: ﻿\chapter{Friend Factory}
+\Trans{﻿\chapter{Friend Factory}}{}
+
+% EN: In this chapter, we are going to talk about making friends. We mean C++ friends here, not friends of C++ (you find those in your local C++ users group). In C++, friends of classes are functions or other classes that are granted special access to the class. In that way, they are not so different from your friends. But C++ can just manufacture friends as needed, on demand!
+\Trans{In this chapter, we are going to talk about making friends. We mean C++ friends here, not friends of C++ (you find those in your local C++ users group). In C++, friends of classes are functions or other classes that are granted special access to the class. In that way, they are not so different from your friends. But C++ can just manufacture friends as needed, on demand!}{}
+
+% EN: The following topics will be covered in this chapter:
+\Trans{The following topics will be covered in this chapter:}{}
+
+\begin{itemize}
+\item
+% EN:   How do friend functions work in C++ and what do they do?
+\Trans{How do friend functions work in C++ and what do they do?}{}
+\item
+% EN:   When should you use friend functions versus class member functions?
+\Trans{When should you use friend functions versus class member functions?}{}
+\item
+% EN:   How to combine friends and templates
+\Trans{How to combine friends and templates}{}
+\item
+% EN:   How to generate friend functions from templates
+\Trans{How to generate friend functions from templates}{}
+\end{itemize}
+
+\section{Technical requirements}
+
+% EN: The example code for this chapter can be found at the following GitHub link: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter12.
+\Trans{The example code for this chapter can be found at the following GitHub link: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter12.}{}
+
+\section{Friends in C++}
+
+% EN: Let's start by reviewing the way in which C++ grants friendship to classes, and the effects of this action, as well as when and for what reasons the friendship should be used (``my code does not compile until I add \texttt{friend} everywhere'' is not a valid reason, but an indication of a poorly designed interface - redesign your classes instead).
+\Trans{Let's start by reviewing the way in which C++ grants friendship to classes, and the effects of this action, as well as when and for what reasons the friendship should be used (``my code does not compile until I add \texttt{friend} everywhere'' is not a valid reason, but an indication of a poorly designed interface - redesign your classes instead).}{}
+
+\subsection{How to grant friendship in C++}
+
+% EN: A \emph{friend} is a C++ concept that applies to classes and affects the access to class members (\emph{access} is what \texttt{public} and \texttt{private} control). Usually, public member functions and data members are accessible to anyone, and private ones are only accessible to other member functions of the class itself. The following code does not compile because the data member \texttt{C:x\_} is private:
+\Trans{A \emph{friend} is a C++ concept that applies to classes and affects the access to class members (\emph{access} is what \texttt{public} and \texttt{private} control). Usually, public member functions and data members are accessible to anyone, and private ones are only accessible to other member functions of the class itself. The following code does not compile because the data member \texttt{C:x\_} is private:}{}
+
+\begin{code}
+% EN: // Example 01
+class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+ };
+C increase(C c, int dx) {
+  return C(c.x_ + dx);     // Does not compile
+\Trans{// Example 01 class C { int x_; public: C(int x) : x_(x) {} }; C increase(C c, int dx) { return C(c.x_ + dx); // Does not compile}{}
+
+}
+\end{code}
+
+% EN: The easiest way to solve this particular problem is to make \texttt{increase()} a member function, but let's stay with this version for a moment. The other option is to relax access and make \texttt{C::x\_} public. That is a bad idea because it exposes \texttt{x\_} - not just to \texttt{increase()}, but to any other code out there that wants to directly modify an object of type \texttt{C}. What we need is to make \texttt{x\_} public, or at least accessible, to \texttt{increase()} and to nobody else. This is done with a friend declaration:
+\Trans{The easiest way to solve this particular problem is to make \texttt{increase()} a member function, but let's stay with this version for a moment. The other option is to relax access and make \texttt{C::x\_} public. That is a bad idea because it exposes \texttt{x\_} - not just to \texttt{increase()}, but to any other code out there that wants to directly modify an object of type \texttt{C}. What we need is to make \texttt{x\_} public, or at least accessible, to \texttt{increase()} and to nobody else. This is done with a friend declaration:}{}
+
+\begin{code}
+% EN: // Example 02
+class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  friend C increase(C c, int dx);
+ };
+C increase(C c, int dx) {
+  return C(c.x_ + dx);    // Now it compiles
+\Trans{// Example 02 class C { int x_; public: C(int x) : x_(x) {} friend C increase(C c, int dx); }; C increase(C c, int dx) { return C(c.x_ + dx); // Now it compiles}{}
+
+}
+\end{code}
+
+% EN: The friend declaration does nothing more than give the specified function the same access as the class member functions get. There is also a form of friend declaration that grants friendship not to a function, but to a class; this is just a way to grant friendship to all member functions of that class.
+\Trans{The friend declaration does nothing more than give the specified function the same access as the class member functions get. There is also a form of friend declaration that grants friendship not to a function, but to a class; this is just a way to grant friendship to all member functions of that class.}{}
+
+\subsection{Friends versus member functions}
+
+% EN: We do have to come back to the question, why not just make \texttt{increase()} a member function of the \texttt{C} class? In the example given in the preceding section, there's no reason to, really - \texttt{increase()} is clearly meant to be a part of the public interface of the \texttt{C} class since it's one of the operations \texttt{C} supports. It needs special access to do its work, so it should be a member function. There are, however, cases where member functions come with limitations, or even cannot be used at all.
+\Trans{We do have to come back to the question, why not just make \texttt{increase()} a member function of the \texttt{C} class? In the example given in the preceding section, there's no reason to, really - \texttt{increase()} is clearly meant to be a part of the public interface of the \texttt{C} class since it's one of the operations \texttt{C} supports. It needs special access to do its work, so it should be a member function. There are, however, cases where member functions come with limitations, or even cannot be used at all.}{}
+
+% EN: Let us consider an addition operator for the same \texttt{C} class - it's what is needed to make an expression such as \texttt{c1\ +\ c2} compile if both variables are of type \texttt{C}. The addition, or \texttt{operator+()}, can be declared as a member function:
+\Trans{Let us consider an addition operator for the same \texttt{C} class - it's what is needed to make an expression such as \texttt{c1\ +\ c2} compile if both variables are of type \texttt{C}. The addition, or \texttt{operator+()}, can be declared as a member function:}{}
+
+\begin{code}
+% EN: // Example 03
+class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  C operator+(const C& rhs) const {
+    return C(x_ + rhs.x_);
+   }
+ };
+...
+C x(1), y(2);
+C z = x + y;
+\Trans{// Example 03 class C { int x_; public: C(int x) : x_(x) {} C operator+(const C& rhs) const { return C(x_ + rhs.x_); } }; ... C x(1), y(2); C z = x + y;}{}
+
+\end{code}
+
+% EN: This code compiles and does exactly what we want; there does not seem to be anything obviously wrong with it. That's because there isn't - so far. But we can add more than just objects of type \texttt{C}:
+\Trans{This code compiles and does exactly what we want; there does not seem to be anything obviously wrong with it. That's because there isn't - so far. But we can add more than just objects of type \texttt{C}:}{}
+
+\begin{code}
+% EN: // Example 03
+C x(1);
+C z = x + 2;
+\Trans{// Example 03 C x(1); C z = x + 2;}{}
+
+\end{code}
+
+% EN: This also compiles, and points to a subtle detail in the declaration of the \texttt{C} class - we did not make the \texttt{C(int)} constructor explicit. This constructor now introduces an implicit conversion from int to \texttt{C}, and that is how the expression \texttt{x\ +\ 2} compiles - first, \texttt{2} is converted into a temporary object, \texttt{C(2)}, using the constructor we provided, and second the member function, \texttt{x.operator+(const\ C\&)}, is called - the right-hand side is the temporary object we just created. The temporary object itself is deleted right after the expression is evaluated. The implicit conversion from integers is rather broad and might have been an oversight. Let's assume that it wasn't and that we really want the expression such as \texttt{x\ +\ 2} to compile. What's not to like, then? Again, nothing so far. The objectionable feature of our design is what comes next:
+\Trans{This also compiles, and points to a subtle detail in the declaration of the \texttt{C} class - we did not make the \texttt{C(int)} constructor explicit. This constructor now introduces an implicit conversion from int to \texttt{C}, and that is how the expression \texttt{x\ +\ 2} compiles - first, \texttt{2} is converted into a temporary object, \texttt{C(2)}, using the constructor we provided, and second the member function, \texttt{x.operator+(const\ C\&)}, is called - the right-hand side is the temporary object we just created. The temporary object itself is deleted right after the expression is evaluated. The implicit conversion from integers is rather broad and might have been an oversight. Let's assume that it wasn't and that we really want the expression such as \texttt{x\ +\ 2} to compile. What's not to like, then? Again, nothing so far. The objectionable feature of our design is what comes next:}{}
+
+\begin{code}
+% EN: // Example 03
+C x(1);
+C z = 2 + x; // Does NOT compile
+\Trans{// Example 03 C x(1); C z = 2 + x; // Does NOT compile}{}
+
+\end{code}
+
+% EN: If \texttt{x\ +\ 2} compiles, you would reasonably expect \texttt{2\ +\ x} to compile and give the same result (there are areas of math where the addition is not commutative, but let's stick with the arithmetic here). The reason it does not compile is that the compiler cannot get to \texttt{operator+()} in the \texttt{C} class from here, and no other \texttt{operator+()} is available for these arguments. The \texttt{x\ +\ y} expression, when used with member function operators, is just syntactic sugar for the equivalent, if verbose, call to \texttt{x.operator+(y)}. The same is true for any other binary operator such as multiplication or comparison.
+\Trans{If \texttt{x\ +\ 2} compiles, you would reasonably expect \texttt{2\ +\ x} to compile and give the same result (there are areas of math where the addition is not commutative, but let's stick with the arithmetic here). The reason it does not compile is that the compiler cannot get to \texttt{operator+()} in the \texttt{C} class from here, and no other \texttt{operator+()} is available for these arguments. The \texttt{x\ +\ y} expression, when used with member function operators, is just syntactic sugar for the equivalent, if verbose, call to \texttt{x.operator+(y)}. The same is true for any other binary operator such as multiplication or comparison.}{}
+
+% EN: The point is, the member function operator is invoked on the first argument of the expression (so technically, \texttt{x\ +\ y} and \texttt{y\ +\ x} are not identical; the member function is called on different objects, but the implementation is such that both give the same result). In our case, the member function would have to be invoked on the number \texttt{2}, which is an integer and has no member functions at all. So, how did the expression \texttt{x\ +\ 2} compile? Quite simple, really: \texttt{x\ +} by itself implies \texttt{x.operator+()}, and the argument is whatever comes after \texttt{+}. In our case, it's \texttt{2}. So, either \texttt{x.operator+(2)} compiles, or it does not, but in either case, the search for \texttt{operator+} to the call is over. The implicit conversion from \texttt{int} in our \texttt{C} class makes this call compile. So, why doesn't the compiler attempt a conversion on the first argument? The answer is, it never does because it has no guidance on what to convert it into - there may be any number of other types that have the \texttt{operator+()} member function, and some of them may accept the \texttt{C} class as their argument, or something \texttt{C} can be converted to. The compiler does not attempt to explore the almost infinite number of such possible conversions.
+\Trans{The point is, the member function operator is invoked on the first argument of the expression (so technically, \texttt{x\ +\ y} and \texttt{y\ +\ x} are not identical; the member function is called on different objects, but the implementation is such that both give the same result). In our case, the member function would have to be invoked on the number \texttt{2}, which is an integer and has no member functions at all. So, how did the expression \texttt{x\ +\ 2} compile? Quite simple, really: \texttt{x\ +} by itself implies \texttt{x.operator+()}, and the argument is whatever comes after \texttt{+}. In our case, it's \texttt{2}. So, either \texttt{x.operator+(2)} compiles, or it does not, but in either case, the search for \texttt{operator+} to the call is over. The implicit conversion from \texttt{int} in our \texttt{C} class makes this call compile. So, why doesn't the compiler attempt a conversion on the first argument? The answer is, it never does because it has no guidance on what to convert it into - there may be any number of other types that have the \texttt{operator+()} member function, and some of them may accept the \texttt{C} class as their argument, or something \texttt{C} can be converted to. The compiler does not attempt to explore the almost infinite number of such possible conversions.}{}
+
+% EN: If we want to use plus in expressions where the first type may be a built-in type or any other type that does not have or cannot have a member function of \texttt{operator+()}, then we have to use a non-member function. No problem; we know how to write those:
+\Trans{If we want to use plus in expressions where the first type may be a built-in type or any other type that does not have or cannot have a member function of \texttt{operator+()}, then we have to use a non-member function. No problem; we know how to write those:}{}
+
+\begin{code}
+% EN: C operator+(const C& lhs, const C& rhs) {
+  return C(lhs.x_ + rhs.x_);
+\Trans{C operator+(const C& lhs, const C& rhs) { return C(lhs.x_ + rhs.x_);}{}
+
+}
+\end{code}
+
+% EN: But now we have lost access to the private data member \texttt{C::x\_}, so our non-member \texttt{operator+()} does not compile either. We have seen the solution to that problem in the previous section - we need to make it a friend:
+\Trans{But now we have lost access to the private data member \texttt{C::x\_}, so our non-member \texttt{operator+()} does not compile either. We have seen the solution to that problem in the previous section - we need to make it a friend:}{}
+
+\begin{code}
+% EN: // Example 04
+class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  friend C operator+(const C& lhs, const C& rhs);
+ };
+C operator+(const C& lhs, const C& rhs) {
+  return C(lhs.x_ + rhs.x_);
+\Trans{// Example 04 class C { int x_; public: C(int x) : x_(x) {} friend C operator+(const C& lhs, const C& rhs); }; C operator+(const C& lhs, const C& rhs) { return C(lhs.x_ + rhs.x_);}{}
+
+}
+% EN: ...
+C x(1), y(2);
+C z1 = x + y;
+C z2 = x + 2;
+C z3 = 1 + y;
+\Trans{... C x(1), y(2); C z1 = x + y; C z2 = x + 2; C z3 = 1 + y;}{}
+
+\end{code}
+
+% EN: Now, everything compiles and works as intended - the non-member function \texttt{operator+()} is simply a non-member function with two arguments of type \texttt{const\ C\&}. The rules for it are the same as for any other such function.
+\Trans{Now, everything compiles and works as intended - the non-member function \texttt{operator+()} is simply a non-member function with two arguments of type \texttt{const\ C\&}. The rules for it are the same as for any other such function.}{}
+
+% EN: We can avoid typing the declaration of the \texttt{operator+()} twice if we define its body \emph{in situ} (immediately following the declaration, inside the class):
+\Trans{We can avoid typing the declaration of the \texttt{operator+()} twice if we define its body \emph{in situ} (immediately following the declaration, inside the class):}{}
+
+\begin{code}
+% EN: // Example 05
+class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  friend C operator+(const C& lhs, const C& rhs) {
+    return C(lhs.x_ + rhs.x_);
+   }
+ };
+\Trans{// Example 05 class C { int x_; public: C(int x) : x_(x) {} friend C operator+(const C& lhs, const C& rhs) { return C(lhs.x_ + rhs.x_); } };}{}
+
+\end{code}
+
+% EN: The latter example is subtly different from the previous one, but usually, you won't be able to see the difference, so it is simply a matter of style - moving the body of the function into the object makes the object itself longer, but defining the function outside of the class is more typing (as well as a possible divergence between the friend declaration and the actual function, if the code is ever changed). We will explain the intricacies of in situ friend declarations in the next section.
+\Trans{The latter example is subtly different from the previous one, but usually, you won't be able to see the difference, so it is simply a matter of style - moving the body of the function into the object makes the object itself longer, but defining the function outside of the class is more typing (as well as a possible divergence between the friend declaration and the actual function, if the code is ever changed). We will explain the intricacies of in situ friend declarations in the next section.}{}
+
+% EN: Either way, the friend function is really a part of the class public interface, but, for technical reasons, we prefer a non-member function in this case. There is even a case when the non-member function is the only choice. Consider the C++ input/output operators, such as the inserter, or \texttt{operator\textless{}\textless{}()}, which are used to write objects out into a stream (for example, \texttt{std::cout}). We want to be able to print an object of type \texttt{C} like so:
+\Trans{Either way, the friend function is really a part of the class public interface, but, for technical reasons, we prefer a non-member function in this case. There is even a case when the non-member function is the only choice. Consider the C++ input/output operators, such as the inserter, or \texttt{operator\textless{}\textless{}()}, which are used to write objects out into a stream (for example, \texttt{std::cout}). We want to be able to print an object of type \texttt{C} like so:}{}
+
+\begin{code}
+% EN: C c1(5);
+std::cout << c1;
+\Trans{C c1(5); std::cout << c1;}{}
+
+\end{code}
+
+% EN: There is no standard \texttt{operator\textless{}\textless{}()} for our type C, so we have to declare our own. The inserter is a binary operator, just like plus (it has parameters on either side), so, were it a member function, it would have to be one on the left-hand side object. Look at the preceding statement - the left-hand side object in the \texttt{std::cout\ \textless{}\textless{}\ c1} expression is not our object, \texttt{c1}, but the standard out stream, \texttt{std::cout}. That's the object we would have to add a member function to, but we cannot - \texttt{std::cout} is declared somewhere in the C++ standard library headers, and there is no way to extend its interface, at least not in a direct manner. Member functions on the \texttt{C} class can be declared by us, but this does not help - only the member functions of the left-hand side object are considered. The only alternative is a non-member function. The first argument has to be \texttt{std::ostream\&}:
+\Trans{There is no standard \texttt{operator\textless{}\textless{}()} for our type C, so we have to declare our own. The inserter is a binary operator, just like plus (it has parameters on either side), so, were it a member function, it would have to be one on the left-hand side object. Look at the preceding statement - the left-hand side object in the \texttt{std::cout\ \textless{}\textless{}\ c1} expression is not our object, \texttt{c1}, but the standard out stream, \texttt{std::cout}. That's the object we would have to add a member function to, but we cannot - \texttt{std::cout} is declared somewhere in the C++ standard library headers, and there is no way to extend its interface, at least not in a direct manner. Member functions on the \texttt{C} class can be declared by us, but this does not help - only the member functions of the left-hand side object are considered. The only alternative is a non-member function. The first argument has to be \texttt{std::ostream\&}:}{}
+
+\begin{code}
+% EN: // Example 06
+class C {
+  ...
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const C& c);
+ };
+std::ostream& operator<<(std::ostream& out, const C& c) {
+  out << c.x_;
+  return out;
+\Trans{// Example 06 class C { ... friend std::ostream& operator<<(std::ostream& out, const C& c); }; std::ostream& operator<<(std::ostream& out, const C& c) { out << c.x_; return out;}{}
+
+}
+\end{code}
+
+% EN: This function has to be declared as a friend since it also needs access to the private data of the \texttt{C} class. It can also be defined \emph{in situ}:
+\Trans{This function has to be declared as a friend since it also needs access to the private data of the \texttt{C} class. It can also be defined \emph{in situ}:}{}
+
+\begin{code}
+% EN: // Example 07
+class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const C& c) {
+    out << c.x_;
+    return out;
+   }
+ };
+\Trans{// Example 07 class C { int x_; public: C(int x) : x_(x) {} friend std::ostream& operator<<(std::ostream& out, const C& c) { out << c.x_; return out; } };}{}
+
+\end{code}
+
+% EN: By convention, the return value is the same stream object, so the inserter operators can be chained:
+\Trans{By convention, the return value is the same stream object, so the inserter operators can be chained:}{}
+
+\begin{code}
+% EN: C c1(5), c2(7);
+std::cout << c1 << c2;
+\Trans{C c1(5), c2(7); std::cout << c1 << c2;}{}
+
+\end{code}
+
+% EN: The way the last statement is interpreted is \texttt{(std::cout\ \textless{}\textless{}\ c1)\ \textless{}\textless{}\ c2}, which boils down to \texttt{operator\textless{}\textless{}(operator\textless{}\textless{}(std::cout,\ c1),\ c2)}. The outer \texttt{operator\textless{}\textless{}()} is called on the return value of the inner \texttt{operator\textless{}\textless{}()}, which is the same: \texttt{std::cout}. Again, the inserter is part of the public interface of the \texttt{C} class - it makes the objects of type \texttt{C} printable. However, it has to be a non-member function.
+\Trans{The way the last statement is interpreted is \texttt{(std::cout\ \textless{}\textless{}\ c1)\ \textless{}\textless{}\ c2}, which boils down to \texttt{operator\textless{}\textless{}(operator\textless{}\textless{}(std::cout,\ c1),\ c2)}. The outer \texttt{operator\textless{}\textless{}()} is called on the return value of the inner \texttt{operator\textless{}\textless{}()}, which is the same: \texttt{std::cout}. Again, the inserter is part of the public interface of the \texttt{C} class - it makes the objects of type \texttt{C} printable. However, it has to be a non-member function.}{}
+
+% EN: The introduction to the use of \texttt{friend} in C++ glossed over several subtle details that are occasionally important, so let us spend some time to elucidate them.
+\Trans{The introduction to the use of \texttt{friend} in C++ glossed over several subtle details that are occasionally important, so let us spend some time to elucidate them.}{}
+
+\subsection{Subtle details of friendship}
+
+% EN: First, let us talk about the effect of declaring a \texttt{friend} function without defining it (i.e., without the in situ implementation):
+\Trans{First, let us talk about the effect of declaring a \texttt{friend} function without defining it (i.e., without the in situ implementation):}{}
+
+\begin{code}
+% EN: // Example 08
+class C {
+  friend C operator+(const C& lhs, const C& rhs);
+  ...
+ };
+C operator+(const C& lhs, const C& rhs) { 鈥? }
+\Trans{// Example 08 class C { friend C operator+(const C& lhs, const C& rhs); ... }; C operator+(const C& lhs, const C& rhs) { 鈥?}}{}
+
+\end{code}
+
+% EN: By the way, it makes no difference whatsoever whether you put the \texttt{friend} declaration into the public or private part of the class. But about the \texttt{friend} declaration itself: which function did we grant access to? This is the first mention of an \texttt{operator+()} with this signature in our program (its definition must come later, after class \texttt{C} itself was declared). Turns out that the \texttt{friend} statement does double duty: it also acts as a forward declaration for the function.
+\Trans{By the way, it makes no difference whatsoever whether you put the \texttt{friend} declaration into the public or private part of the class. But about the \texttt{friend} declaration itself: which function did we grant access to? This is the first mention of an \texttt{operator+()} with this signature in our program (its definition must come later, after class \texttt{C} itself was declared). Turns out that the \texttt{friend} statement does double duty: it also acts as a forward declaration for the function.}{}
+
+% EN: Of course, there is no rule that prevents us from forward-declaring the same function ourselves:
+\Trans{Of course, there is no rule that prevents us from forward-declaring the same function ourselves:}{}
+
+\begin{code}
+% EN: // Example 09
+class C;
+C operator+(const C& lhs, const C& rhs);
+class C {
+  friend C operator+(const C& lhs, const C& rhs);
+  ...
+ };
+C operator+(const C& lhs, const C& rhs) { 鈥? }
+\Trans{// Example 09 class C; C operator+(const C& lhs, const C& rhs); class C { friend C operator+(const C& lhs, const C& rhs); ... }; C operator+(const C& lhs, const C& rhs) { 鈥?}}{}
+
+\end{code}
+
+% EN: There is no need to use a separate forward declaration just to use \texttt{friend}, but it may be necessary for other reasons if we want to use \texttt{operator+()} earlier in our program.
+\Trans{There is no need to use a separate forward declaration just to use \texttt{friend}, but it may be necessary for other reasons if we want to use \texttt{operator+()} earlier in our program.}{}
+
+% EN: Note that the compiler does not warn you if the \texttt{friend} forward declaration does not match the function definition, or if the \texttt{friend} statement does not match the forward declaration. If the function signature in the \texttt{friend} statement differs from the actual function, you will have granted friendship to some other function that is forward-declared but not defined anywhere. It is highly likely that you will get a syntax error compiling the real function because it now has no special access to the class and can't access its private members. But the error message won't say anything about a mismatch between the \texttt{friend} statement and the function definition. You just have to know that if you granted friendship to a function and the compiler doesn't see it, there is a discrepancy between the function signature in the \texttt{friend} statement and the one in the function definition.
+\Trans{Note that the compiler does not warn you if the \texttt{friend} forward declaration does not match the function definition, or if the \texttt{friend} statement does not match the forward declaration. If the function signature in the \texttt{friend} statement differs from the actual function, you will have granted friendship to some other function that is forward-declared but not defined anywhere. It is highly likely that you will get a syntax error compiling the real function because it now has no special access to the class and can't access its private members. But the error message won't say anything about a mismatch between the \texttt{friend} statement and the function definition. You just have to know that if you granted friendship to a function and the compiler doesn't see it, there is a discrepancy between the function signature in the \texttt{friend} statement and the one in the function definition.}{}
+
+% EN: Of course, if the \texttt{friend} statement also defines the function instead of just declaring it, then it is not acting as a forward declaration at all. But in this case, there is another subtlety, namely, in which scope is the new function defined? Consider that if you declare a static function inside a class, that function exists in the scope of the class itself. If we have a class \texttt{C} with a static function \texttt{f()}, the proper name of this function outside of the class is \texttt{C::f}:
+\Trans{Of course, if the \texttt{friend} statement also defines the function instead of just declaring it, then it is not acting as a forward declaration at all. But in this case, there is another subtlety, namely, in which scope is the new function defined? Consider that if you declare a static function inside a class, that function exists in the scope of the class itself. If we have a class \texttt{C} with a static function \texttt{f()}, the proper name of this function outside of the class is \texttt{C::f}:}{}
+
+\begin{code}
+% EN: class C {
+  static void f(const C& c);
+  ...
+ };
+C c;
+C::f(c);    // Must be called as C::f() not f()
+\Trans{class C { static void f(const C& c); ... }; C c; C::f(c); // Must be called as C::f() not f()}{}
+
+\end{code}
+
+% EN: It is easy to see that the same does not apply to the \texttt{friend} functions:
+\Trans{It is easy to see that the same does not apply to the \texttt{friend} functions:}{}
+
+\begin{code}
+% EN: class C {
+  friend void f(const C& c);
+  ...
+ };
+C c;
+C::f(c);    // Does not compile 鈥?not a member
+\Trans{class C { friend void f(const C& c); ... }; C c; C::f(c); // Does not compile 鈥?not a member}{}
+
+\end{code}
+
+% EN: This makes sense, considering that we already saw that the \texttt{friend} statement without a definition forward-declared a function that is defined outside of the class. So, if the \texttt{friend} declaration forward-declared a function in the scope containing the class (in our case, the global scope, but could have been a \texttt{namespace}), then the \texttt{friend} statement with an in situ definition must define a function in the same scope, i.e., it injects a function into the outer scope of the class. Right? Yes, but not entirely.
+\Trans{This makes sense, considering that we already saw that the \texttt{friend} statement without a definition forward-declared a function that is defined outside of the class. So, if the \texttt{friend} declaration forward-declared a function in the scope containing the class (in our case, the global scope, but could have been a \texttt{namespace}), then the \texttt{friend} statement with an in situ definition must define a function in the same scope, i.e., it injects a function into the outer scope of the class. Right? Yes, but not entirely.}{}
+
+% EN: In practice, odds are good that you would never notice the ``not entirely'' part, and everything behaves as if the function was simply injected into the containing scope. It takes a rather contrived example to demonstrate what really happens:
+\Trans{In practice, odds are good that you would never notice the ``not entirely'' part, and everything behaves as if the function was simply injected into the containing scope. It takes a rather contrived example to demonstrate what really happens:}{}
+
+\begin{code}
+% EN: // Example 10
+class C {
+  static int n_;
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  friend int f(int i) { return i + C::n_;  }
+  friend int g(const C& c) { return c.x_ + C::n_;  }
+ };
+int C::n_ = 42;
+...
+C c(1);
+f(0);        // Does not comppile - no ADL
+g(c);        // Compiles fine
+\Trans{// Example 10 class C { static int n_; int x_; public: C(int x) : x_(x) {} friend int f(int i) { return i + C::n_; } friend int g(const C& c) { return c.x_ + C::n_; } }; int C::n_ = 42; ... C c(1); f(0); // Does not comppile - no ADL g(c); // Compiles fine}{}
+
+\end{code}
+
+% EN: Here we have two \texttt{friend} functions, \texttt{f()} and \texttt{g()}, both are defined at the point of declaration. The function \texttt{g()} behaves as if it was declared in the global scope (or the scope containing the class \texttt{C}, if we used a \texttt{namespace}). But a call to \texttt{f()} in the same scope does not compile, and the error message is going to be ``function f is not declared in this scope'' or something to that effect. The wording of compiler error messages varies widely, but that is the gist of the error: the call to \texttt{f()} did not find a function to call. The only difference between the functions \texttt{f()} and \texttt{g()} is their arguments; that turns out to be key.
+\Trans{Here we have two \texttt{friend} functions, \texttt{f()} and \texttt{g()}, both are defined at the point of declaration. The function \texttt{g()} behaves as if it was declared in the global scope (or the scope containing the class \texttt{C}, if we used a \texttt{namespace}). But a call to \texttt{f()} in the same scope does not compile, and the error message is going to be ``function f is not declared in this scope'' or something to that effect. The wording of compiler error messages varies widely, but that is the gist of the error: the call to \texttt{f()} did not find a function to call. The only difference between the functions \texttt{f()} and \texttt{g()} is their arguments; that turns out to be key.}{}
+
+% EN: To understand this, we have to know how the compiler looks up a function name when you write a function call such as \texttt{f(0)}. First of all, this is a non-member function, so the compiler looks only for those (it could also be a functor -- a class with \texttt{operator()}, but that is not important right now since we don't have any). Second, the compiler searches the current scope, the one where the call is made, and all containing scopes such as nested function bodies, classes, and namespaces) all the way to the global scope. But this is not the end of it: the compiler also looks at the arguments of the function and searches the scope (or scopes) where each of these argument types is declared. This step is called the \textbf{argument-dependent lookup} (\textbf{ADL}), also known as the \textbf{Koenig lookup} after Andrew Koenig (who denies inventing it). After all these lookups are done and the compiler finds every function with the matching name in one of the scopes we just listed, the compiler does the overload resolution on all the functions it found (i.e., there is no priority given to any particular scope).
+\Trans{To understand this, we have to know how the compiler looks up a function name when you write a function call such as \texttt{f(0)}. First of all, this is a non-member function, so the compiler looks only for those (it could also be a functor -- a class with \texttt{operator()}, but that is not important right now since we don't have any). Second, the compiler searches the current scope, the one where the call is made, and all containing scopes such as nested function bodies, classes, and namespaces) all the way to the global scope. But this is not the end of it: the compiler also looks at the arguments of the function and searches the scope (or scopes) where each of these argument types is declared. This step is called the \textbf{argument-dependent lookup} (\textbf{ADL}), also known as the \textbf{Koenig lookup} after Andrew Koenig (who denies inventing it). After all these lookups are done and the compiler finds every function with the matching name in one of the scopes we just listed, the compiler does the overload resolution on all the functions it found (i.e., there is no priority given to any particular scope).}{}
+
+% EN: So, what does this have to do with the \texttt{friend} functions? Only this: according to the standard, a function defined by the \texttt{friend} statement is injected into the scope containing the class, but \emph{it can be found only by the} \emph{argument-dependent lookup}.
+\Trans{So, what does this have to do with the \texttt{friend} functions? Only this: according to the standard, a function defined by the \texttt{friend} statement is injected into the scope containing the class, but \emph{it can be found only by the} \emph{argument-dependent lookup}.}{}
+
+% EN: This explains the behavior we just saw: both the functions \texttt{f()} and \texttt{g()} are injected into the global scope since that is the scope containing class \texttt{C}. Function \texttt{g()} has an argument of type \texttt{const\ C\&}, so it is found by the ADL in the scope containing the class \texttt{C}. Function \texttt{f()} has an argument of type \texttt{int}, and the built-in types are not considered to be declared in any scope, they ``just are.'' Since no ADL can be performed and the functions defined as friends are only found by ADL, function \texttt{f()} cannot be found at all.
+\Trans{This explains the behavior we just saw: both the functions \texttt{f()} and \texttt{g()} are injected into the global scope since that is the scope containing class \texttt{C}. Function \texttt{g()} has an argument of type \texttt{const\ C\&}, so it is found by the ADL in the scope containing the class \texttt{C}. Function \texttt{f()} has an argument of type \texttt{int}, and the built-in types are not considered to be declared in any scope, they ``just are.'' Since no ADL can be performed and the functions defined as friends are only found by ADL, function \texttt{f()} cannot be found at all.}{}
+
+% EN: Note that this situation is very fragile. For example, if we forward-declare the same function, it can be found in the scope where it is forward-declared and does not need the ADL:
+\Trans{Note that this situation is very fragile. For example, if we forward-declare the same function, it can be found in the scope where it is forward-declared and does not need the ADL:}{}
+
+\begin{code}
+% EN: // Example 11
+int f(int i);    // Forward declaration
+class C {
+  ...
+  friend int f(int i) { return i + C::n_;  }
+ };
+f(0);        // No problem
+\Trans{// Example 11 int f(int i); // Forward declaration class C { ... friend int f(int i) { return i + C::n_; } }; f(0); // No problem}{}
+
+\end{code}
+
+% EN: The same happens if the \texttt{friend} statement only declared the function, to be defined later:
+\Trans{The same happens if the \texttt{friend} statement only declared the function, to be defined later:}{}
+
+\begin{code}
+% EN: // Example 12
+class C {
+  ...
+  friend int f(int i);    // Forward declaration
+ };
+int f(int i) { return i + C::n_;  }
+f(0);        // No problem
+\Trans{// Example 12 class C { ... friend int f(int i); // Forward declaration }; int f(int i) { return i + C::n_; } f(0); // No problem}{}
+
+\end{code}
+
+% EN: Why don't we see this as a problem more often? Because most of the time, functions declared as friends inside classes have at least one argument of the type related to the class itself (such as a pointer or a reference). Both \texttt{operator+()} and \texttt{operator\textless{}\textless{}()} we have seen earlier fall into that category. After all, the only reason to declare a function as a friend is so it can access private members of the class, but the function would not need this access if it did not operate on an object of the class type. As a non-member function, how would it get access to such an object if not through its arguments? Of course, there are ways, but these situations rarely happen in practice.
+\Trans{Why don't we see this as a problem more often? Because most of the time, functions declared as friends inside classes have at least one argument of the type related to the class itself (such as a pointer or a reference). Both \texttt{operator+()} and \texttt{operator\textless{}\textless{}()} we have seen earlier fall into that category. After all, the only reason to declare a function as a friend is so it can access private members of the class, but the function would not need this access if it did not operate on an object of the class type. As a non-member function, how would it get access to such an object if not through its arguments? Of course, there are ways, but these situations rarely happen in practice.}{}
+
+% EN: Yet another subtle and potentially dangerous case happens when a program defines its own \texttt{operator\ new}. This is not illegal, class-specific memory allocation operators are often necessary. But declaring one is not that simple. There are two common uses of a custom \texttt{operator\ new}: the first one is where the operator is defined for the class that is being allocated, usually inside the class itself. These are called class-specific operators, and they aren't the subject of our interest now. We need to explain the second common case, where the custom \texttt{operator\ new} is defined to allocate memory using a specific allocator class. This is how it is usually done:
+\Trans{Yet another subtle and potentially dangerous case happens when a program defines its own \texttt{operator\ new}. This is not illegal, class-specific memory allocation operators are often necessary. But declaring one is not that simple. There are two common uses of a custom \texttt{operator\ new}: the first one is where the operator is defined for the class that is being allocated, usually inside the class itself. These are called class-specific operators, and they aren't the subject of our interest now. We need to explain the second common case, where the custom \texttt{operator\ new} is defined to allocate memory using a specific allocator class. This is how it is usually done:}{}
+
+\begin{code}
+% EN: // Example 13
+class Alloc {
+  void* alloc(size_t s);    // Allocates memory
+  void dealloc(void* p);     // Releases memory
+  friend void* operator new (size_t s, Alloc* a);
+  friend void operator delete(void* p, Alloc* a);
+ };
+void* operator new (size_t s, Alloc* a) {
+  return a->alloc(s);
+\Trans{// Example 13 class Alloc { void* alloc(size_t s); // Allocates memory void dealloc(void* p); // Releases memory friend void* operator new (size_t s, Alloc* a); friend void operator delete(void* p, Alloc* a); }; void* operator new (size_t s, Alloc* a) { return a->alloc(s);}{}
+
+}
+% EN: void operator delete(void* p, Alloc* a) {
+  a->dealloc(p);
+\Trans{void operator delete(void* p, Alloc* a) { a->dealloc(p);}{}
+
+}
+% EN: class C { ...  };
+Alloc a;
+C* c = new (&a) C;
+\Trans{class C { ... }; Alloc a; C* c = new (&a) C;}{}
+
+\end{code}
+
+% EN: There are several details to note: first, our allocator class \texttt{Alloc} has an overload for \texttt{operator\ new}: the first argument of every \texttt{operator\ new} is mandatory and must be the size of the allocation (the compiler fills that in). The second argument (and the third, etc, if necessary) are arbitrary; in our case, it's the pointer to the allocator class that is going to provide memory for this allocation. The \texttt{operator\ new} itself is a function in the global scope, and it is declared as a friend of class \texttt{Alloc}. If you are wondering how you can call the matching \texttt{operator\ delete} that we also declared, the answer is you cannot; this operator is used only by the compiler itself in case the allocation by \texttt{operator\ new} succeeded but the constructor of the new object throws an exception. The compiler will use \texttt{operator\ delete} with the arguments matching those of \texttt{operator\ new}. But this is not how you will delete this object when its lifetime is over: there is no way to add extra arguments to a \texttt{delete} expression, so you'll have to call the destructor yourself and then explicitly return the memory to the allocator.
+\Trans{There are several details to note: first, our allocator class \texttt{Alloc} has an overload for \texttt{operator\ new}: the first argument of every \texttt{operator\ new} is mandatory and must be the size of the allocation (the compiler fills that in). The second argument (and the third, etc, if necessary) are arbitrary; in our case, it's the pointer to the allocator class that is going to provide memory for this allocation. The \texttt{operator\ new} itself is a function in the global scope, and it is declared as a friend of class \texttt{Alloc}. If you are wondering how you can call the matching \texttt{operator\ delete} that we also declared, the answer is you cannot; this operator is used only by the compiler itself in case the allocation by \texttt{operator\ new} succeeded but the constructor of the new object throws an exception. The compiler will use \texttt{operator\ delete} with the arguments matching those of \texttt{operator\ new}. But this is not how you will delete this object when its lifetime is over: there is no way to add extra arguments to a \texttt{delete} expression, so you'll have to call the destructor yourself and then explicitly return the memory to the allocator.}{}
+
+% EN: This works exactly as intended. The compiler looks for the best match for the call to \texttt{operator\ new(size\_t,\ Alloc*)} and finds our custom \texttt{operator\ new} in the global scope as intended.
+\Trans{This works exactly as intended. The compiler looks for the best match for the call to \texttt{operator\ new(size\_t,\ Alloc*)} and finds our custom \texttt{operator\ new} in the global scope as intended.}{}
+
+% EN: Now, you may decide to move the body of the operator into the \texttt{friend} statement to save some typing as well as avoid the possibility of the \texttt{friend} declaration and the actual \texttt{operator\ new} definition ever getting out of sync. This is done with only a minor change:
+\Trans{Now, you may decide to move the body of the operator into the \texttt{friend} statement to save some typing as well as avoid the possibility of the \texttt{friend} declaration and the actual \texttt{operator\ new} definition ever getting out of sync. This is done with only a minor change:}{}
+
+\begin{code}
+% EN: // Example 14
+class Alloc {
+  void* alloc(size_t s);    // Allocates memory
+  void dealloc(void* p);     // Releases memory
+  friend void* operator new (size_t s, Alloc* a) {
+    return a->alloc(s);
+   }
+  friend void operator delete(void* p, Alloc* a) {
+    a->dealloc(p);
+   }
+ };
+class C { ...  };
+Alloc a;
+C* c = new (&a) C;
+\Trans{// Example 14 class Alloc { void* alloc(size_t s); // Allocates memory void dealloc(void* p); // Releases memory friend void* operator new (size_t s, Alloc* a) { return a->alloc(s); } friend void operator delete(void* p, Alloc* a) { a->dealloc(p); } }; class C { ... }; Alloc a; C* c = new (&a) C;}{}
+
+\end{code}
+
+% EN: This program will almost certainly compile. It will work correctly on some compilers and produce horrible memory corruption on others. Unfortunately, those other compilers are correct. This is what is going on: the \emph{new expression} (which is the standard name for the syntax ``\texttt{new} \ldots{} some-type'') has special rules for looking up the matching \texttt{operator\ new}. Specifically, the lookup is done in the scope of the class that is being constructed (class \texttt{C} in our case) and in the global scope (these rules are defined in the section \texttt{{[}expr.new{]}} of the standard). Note that there is no lookup in the scope of the arguments to \texttt{operator\ new} itself, i.e., no argument-dependent lookup. Since the function defined in situ by the \texttt{friend} statement can be found only by the argument-dependent lookup, it is not found at all. But how does the program compile then? This happens because of another overload for \texttt{operator\ new}, the so-called \emph{placement new}. This overload has the form:
+\Trans{This program will almost certainly compile. It will work correctly on some compilers and produce horrible memory corruption on others. Unfortunately, those other compilers are correct. This is what is going on: the \emph{new expression} (which is the standard name for the syntax ``\texttt{new} \ldots{} some-type'') has special rules for looking up the matching \texttt{operator\ new}. Specifically, the lookup is done in the scope of the class that is being constructed (class \texttt{C} in our case) and in the global scope (these rules are defined in the section \texttt{{[}expr.new{]}} of the standard). Note that there is no lookup in the scope of the arguments to \texttt{operator\ new} itself, i.e., no argument-dependent lookup. Since the function defined in situ by the \texttt{friend} statement can be found only by the argument-dependent lookup, it is not found at all. But how does the program compile then? This happens because of another overload for \texttt{operator\ new}, the so-called \emph{placement new}. This overload has the form:}{}
+
+\begin{code}
+% EN: void* new(size_t size, void* addr) { return addr; }
+\Trans{void* new(size_t size, void* addr) { return addr; }}{}
+\end{code}
+
+% EN: It is declared in the standard header \texttt{\textless{}new\textgreater{}}, which is included by so many other headers that your program is very likely to include it even if you did not do so explicitly.
+\Trans{It is declared in the standard header \texttt{\textless{}new\textgreater{}}, which is included by so many other headers that your program is very likely to include it even if you did not do so explicitly.}{}
+
+% EN: The intent for the placement new is to construct an object in memory that was allocated earlier (we used this to construct objects in the space reserved inside a class when we studied type erasure in the eponymous chapter earlier). But it is also a possible match to our call of operator \texttt{new(size\_t,\ Alloc*)} because \texttt{Alloc*} can be implicitly converted to \texttt{void*}. Our own overload, which does not require this conversion, would be a better match, but, unfortunately, when defined in situ, it is not found by the lookup. The result is that the object of type \texttt{C} is constructed in the memory already occupied by the allocator object itself, corrupting the latter object in the process.
+\Trans{The intent for the placement new is to construct an object in memory that was allocated earlier (we used this to construct objects in the space reserved inside a class when we studied type erasure in the eponymous chapter earlier). But it is also a possible match to our call of operator \texttt{new(size\_t,\ Alloc*)} because \texttt{Alloc*} can be implicitly converted to \texttt{void*}. Our own overload, which does not require this conversion, would be a better match, but, unfortunately, when defined in situ, it is not found by the lookup. The result is that the object of type \texttt{C} is constructed in the memory already occupied by the allocator object itself, corrupting the latter object in the process.}{}
+
+% EN: You can test your compilers using our examples: when defined outside of the class, the custom \texttt{operator\ new} should be invoked and the program should work as intended. But when defined by the \texttt{friend} statement, only the placement new should be found (some compilers will also issue a warning about overwriting an already constructed object).
+\Trans{You can test your compilers using our examples: when defined outside of the class, the custom \texttt{operator\ new} should be invoked and the program should work as intended. But when defined by the \texttt{friend} statement, only the placement new should be found (some compilers will also issue a warning about overwriting an already constructed object).}{}
+
+% EN: So far, our classes are just regular classes, not templates, and our non-member functions have declared friends that were just regular non-template functions. Now, let's consider what, if anything, needs to change if the class becomes a template.
+\Trans{So far, our classes are just regular classes, not templates, and our non-member functions have declared friends that were just regular non-template functions. Now, let's consider what, if anything, needs to change if the class becomes a template.}{}
+
+\section{Friends and templates}
+
+% EN: Both classes and functions in C++ can be templates, and we can have several different combinations - a class template can grant friendship to a non-template function if its parameter types don't depend on the template parameters; this is not a particularly interesting case, and certainly does not solve any of the problems we're dealing with now. When the friend function needs to operate on the template parameter types, making the right friends becomes trickier.
+\Trans{Both classes and functions in C++ can be templates, and we can have several different combinations - a class template can grant friendship to a non-template function if its parameter types don't depend on the template parameters; this is not a particularly interesting case, and certainly does not solve any of the problems we're dealing with now. When the friend function needs to operate on the template parameter types, making the right friends becomes trickier.}{}
+
+\subsection{Friends of template classes}
+
+% EN: Let's start by making our \texttt{C} class into a template:
+\Trans{Let's start by making our \texttt{C} class into a template:}{}
+
+\begin{code}
+% EN: template <typename T> class C {
+  T x_;
+  public:
+  C(T x) : x_(x) { }
+ };
+\Trans{template <typename T> class C { T x_; public: C(T x) : x_(x) {} };}{}
+
+\end{code}
+
+% EN: We still want to add objects of type \texttt{C} and print them out. We have already considered reasons why the former is better accomplished with a non-member function, and the latter cannot be done in any other way. These reasons remain valid for class templates as well.
+\Trans{We still want to add objects of type \texttt{C} and print them out. We have already considered reasons why the former is better accomplished with a non-member function, and the latter cannot be done in any other way. These reasons remain valid for class templates as well.}{}
+
+% EN: No problem - we can declare template functions to go with our template classes and do the work that the non-template functions used to do in the previous section. Let's start with \texttt{operator+()}:
+\Trans{No problem - we can declare template functions to go with our template classes and do the work that the non-template functions used to do in the previous section. Let's start with \texttt{operator+()}:}{}
+
+\begin{code}
+% EN: template <typename T>
+C<T> operator+(const C<T>& lhs, const C<T>& rhs) {
+  return C<T>(lhs.x_ + rhs.x_);
+\Trans{template <typename T> C<T> operator+(const C<T>& lhs, const C<T>& rhs) { return C<T>(lhs.x_ + rhs.x_);}{}
+
+}
+\end{code}
+
+% EN: This is the same function that we saw previously, only made into a template that can accept any instantiation of the class template \texttt{C}. Note that we parameterized this template on the type \texttt{T}, that is, the template parameter of \texttt{C}. We could, of course, simply declare the following:
+\Trans{This is the same function that we saw previously, only made into a template that can accept any instantiation of the class template \texttt{C}. Note that we parameterized this template on the type \texttt{T}, that is, the template parameter of \texttt{C}. We could, of course, simply declare the following:}{}
+
+\begin{code}
+% EN: template <typename C>
+C operator+(const C& lhs, const C& rhs) { // NEVER do this!
+  return C<T>(lhs.x_ + rhs.x_);
+\Trans{template <typename C> C operator+(const C& lhs, const C& rhs) { // NEVER do this! return C<T>(lhs.x_ + rhs.x_);}{}
+
+}
+\end{code}
+
+% EN: However, this introduces - into the global scope no less - an \texttt{operator+()} that claims to accept two arguments of any type. Of course, it really only handles types that have an \texttt{x\_} data member. So, what are we going to do when we have a template class, \texttt{D}, that is also addable but has a \texttt{y\_} data member instead?
+\Trans{However, this introduces - into the global scope no less - an \texttt{operator+()} that claims to accept two arguments of any type. Of course, it really only handles types that have an \texttt{x\_} data member. So, what are we going to do when we have a template class, \texttt{D}, that is also addable but has a \texttt{y\_} data member instead?}{}
+
+% EN: The earlier version of the template is at least restricted to all possible instantiations of the class template \texttt{C}. Of course, it suffers from the same problem as our very first attempt at a non-member function - it does not have access to the private data member \texttt{C\textless{}T\textgreater{}::x\_}. No problem - this chapter is about friends, after all. But friends to what? The entire class template, \texttt{C}, is going to have a friend declaration, just one for all \texttt{T} types, and that has to work for every instantiation of the template function \texttt{operator+()}. It appears that we have to grant friendship to the entire function template:
+\Trans{The earlier version of the template is at least restricted to all possible instantiations of the class template \texttt{C}. Of course, it suffers from the same problem as our very first attempt at a non-member function - it does not have access to the private data member \texttt{C\textless{}T\textgreater{}::x\_}. No problem - this chapter is about friends, after all. But friends to what? The entire class template, \texttt{C}, is going to have a friend declaration, just one for all \texttt{T} types, and that has to work for every instantiation of the template function \texttt{operator+()}. It appears that we have to grant friendship to the entire function template:}{}
+
+\begin{code}
+% EN: // Example 15
+template <typename T> class C {
+  T x_;
+  public:
+  C(T x) : x_(x) { }
+  template <typename U>
+  friend C<U> operator+(const C<U>& lhs, const C<U>& rhs);
+ };
+template <typename T>
+C<T> operator+(const C<T>& lhs, const C<T>& rhs) {
+  return C<T>(lhs.x_ + rhs.x_);
+\Trans{// Example 15 template <typename T> class C { T x_; public: C(T x) : x_(x) {} template <typename U> friend C<U> operator+(const C<U>& lhs, const C<U>& rhs); }; template <typename T> C<T> operator+(const C<T>& lhs, const C<T>& rhs) { return C<T>(lhs.x_ + rhs.x_);}{}
+
+}
+\end{code}
+
+% EN: Note the correct syntax - the keyword \texttt{friend} appears after the template and its parameters but before the return type of the function. Also, note that we had to rename the template parameter of the nested friend declaration - the \texttt{T} identifier is already used for the class template parameter. Similarly, we could rename the template parameter \texttt{T} in the definition of the function itself, but we don't have to - just like in function declarations and definitions, the parameter is just a name; it is only meaningful within each declaration - two declarations for the same function can use different names for the same parameter. What we can do instead is move the function body inline, into the class:
+\Trans{Note the correct syntax - the keyword \texttt{friend} appears after the template and its parameters but before the return type of the function. Also, note that we had to rename the template parameter of the nested friend declaration - the \texttt{T} identifier is already used for the class template parameter. Similarly, we could rename the template parameter \texttt{T} in the definition of the function itself, but we don't have to - just like in function declarations and definitions, the parameter is just a name; it is only meaningful within each declaration - two declarations for the same function can use different names for the same parameter. What we can do instead is move the function body inline, into the class:}{}
+
+\begin{code}
+% EN: // Example 16
+template <typename T> class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  template <typename U>
+  friend C<U> operator+(const C<U>& lhs, const C<U>& rhs) {
+    return C<U>(lhs.x_ + rhs.x_);
+   }
+ };
+\Trans{// Example 16 template <typename T> class C { int x_; public: C(int x) : x_(x) {} template <typename U> friend C<U> operator+(const C<U>& lhs, const C<U>& rhs) { return C<U>(lhs.x_ + rhs.x_); } };}{}
+
+\end{code}
+
+% EN: You might point out that we have blown a rather wide hole in the encapsulation of the template class \texttt{C} -- by granting friendship of any instantiation of \texttt{C\textless{}T\textgreater{}} to the entire template function, we have, for example, made the \texttt{operator+(const\ C\&\textless{}double\textgreater{},\ const\ C\&\textless{}double\textgreater{})} instantiation a friend of \texttt{C\textless{}int\textgreater{}}. This is clearly not necessary, although it may not be immediately obvious where the harm is in that (an example that shows actual harm would be rather convoluted, as necessary). But this misses a much more serious problem with our design, which becomes apparent as soon as we start using it to add something. It works, up to a point:
+\Trans{You might point out that we have blown a rather wide hole in the encapsulation of the template class \texttt{C} -- by granting friendship of any instantiation of \texttt{C\textless{}T\textgreater{}} to the entire template function, we have, for example, made the \texttt{operator+(const\ C\&\textless{}double\textgreater{},\ const\ C\&\textless{}double\textgreater{})} instantiation a friend of \texttt{C\textless{}int\textgreater{}}. This is clearly not necessary, although it may not be immediately obvious where the harm is in that (an example that shows actual harm would be rather convoluted, as necessary). But this misses a much more serious problem with our design, which becomes apparent as soon as we start using it to add something. It works, up to a point:}{}
+
+\begin{code}
+% EN: C<int> x(1), y(2);
+C<int> z = x + y; // So far so good...
+\Trans{C<int> x(1), y(2); C<int> z = x + y; // So far so good...}{}
+
+\end{code}
+
+% EN: But only up to a point:
+\Trans{But only up to a point:}{}
+
+\begin{code}
+% EN: C<int> x(1), y(2);
+C<int> z1 = x + 2; // This does not compile!
+C<int> z2 = 1 + 2; // Neither does this!
+\Trans{C<int> x(1), y(2); C<int> z1 = x + 2; // This does not compile! C<int> z2 = 1 + 2; // Neither does this!}{}
+
+\end{code}
+
+% EN: But was this not the very reason to use a non-member function? What happened to our implicit conversions? This used to work! The answer is in the details - it used to work, but for a non-template function, \texttt{operator+()}. The conversion rules for a template function are very different. The exact technical details can be gleaned from the standard, with great diligence and effort, but this is the gist of it - when considering non-member, non-template functions, the compiler will look for all functions with the given name (\texttt{operator+}, in our case), then check if they accept the right number of parameters (possibly considering default arguments), then check if, for each such function, for each of its parameters, a conversion from the supplied argument to the specified parameter type exists (the rules on which conversions, exactly, are considered, and again fairly complex, but let's say that both user-given implicit conversions and built-in conversions such as non-const to \texttt{const} are considered). If this process yields only one function, that function is called (otherwise the compiler either selects the \emph{best} overload or complains that several candidates are equally possible and the call is ambiguous).
+\Trans{But was this not the very reason to use a non-member function? What happened to our implicit conversions? This used to work! The answer is in the details - it used to work, but for a non-template function, \texttt{operator+()}. The conversion rules for a template function are very different. The exact technical details can be gleaned from the standard, with great diligence and effort, but this is the gist of it - when considering non-member, non-template functions, the compiler will look for all functions with the given name (\texttt{operator+}, in our case), then check if they accept the right number of parameters (possibly considering default arguments), then check if, for each such function, for each of its parameters, a conversion from the supplied argument to the specified parameter type exists (the rules on which conversions, exactly, are considered, and again fairly complex, but let's say that both user-given implicit conversions and built-in conversions such as non-const to \texttt{const} are considered). If this process yields only one function, that function is called (otherwise the compiler either selects the \emph{best} overload or complains that several candidates are equally possible and the call is ambiguous).}{}
+
+% EN: For template functions, this process would again yield an almost unlimited number of candidates - every template function with the name \texttt{operator+()} would have to be instantiated on every known type just to check if enough type conversions are available to make it work. Instead, a much simpler process is attempted - in addition to all non-template functions described in the previous paragraph (in our case, none), the compiler also considers instantiations of template functions with the given name (again, \texttt{operator+}) and the types of all parameters equal to the types of the function arguments at the call site (so-called trivial conversions, such as adding \texttt{const}, are allowed).
+\Trans{For template functions, this process would again yield an almost unlimited number of candidates - every template function with the name \texttt{operator+()} would have to be instantiated on every known type just to check if enough type conversions are available to make it work. Instead, a much simpler process is attempted - in addition to all non-template functions described in the previous paragraph (in our case, none), the compiler also considers instantiations of template functions with the given name (again, \texttt{operator+}) and the types of all parameters equal to the types of the function arguments at the call site (so-called trivial conversions, such as adding \texttt{const}, are allowed).}{}
+
+% EN: In our case, the argument types in the \texttt{x\ +\ 2} expression are \texttt{C\textless{}int\textgreater{}} and \texttt{int}, respectively. The compiler looks for an instantiation of the template function, \texttt{operator+}, that accepts two arguments of this type, and the user-given conversions are not considered. There is no such function, of course, and so the call to \texttt{operator+()} cannot be resolved.
+\Trans{In our case, the argument types in the \texttt{x\ +\ 2} expression are \texttt{C\textless{}int\textgreater{}} and \texttt{int}, respectively. The compiler looks for an instantiation of the template function, \texttt{operator+}, that accepts two arguments of this type, and the user-given conversions are not considered. There is no such function, of course, and so the call to \texttt{operator+()} cannot be resolved.}{}
+
+% EN: The root of the problem is that we really want the user-given conversions to be used by the compiler automatically, but this is not going to happen as long as we are trying to instantiate a template function. We could declare a non-template function for \texttt{operator+(const\ C\textless{}int\textgreater{}\&,\ const\ C\textless{}int\textgreater{}\&)}, but, with a \texttt{C} template class, we would have to declare one for every \texttt{T} type that the \texttt{C} class might be instantiated on.
+\Trans{The root of the problem is that we really want the user-given conversions to be used by the compiler automatically, but this is not going to happen as long as we are trying to instantiate a template function. We could declare a non-template function for \texttt{operator+(const\ C\textless{}int\textgreater{}\&,\ const\ C\textless{}int\textgreater{}\&)}, but, with a \texttt{C} template class, we would have to declare one for every \texttt{T} type that the \texttt{C} class might be instantiated on.}{}
+
+\section{The template friend factory}
+
+% EN: What we need is to automatically generate a non-template function for every \texttt{T} type that's used to instantiate the class template \texttt{C}. Of course, it is impossible to generate all of these functions in advance - there is a nearly unlimited number of \texttt{T} types that could, in theory, be used with the template class \texttt{C}. Fortunately, we do not need to generate \texttt{operator+()} for every one of such types - we only need them for the types that were actually used with this template in our program.
+\Trans{What we need is to automatically generate a non-template function for every \texttt{T} type that's used to instantiate the class template \texttt{C}. Of course, it is impossible to generate all of these functions in advance - there is a nearly unlimited number of \texttt{T} types that could, in theory, be used with the template class \texttt{C}. Fortunately, we do not need to generate \texttt{operator+()} for every one of such types - we only need them for the types that were actually used with this template in our program.}{}
+
+\subsection{Generating friends on demand}
+
+% EN: The pattern that we are about to see is a very old one, and was introduced by John Barton and Lee Nackman in 1994 for a completely different purpose - they used it to work around certain limitations of the compilers that existed at the time. The inventors proposed the name \emph{Restricted Template Expansion}, which was never widely used. Years later, Dan Sacks coined the name \emph{Friends Factory}, but the pattern is also sometimes referred to simply as the \emph{Barton-Nackman trick}.
+\Trans{The pattern that we are about to see is a very old one, and was introduced by John Barton and Lee Nackman in 1994 for a completely different purpose - they used it to work around certain limitations of the compilers that existed at the time. The inventors proposed the name \emph{Restricted Template Expansion}, which was never widely used. Years later, Dan Sacks coined the name \emph{Friends Factory}, but the pattern is also sometimes referred to simply as the \emph{Barton-Nackman trick}.}{}
+
+% EN: The pattern looks very simple and very similar to the code we wrote earlier throughout this chapter:
+\Trans{The pattern looks very simple and very similar to the code we wrote earlier throughout this chapter:}{}
+
+\begin{code}
+% EN: // Example 17
+template <typename T> class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  friend C operator+(const C& lhs, const C& rhs) {
+    return C(lhs.x_ + rhs.x_);
+   }
+ };
+\Trans{// Example 17 template <typename T> class C { int x_; public: C(int x) : x_(x) {} friend C operator+(const C& lhs, const C& rhs) { return C(lhs.x_ + rhs.x_); } };}{}
+
+\end{code}
+
+% EN: We are taking advantage of a very specific C++ feature, and so the code must be written precisely. A non-template friend function is defined inside the class template. This function must be defined inline; it cannot be declared a friend and then defined later, except as an explicit template instantiation - we could have declared the friend function inside the class and then defined \texttt{operator+\textless{}const\ C\textless{}int\textgreater{}\textgreater{}\&,\ const\ C\textless{}int\textgreater{}\&)}, which would work for \texttt{C\textless{}int\textgreater{}} but not \texttt{C\textless{}double\textgreater{}} (since we do not know what types the callers may instantiate later, this is not very useful). It may have the parameters of the \texttt{T} type, the template parameter, the \texttt{C\textless{}T\textgreater{}} type (which, inside the class template, can be referred to as simply \texttt{C}), and any other type that is either fixed or depends only on the template parameters, but it may not be a template itself. Every instantiation of the \texttt{C} class template, with any combination of template parameter types, generates exactly one non-template, non-member function with the specified name. Note that the generated functions are non-template functions; they are regular functions, and the usual conversion rules apply to them. We are now back to the non-template \texttt{operator+()}, and all conversions work exactly the way we want them to:
+\Trans{We are taking advantage of a very specific C++ feature, and so the code must be written precisely. A non-template friend function is defined inside the class template. This function must be defined inline; it cannot be declared a friend and then defined later, except as an explicit template instantiation - we could have declared the friend function inside the class and then defined \texttt{operator+\textless{}const\ C\textless{}int\textgreater{}\textgreater{}\&,\ const\ C\textless{}int\textgreater{}\&)}, which would work for \texttt{C\textless{}int\textgreater{}} but not \texttt{C\textless{}double\textgreater{}} (since we do not know what types the callers may instantiate later, this is not very useful). It may have the parameters of the \texttt{T} type, the template parameter, the \texttt{C\textless{}T\textgreater{}} type (which, inside the class template, can be referred to as simply \texttt{C}), and any other type that is either fixed or depends only on the template parameters, but it may not be a template itself. Every instantiation of the \texttt{C} class template, with any combination of template parameter types, generates exactly one non-template, non-member function with the specified name. Note that the generated functions are non-template functions; they are regular functions, and the usual conversion rules apply to them. We are now back to the non-template \texttt{operator+()}, and all conversions work exactly the way we want them to:}{}
+
+\begin{code}
+% EN: C<int> x(1), y(2);
+C<int> z1 = x + y; // This works
+C<int> z2 = x + 2; // and this too
+C<int> z3 = 1 + 2; // so does this
+\Trans{C<int> x(1), y(2); C<int> z1 = x + y; // This works C<int> z2 = x + 2; // and this too C<int> z3 = 1 + 2; // so does this}{}
+
+\end{code}
+
+% EN: This is it - this is the whole pattern. There are a few details we must note. First of all, the keyword \texttt{friend} cannot be omitted. A class cannot normally generate a non-member function, except for declaring a friend. Even if the function does not need access to any private data, in order to automatically generate non-template functions from instantiations of class templates, these functions have to be declared friends (static non-member functions can be generated in a similar manner, but the binary operators cannot be static functions - the standard explicitly forbids it). Second, the generated function is placed in the scope containing the class but must be found by the argument-dependent lookup, as we learned earlier in this chapter. For example, let's define the inserter operator for our \texttt{C} template class, but not before wrapping the entire class in a namespace:
+\Trans{This is it - this is the whole pattern. There are a few details we must note. First of all, the keyword \texttt{friend} cannot be omitted. A class cannot normally generate a non-member function, except for declaring a friend. Even if the function does not need access to any private data, in order to automatically generate non-template functions from instantiations of class templates, these functions have to be declared friends (static non-member functions can be generated in a similar manner, but the binary operators cannot be static functions - the standard explicitly forbids it). Second, the generated function is placed in the scope containing the class but must be found by the argument-dependent lookup, as we learned earlier in this chapter. For example, let's define the inserter operator for our \texttt{C} template class, but not before wrapping the entire class in a namespace:}{}
+
+\begin{code}
+% EN: // Example 18
+namespace NS {
+template <typename T> class C {
+  int x_;
+  public:
+  C(int x) : x_(x) { }
+  friend C operator+(const C& lhs, const C& rhs) {
+    return C(lhs.x_ + rhs.x_);
+   }
+  friend std::ostream&
+  operator<<(std::ostream& out, const C& c) {
+    out << c.x_;
+    return out;
+   }
+ };
+ } // namespace NS
+\Trans{// Example 18 namespace NS { template <typename T> class C { int x_; public: C(int x) : x_(x) {} friend C operator+(const C& lhs, const C& rhs) { return C(lhs.x_ + rhs.x_); } friend std::ostream& operator<<(std::ostream& out, const C& c) { out << c.x_; return out; } }; } // namespace NS}{}
+
+\end{code}
+
+% EN: We can now both add and print the objects of the \texttt{C} type:
+\Trans{We can now both add and print the objects of the \texttt{C} type:}{}
+
+\begin{code}
+% EN: NS::C<int> x(1), y(2);
+std::cout << (x + y) << std::endl;
+\Trans{NS::C<int> x(1), y(2); std::cout << (x + y) << std::endl;}{}
+
+\end{code}
+
+% EN: Note that, even though the \texttt{C} class template is now in the namespace \texttt{NS}, and has to be used as such (\texttt{NS::C\textless{}int\textgreater{}}), we did not need to do anything special to invoke either \texttt{operator+()} or \texttt{operator\textless{}\textless{}()}. This does not mean that they were generated in the global scope. No, they are still in the namespace \texttt{NS}, but what we see is the argument-dependent lookup in action - when looking for a function named \texttt{operator+()}, for example, the compiler considers the candidates in the current scope (that is, the global scope, and there aren't any), as well as the scope in which the arguments to the function are defined. In our case, at least one of the arguments to \texttt{operator+()} is of type \texttt{NS::C\textless{}int\textgreater{}}, which automatically brings all functions declared in the \texttt{NS} namespace into play. The friend factory generates its functions in the scope containing the class template, which is, of course, also the \texttt{NS} namespace. Thus, the lookup finds the definition, and both the \texttt{+} and \texttt{\textless{}\textless{}} operations are resolved exactly the way we would want them to be. Rest assured that this is by design and is no accident; the argument lookup rules are fine-tuned to produce this desired and expected result.
+\Trans{Note that, even though the \texttt{C} class template is now in the namespace \texttt{NS}, and has to be used as such (\texttt{NS::C\textless{}int\textgreater{}}), we did not need to do anything special to invoke either \texttt{operator+()} or \texttt{operator\textless{}\textless{}()}. This does not mean that they were generated in the global scope. No, they are still in the namespace \texttt{NS}, but what we see is the argument-dependent lookup in action - when looking for a function named \texttt{operator+()}, for example, the compiler considers the candidates in the current scope (that is, the global scope, and there aren't any), as well as the scope in which the arguments to the function are defined. In our case, at least one of the arguments to \texttt{operator+()} is of type \texttt{NS::C\textless{}int\textgreater{}}, which automatically brings all functions declared in the \texttt{NS} namespace into play. The friend factory generates its functions in the scope containing the class template, which is, of course, also the \texttt{NS} namespace. Thus, the lookup finds the definition, and both the \texttt{+} and \texttt{\textless{}\textless{}} operations are resolved exactly the way we would want them to be. Rest assured that this is by design and is no accident; the argument lookup rules are fine-tuned to produce this desired and expected result.}{}
+
+% EN: It is easy to prove that, even though friend functions are generated in the scope containing the class (in our case namespace \texttt{NS}), they can only be found by the argument-dependent lookup. A straightforward attempt to find the function without using an argument-dependent lookup will fail:
+\Trans{It is easy to prove that, even though friend functions are generated in the scope containing the class (in our case namespace \texttt{NS}), they can only be found by the argument-dependent lookup. A straightforward attempt to find the function without using an argument-dependent lookup will fail:}{}
+
+\begin{code}
+% EN: auto p = &NS::C<int>::operator+; // Does not compile
+\Trans{auto p = &NS::C<int>::operator+; // Does not compile}{}
+\end{code}
+
+% EN: There is also a connection between the friend factory pattern and one of the patterns we studied earlier.
+\Trans{There is also a connection between the friend factory pattern and one of the patterns we studied earlier.}{}
+
+\section{The friend factory and the Curiously Recurring Template Pattern}
+
+% EN: The friend factory is a pattern that synthesizes a non-template, non-member function from every instantiation of a class template - every time the template is instantiated on a new type, a new function is generated. For its parameters, this function can use any types we can declare in that instantiation of the class template. Usually, this is the class itself, but it can be any type the template knows about.
+\Trans{The friend factory is a pattern that synthesizes a non-template, non-member function from every instantiation of a class template - every time the template is instantiated on a new type, a new function is generated. For its parameters, this function can use any types we can declare in that instantiation of the class template. Usually, this is the class itself, but it can be any type the template knows about.}{}
+
+% EN: In this manner, the friend factory can be employed together with the \textbf{Curiously Recurring Template Pattern} (\textbf{CRTP}) that we studied in \emph{Chapter 8, The Curiously Recurring Template Pattern}. Recall that the main idea of the CRTP is that a class inherits from an instantiation of a base class template that is parameterized by the derived class type. Consider what we have here - a template for a base class that is automatically instantiated with every class derived from it, and it knows what that type is. This seems like an ideal place to put a friend factory. Of course, the operators generated by the base class have to not only know what the type of the object is that they operate on but also what to do with it (for example, how to print it). Sometimes, the necessary data actually resides in the base class, and then the base class can provide complete implementations. But it is rare that the derived class adds so little to the base class. The more common use of CRTP, together with the friend factory, is to implement some operators in a standard way through some other functionality. For example, \texttt{operator!=()} can be implemented through \texttt{operator==()}:
+\Trans{In this manner, the friend factory can be employed together with the \textbf{Curiously Recurring Template Pattern} (\textbf{CRTP}) that we studied in \emph{Chapter 8, The Curiously Recurring Template Pattern}. Recall that the main idea of the CRTP is that a class inherits from an instantiation of a base class template that is parameterized by the derived class type. Consider what we have here - a template for a base class that is automatically instantiated with every class derived from it, and it knows what that type is. This seems like an ideal place to put a friend factory. Of course, the operators generated by the base class have to not only know what the type of the object is that they operate on but also what to do with it (for example, how to print it). Sometimes, the necessary data actually resides in the base class, and then the base class can provide complete implementations. But it is rare that the derived class adds so little to the base class. The more common use of CRTP, together with the friend factory, is to implement some operators in a standard way through some other functionality. For example, \texttt{operator!=()} can be implemented through \texttt{operator==()}:}{}
+
+\begin{code}
+% EN: // Example 19
+template <typename D> class B {
+  public:
+  friend bool operator!=(const D& lhs, const D& rhs) {
+    return !(lhs == rhs);
+   }
+ };
+template <typename T> class C : public B<C<T>> {
+  T x_;
+  public:
+  C(T x) : x_(x) { }
+  friend bool operator==(const C& lhs, const C& rhs) {
+    return lhs.x_ == rhs.x_;
+   }
+ };
+\Trans{// Example 19 template <typename D> class B { public: friend bool operator!=(const D& lhs, const D& rhs) { return !(lhs == rhs); } }; template <typename T> class C : public B<C<T>> { T x_; public: C(T x) : x_(x) {} friend bool operator==(const C& lhs, const C& rhs) { return lhs.x_ == rhs.x_; } };}{}
+
+\end{code}
+
+% EN: Here, the derived class \texttt{C} uses the friend factory pattern to generate a non-template function for the binary \texttt{operator==()} directly from the instantiation of the class template. It also inherits from the base class \texttt{B}, which triggers an instantiation of that template as well, which in turn generates a non-template function for \texttt{operator!=()} for every type for which we have generated \texttt{operator==()}.
+\Trans{Here, the derived class \texttt{C} uses the friend factory pattern to generate a non-template function for the binary \texttt{operator==()} directly from the instantiation of the class template. It also inherits from the base class \texttt{B}, which triggers an instantiation of that template as well, which in turn generates a non-template function for \texttt{operator!=()} for every type for which we have generated \texttt{operator==()}.}{}
+
+% EN: The second use of CRTP is to convert member functions to non-member functions. For example, the binary \texttt{operator+()} is sometimes implemented in terms of \texttt{operator+=()}, which is always a member function (it acts on its first operand). To implement the binary \texttt{operator+()}, someone has to take care of the conversions to that object's type, and then \texttt{operator+=()} can be called. These conversions are provided by the binary operators that are generated by the common CRTP base class when using the friend factory. Similarly, the inserter operator can be generated if we establish the convention that our classes have a \texttt{print()} member function:
+\Trans{The second use of CRTP is to convert member functions to non-member functions. For example, the binary \texttt{operator+()} is sometimes implemented in terms of \texttt{operator+=()}, which is always a member function (it acts on its first operand). To implement the binary \texttt{operator+()}, someone has to take care of the conversions to that object's type, and then \texttt{operator+=()} can be called. These conversions are provided by the binary operators that are generated by the common CRTP base class when using the friend factory. Similarly, the inserter operator can be generated if we establish the convention that our classes have a \texttt{print()} member function:}{}
+
+\begin{code}
+% EN: // Example 20
+template <typename D> class B {
+  public:
+  friend D operator+(const D& lhs, const D& rhs) {
+    D res(lhs);
+    res += rhs; // Convert += to +
+    return res;
+   }
+  friend std::ostream&
+  operator<<(std::ostream& out, const D& d) {
+    d.print(out);
+    return out;
+   }
+ };
+template <typename T> class C : public B<C<T>> {
+  T x_;
+  public:
+  C(T x) : x_(x) { }
+  C operator+=(const C& incr) {
+    x_ += incr.x_;
+    return *this;
+   }
+  void print(std::ostream& out) const {
+    out << x_;
+   }
+ };
+\Trans{// Example 20 template <typename D> class B { public: friend D operator+(const D& lhs, const D& rhs) { D res(lhs); res += rhs; // Convert += to + return res; } friend std::ostream& operator<<(std::ostream& out, const D& d) { d.print(out); return out; } }; template <typename T> class C : public B<C<T>> { T x_; public: C(T x) : x_(x) {} C operator+=(const C& incr) { x_ += incr.x_; return *this; } void print(std::ostream& out) const { out << x_; } };}{}
+
+\end{code}
+
+% EN: In this fashion, CRTP can be used to add boilerplate interfaces while delegating the implementation to the derived classes. It is, after all, a static (compile-time) delegation pattern.
+\Trans{In this fashion, CRTP can be used to add boilerplate interfaces while delegating the implementation to the derived classes. It is, after all, a static (compile-time) delegation pattern.}{}
+
+\section{Summary}
+
+% EN: In this chapter, we have learned about a very C++-specific pattern that was originally introduced as a workaround for the buggy early C++ compilers but found new use years later. The friend factory is used to generate non-template functions from instantiations of class templates. As non-template functions, these generated friends have much more flexible rules with regard to argument conversions compared to template functions. We have also learned how the argument-dependent lookup, type conversions, and the friend factory work together to deliver a result that looks very natural, by a process that is far from intuitive.
+\Trans{In this chapter, we have learned about a very C++-specific pattern that was originally introduced as a workaround for the buggy early C++ compilers but found new use years later. The friend factory is used to generate non-template functions from instantiations of class templates. As non-template functions, these generated friends have much more flexible rules with regard to argument conversions compared to template functions. We have also learned how the argument-dependent lookup, type conversions, and the friend factory work together to deliver a result that looks very natural, by a process that is far from intuitive.}{}
+
+% EN: The next chapter describes a totally different kind of Factory - a C++ pattern that's based on the classic Factory pattern and addresses a certain asymmetry in the language - all member functions, even destructors, can be virtual, except the constructors.
+\Trans{The next chapter describes a totally different kind of Factory - a C++ pattern that's based on the classic Factory pattern and addresses a certain asymmetry in the language - all member functions, even destructors, can be virtual, except the constructors.}{}
+
+\section{Questions}
+
+\begin{enumerate}
+\item
+% EN:   What is the effect of declaring a function as a \emph{friend}?
+\Trans{What is the effect of declaring a function as a \emph{friend}?}{}
+\item
+% EN:   What is the difference between granting friendship to a function versus a function template?
+\Trans{What is the difference between granting friendship to a function versus a function template?}{}
+\item
+% EN:   Why are binary operators usually implemented as non-member functions?
+\Trans{Why are binary operators usually implemented as non-member functions?}{}
+\item
+% EN:   Why is the inserter operator always implemented as a non-member function?
+\Trans{Why is the inserter operator always implemented as a non-member function?}{}
+\item
+% EN:   What is the main difference between argument conversions for template and non-template functions?
+\Trans{What is the main difference between argument conversions for template and non-template functions?}{}
+\item
+% EN:   How can we make the act of instantiating the template also generate a unique non-template, non-member function?
+\Trans{How can we make the act of instantiating the template also generate a unique non-template, non-member function?}{}
+\end{enumerate}
+
