@@ -93,11 +93,13 @@
 %%%%%%%%%% 让章首页不显示页码
 \let\ps@plain\ps@empty
 %数字字体
-\newfont{\font@chapnum}{eurb10 scaled 4000}
-\newcommand{\chap@numfont}{\font@chapnum}
+\newfont{\font@eurb}{eurb10 scaled 4000}
+\newfont{\font@cmb}{cmb10 scaled 1300} %pplr9d D:\texlive\2018\texmf-dist\fonts\type1\public\amsfonts\cm cmb10
+\newfont{\font@pplr}{pplr9d scaled 4000}
+\newcommand{\chap@numfont}{\font@eurb}
 
-% 内部宏使用 @，从此处开始将 @ 视为字母
-%\makeatletter% .cls和 .sty 中默认已启用
+
+
 \def\chap@image{} % 章节背景图片文件名
 \newcommand{\setchapterimage}[1]{\def\chap@image{#1}}%
 % 计算版心左边界相对 page.north west 的水平偏移（twoside 兼容）
@@ -113,7 +115,6 @@
     \chap@textarealeft=\dimexpr1in+\oddsidemargin+\hoffset\relax
   \fi
 }
-% 章节标题相关参数全部写死，去除自定义接口，只保留\setchapterimage
 % 章节标题后垂直间距（有/无背景两档，固定值）
 \newlength{\chap@vsp@with}
 \newlength{\chap@vsp@without}
@@ -172,7 +173,7 @@
 \def\chap@schapter@linespread{1.15}
 \newcommand{\setschapterlinespread}[1]{\def\chap@schapter@linespread{#1}}
 % 编号章标题的字体（可配置），默认 \Huge\bfseries
-\newcommand{\chap@chapter@font}{\fontsize{32pt}{38pt}\selectfont\bfseries}
+\newcommand{\chap@chapter@font}{\fontsize{36pt}{40pt}\selectfont\bfseries}
 \newcommand{\setchaptertitlefont}[1]{\renewcommand{\chap@chapter@font}{#1}}
 % 用户接口：细调章号在竖直方向上的位置（正值下移，负值上移）
 \newcommand{\setchapnumyadjust}[1]{\setlength{\chap@chapnum@yadjust}{#1}}
@@ -220,13 +221,13 @@
     \def\chap@num@draw{white}
     \def\chap@num@drawopacity{0.35}
   % 标题白字 + 半透明黑底，圆角与内边距
-  \def\chap@title@textcolor{wineRed}
+  \def\chap@title@textcolor{white}
   \def\chap@title@nodeopts{}%{chapTitleOnBG}%不启用默认黑底
   \fi
   % 预计算版心左边界相对 page.north west 的水平偏移
   \chap@settextarealeft
   % 计算“紧贴”宽度：章号自然宽度 + 2*内边距
-  \sbox{\chap@num@box}{{\font@chapnum \scalebox{3}{\thechapter}}}% 测量内容自身宽度
+  \sbox{\chap@num@box}{{\chap@numfont \scalebox{3}{\thechapter}}}% 测量内容自身宽度
   \setlength{\chap@num@actualwidth}{\wd\chap@num@box}
   \addtolength{\chap@num@actualwidth}{2\chap@num@pad}
   % 计算章号的垂直位置：
@@ -248,7 +249,7 @@
       anchor=\ifx\chap@image\@empty north west\else west\fi, % 无背景时左上角对齐，有背景时左中对齐
       text=\chap@num@textcolor,
       align=center,
-      font=\font@chapnum,
+      font=\chap@numfont,
       inner sep=\chap@num@pad,
       fill=\chap@num@fill,
       fill opacity=\chap@num@opacity,
@@ -431,7 +432,7 @@
 % 安全版：可用于 moving arguments（如 \section、\caption、\item 等）
 % 说明：xparse 定义的命令为健壮（robust），这里避免 verbatim 类实现，保证在写入 .aux/.toc 时不出错。
 \NewDocumentCommand{\ci}{O{} m}{%
-  {\ttfamily\small\color{wineRed}#2}% 可选项 #1 预留，当前不参与样式（保持兼容）
+  {\ttfamily\color{blue}#2}% 可选项 #1 预留，当前不参与样式（保持兼容）
 }
 
 % 高亮版：原来的 verbatim 方案，改名为 \cii；使用分隔符调用：\cii[<keys>]|code|
@@ -439,6 +440,7 @@
   \lstinline[
     language=C++,
     breaklines,
+    breakatwhitespace=false,
     basicstyle=\ttfamily\small\color{wineRed},
     keywordstyle=\bfseries\color{blue},
     identifierstyle=\color{wineRed},

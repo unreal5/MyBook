@@ -12,27 +12,16 @@
 
 \setchapterimage{j-20}
 
-
-\lstdefinestyle{cpp}{
-  language=C++,
-  basicstyle=\ttfamily\small,
-  keywordstyle=\color{blue},
-  stringstyle=\color{teal},
-  commentstyle=\color{gray},
-  tabsize=4,
-  showstringspaces=false,
-  breaklines=true,
-  frame=single
-}
 \chapter{动画基础}
+以下结论是与github copilot 对话的结果，并不保证绝对正确，但部分已经在Aura项目中测试。Aura是一个小型动画系统，因此结果可能并不完全正确，需要在工程实践中进一步验证。
 \section{UAnimInstance 派生类的并行更新实现思路}
 
 \subsection{核心结论摘要 (TL;DR)}
 \begin{itemize}
-  \item 你无法也不需要手动把 \texttt{NativeUpdateAnimation} 挪到线程池；并行是引擎的“\emph{动画评估} (Evaluation) / 更新 (Update)”阶段自动调度。
-  \item Game Thread 负责：收集角色/移动等状态 $\rightarrow$ 拷贝到 \texttt{FAnimInstanceProxy}。
-  \item Worker 线程负责：运行动画图节点更新 + 姿势计算（使用 Proxy 中的只读数据副本）。
-  \item 关键是：自定义 \texttt{FAnimInstanceProxy}，并保证线程安全的数据传递（值复制，不在工作线程访问 Actor/World）。
+  \item 你无法也不需要手动把 \ci{NativeUpdateAnimation} 挪到线程池；并行是引擎的“\emph{动画评估(Evaluation) / 更新 (Update)}”阶段自动调度。
+  \item \textbf{Game Thread} 负责：收集角色/移动等状态 $\rightarrow$ 拷贝到 \ci{FAnimInstanceProxy}。
+  \item \textbf{Worker线程}负责：运行动画图节点更新 $+$ 姿势计算（使用 Proxy 中的只读数据副本）。
+  \item \textbf{关键是}：自定义 \ci{FAnimInstanceProxy}，并保证线程安全的数据传递（值复制，不在工作线程访问 \ci{Actor/World}）。
 \end{itemize}
 
 \subsection{引擎并行动画流程概览}
@@ -44,10 +33,10 @@
 
 \subsection{触发并行的前提}
 \begin{enumerate}
-  \item 组件层标志（不同版本命名略有差异）：
+  \item 组件层标志（不同版本命名略有差异），位于\cii{USkeletalMeshComponent}组件内：
   \begin{itemize}
-    \item \ci{USkeletalMeshComponent::bAllowParallelUpdateAnimation = true}
-    \item \ci{USkeletalMeshComponent::bParallelAnimationEvaluation = true}（或旧字段 \ci{bUseParallelEvaluation}）
+    \item \ci{bAllowParallelUpdateAnimation = true}
+    \item \ci{bParallelAnimationEvaluation = true}（或旧字段 \cii{bUseParallelEvaluation}）
   \end{itemize}
   \item 项目设置里未关闭并行动画（Project Settings $\rightarrow$ Engine $\rightarrow$ Animation）。
   \item 没有在动画实例里做阻塞/非线程安全操作（例如蓝图里直接做 LineTrace）。
@@ -59,9 +48,9 @@
 
 \textbf{特点}：
 \begin{itemize}
-  \item 只保存 POD \footnote{POD = “Plain Old Data”，即没有复杂构造/析构、无虚函数、标准布局、可按字节安全拷贝的老式纯数据类型；在多线程和性能敏感路径用来保证简单、可预测、低成本的数据传递。}/ 线程安全结构（\texttt{float}, \texttt{bool}, \texttt{FVector}, \texttt{FRotator}, 简单数组等）。
-  \item 不持有或访问 \texttt{AActor*}, \texttt{UObject*} 等非线程安全对象（除非只是初始化时一次性缓存且不在 Worker 中解引用——一般仍不推荐）。
-  \item 可重写 \texttt{Update()}（对数据做纯数学运算）、可选 \texttt{Evaluate()}（自定义姿势混合，需要熟悉 Pose Pipeline）。
+  \item 只保存 POD \footnote{POD = “Plain Old Data”，即没有复杂构造/析构、无虚函数、标准布局、可按字节安全拷贝的老式纯数据类型；在多线程和性能敏感路径用来保证简单、可预测、低成本的数据传递。}/ 线程安全结构（\ci{float}, \ci{bool}, \ci{FVector}, \ci{FRotator}, 简单数组等）。
+  \item 不持有或访问 \ci{AActor*}, \ci{UObject*} 等非线程安全对象（除非只是初始化时一次性缓存且不在 Worker 中解引用——一般仍不推荐）。
+  \item 可重写 \ci{Update()}（对数据做纯数学运算）、可选 \ci{Evaluate()}（自定义姿势混合，需要熟悉 Pose Pipeline）。
 \end{itemize}
 
 \subsection{示例：自定义 Proxy}
@@ -97,7 +86,7 @@ struct FAuraAnimInstanceProxy : public FAnimInstanceProxy
 \end{code}
 
 \subsection{修改 UAnimInstance 派生类}
-在你的 \texttt{UAnimInstBase}（见现有的 \texttt{AnimInstBase.h}）添加 Proxy 支持：
+在你的 \ci{UAnimInstBase}（见现有的 \ci{AnimInstBase.h}）添加 Proxy 支持：
 
 \subsection*{头文件补充}
 \begin{code}[caption={AnimInstBase.h 关键补充}]
@@ -165,20 +154,20 @@ void UAnimInstBase::NativeUpdateAnimation(float DeltaSeconds)
 \subsection{线程安全守则}
 \begin{itemize}
   \item \textbf{允许（放 Proxy）}：数值缓存、状态标志、已解算出的 Blend 权重、数学预计算结果。
-  \item \textbf{禁止（Worker 中做）}：访问 \texttt{GetWorld()}, 执行 Trace、修改 Gameplay Ability、广播动态多播委托、访问非线程安全容器。
+  \item \textbf{禁止（Worker 中做）}：访问 \ci{GetWorld()}, 执行 Trace、修改 Gameplay Ability、广播动态多播委托、访问非线程安全容器。
   \item \textbf{不要} 在 Proxy 中 \cii{new/delete UObject} 或修改全局单例。
 \end{itemize}
 
 \subsection{可覆盖的并行策略函数（可选）}
 \begin{itemize}
-  \item \texttt{bool UAnimInstance::ShouldUseParallelUpdateAnimation() const}：强制允许/禁止并行 Update。
-  \item \texttt{bool USkeletalMeshComponent::CanUseParallelEvaluation() const}：组件层逻辑判定。
+  \item \ci{bool UAnimInstance::ShouldUseParallelUpdateAnimation() const}：强制允许/禁止并行 Update。
+  \item \ci{bool USkeletalMeshComponent::CanUseParallelEvaluation() const}：组件层逻辑判定。
 \end{itemize}
 
 \subsection{验证并行是否生效}
 \begin{enumerate}
-  \item 运行 \texttt{stat anim}，观察 “Parallel Evaluation” 任务。
-  \item 用 \texttt{stat taskgraph} 检查是否出现动画任务分派。
+  \item 运行 \ci{stat anim}，观察 “Parallel Evaluation” 任务。
+  \item 用 \ci{stat taskgraph} 检查是否出现动画任务分派。
   \item 多放几个角色实例，确保有足够工作量促使并行。
   \item 在 Proxy::Update 加轻量日志（注意：过多日志会反向影响并行）。
 \end{enumerate}
@@ -208,18 +197,18 @@ Worker 崩溃 & 在 Proxy::Update/Evaluate 访问了 Actor/World/ASC \\
 
 \subsection{最小工作清单 (Checklist)}
 \begin{enumerate}
-  \item 创建 \texttt{FAuraAnimInstanceProxy}。
-  \item 在 \texttt{UAnimInstBase} 覆盖 \texttt{CreateAnimInstanceProxy / DestroyAnimInstanceProxy}。
-  \item 在 \texttt{NativeUpdateAnimation} 读取 Movement $\rightarrow$ 同步到 Proxy。
+  \item 创建 \ci{FAuraAnimInstanceProxy}。
+  \item 在 \ci{UAnimInstBase} 覆盖 \ci{CreateAnimInstanceProxy / DestroyAnimInstanceProxy}。
+  \item 在 \ci{NativeUpdateAnimation} 读取 Movement $\rightarrow$ 同步到 Proxy。
   \item 启用组件并行动画相关标志。
-  \item 使用 \texttt{stat anim} 验证。
+  \item 使用 \ci{stat anim} 验证。
 \end{enumerate}
 
 \subsection{可扩展方向}
 \begin{itemize}
   \item \textbf{预测性运算}：在 \cii{Proxy::Update} 中做曲线或 Blend 参数预计算，减少 Game Thread 蓝图节点开销。
   \item \textbf{分层数据}：对多种姿势条件（Combat/Idle/Cast）压缩为 bit mask 再放 Proxy。
-  \item \textbf{共享数据缓存}：对全局静态（只读）表格/曲线放到线程安全共享结构（例如 \texttt{TSharedPtr<const FData>}），Worker 线程只读访问。
+  \item \textbf{共享数据缓存}：对全局静态（只读）表格/曲线放到线程安全共享结构（例如 \ci{TSharedPtr<const FData>}），Worker 线程只读访问。
 \end{itemize}
 
 \subsection{总结语句便于记忆}
@@ -274,7 +263,7 @@ Worker 线程里计算出的派生值（昂贵或需多线程）：
 
 \subsection{示例：Proxy 内计算 \(\rightarrow\) 下一帧蓝图读取}
 \subsubsection*{Proxy 定义}
-\begin{lstlisting}[style=cpp]
+\begin{code}
 struct FAuraAnimInstanceProxy : public FAnimInstanceProxy
 {
     FAuraAnimInstanceProxy(UAnimInstance* InInstance)
@@ -300,16 +289,16 @@ struct FAuraAnimInstanceProxy : public FAnimInstanceProxy
 
     float GetComputedLeanAngle() const { return ComputedLeanAngle; }
 };
-\end{lstlisting}
+\end{code}
 
 \subsubsection*{AnimInstance 中声明可供蓝图读取的变量}
-\begin{lstlisting}[style=cpp]
+\begin{code}
 UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Anim|Runtime")
 float LeanAngle = 0.f;
-\end{lstlisting}
+\end{code}
 
 \subsubsection*{Game Thread 更新基础数据并写入 Proxy}
-\begin{lstlisting}[style=cpp]
+\begin{code}
 void UAnimInstBase::NativeUpdateAnimation(float DeltaSeconds)
 {
     Super::NativeUpdateAnimation(DeltaSeconds);
@@ -321,10 +310,10 @@ void UAnimInstBase::NativeUpdateAnimation(float DeltaSeconds)
     // 写入 Proxy 副本（线程安全数据）
     GetAuraProxy().SetMovementData(GroundSpeed, bShouldMove);
 }
-\end{lstlisting}
+\end{code}
 
 \subsubsection*{帧末回拷派生值}
-\begin{lstlisting}[style=cpp]
+\begin{code}
 void UAnimInstBase::PostUpdateAnimation()
 {
     Super::PostUpdateAnimation();
@@ -332,10 +321,10 @@ void UAnimInstBase::PostUpdateAnimation()
         static_cast<const FAuraAnimInstanceProxy&>(GetProxyOnGameThread());
     LeanAngle = P.GetComputedLeanAngle(); // 下一帧 Anim Graph 可用
 }
-\end{lstlisting}
+\end{code}
 
 \subsection{可选：蓝图函数直接访问 Proxy（一般不推荐用于状态机）}
-\begin{lstlisting}[style=cpp]
+\begin{code}
 UFUNCTION(BlueprintCallable, Category="Anim|Proxy")
 float GetProxyLeanAngle() const
 {
@@ -343,7 +332,7 @@ float GetProxyLeanAngle() const
         static_cast<const FAuraAnimInstanceProxy&>(GetProxyOnGameThread());
     return P.GetComputedLeanAngle();
 }
-\end{lstlisting}
+\end{code}
 注意：不要在并行评估路径（图节点内部）依赖这种函数；只适用于事件图（Event Graph）或通知回调中临时获取。
 
 \subsection{数据流时序图}
@@ -385,7 +374,7 @@ float GetProxyLeanAngle() const
 \end{enumerate}
 
 \subsection{极简模版汇总}
-\begin{lstlisting}[style=cpp]
+\begin{code}
 // 1. Proxy 里计算
 ComputedLeanAngle = ...;
 
@@ -393,7 +382,7 @@ ComputedLeanAngle = ...;
 LeanAngle = Proxy.GetComputedLeanAngle();
 
 // 3. 动画蓝图状态机用 LeanAngle
-\end{lstlisting}
+\end{code}
 
 \subsection{一行总结}
 \[
@@ -427,7 +416,7 @@ LeanAngle = Proxy.GetComputedLeanAngle();
 \begin{center}
 \begin{tabular}{p{4cm} p{5.2cm} p{5.2cm}}
 \hline
-维度 & \texttt{NativeThreadSafeUpdateAnimation} & Proxy (\texttt{Update + PostUpdate}) \\
+维度 & \ci{NativeThreadSafeUpdateAnimation} & Proxy (\ci{Update + PostUpdate}) \\
 \hline
 接口归属 & AnimInstance 本体 & 独立轻量 Proxy 容器 \\
 数据边界 & 直接操作实例成员（需自律） & 线程阶段只触碰已复制的 POD 数据 \\
