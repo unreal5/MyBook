@@ -1,37 +1,37 @@
-﻿\chapter{The Visitor Pattern and Multiple Dispatch}
+\chapter{访问者模式和多重分派}
 
-The Visitor pattern is another classic object-oriented design pattern, one of the 23 patterns introduced in the book \emph{Design Patterns -- Elements of Reusable Object-Oriented Software}, by Erich Gamma, Richard Helm, Ralph Johnson, and John Vlissides. It was one of the more popular patterns during the golden age of object-oriented programming since it can be used to make large class hierarchies more maintainable. In recent years, the use of Visitor in C++ declined, as large complex hierarchies became less common, and the Visitor pattern is a fairly complex pattern to implement. Generic programming - in particular, the language features added in C++11 and C++14 - makes it easier to implement and maintain the Visitor classes, while the new applications of the old pattern have served to rekindle some of the fading interest in it.
+访问者模式是另一个经典的面向对象设计模式，是Erich Gamma、Richard Helm、Ralph Johnson和John Vlissides在《设计模式——可复用面向对象软件的要素》一书中介绍的23种模式之一。在面向对象编程的黄金时代，它是更受欢迎的模式之一，因为它可以用来使大型类层次结构更易于维护。近年来，访问者模式在C++中的使用有所下降，因为大型复杂层次结构变得不那么常见，而访问者模式是一个相当复杂的模式来实现。泛型编程——特别是C++11和C++14中添加的语言特性——使得实现和维护访问者类更容易，而旧模式的新应用重新点燃了人们对它逐渐消退的兴趣。
 
-The following topics will be covered in this chapter:
+本章将涵盖以下主题：
 
 \begin{itemize}
 \item
-  The Visitor pattern
+  访问者模式
 \item
-  Implementations of Visitor in C++
+  C++中访问者的实现
 \item
-  The use of generic programming to simplify the Visitor classes
+  使用泛型编程简化访问者类
 \item
-  The use of Visitor for composite objects
+  访问者用于复合对象
 \item
-  Compile-time Visitor and reflection
+  编译时访问者和反射
 \end{itemize}
 
-Technical requirements
+技术要求
 
-The example code for this chapter can be found at the following GitHub link: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/main/Chapter17.
+本章的示例代码可以在以下GitHub链接中找到：\url{https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/main/Chapter17}。
 
-\section{The Visitor pattern}
+\section{访问者模式}
 
-The Visitor pattern stands out from the other classic object-oriented patterns due to its complexity. On the one hand, the basic structure of the Visitor pattern is quite complex and involves many coordinated classes that must work together to form the pattern. On the other hand, even the description of the Visitor pattern is complex - there are several very different ways to describe the same pattern. Many patterns can be applied to multiple kinds of problems, but the Visitor pattern goes beyond that - there are several ways to describe what it does that use completely different languages, talk about seemingly unrelated problems, and overall have nothing in common. However, they all describe the same pattern. Let's start by examining the many faces of the Visitor pattern, and then move on to the implementation.
+访问者模式因其复杂性而在其他经典面向对象模式中脱颖而出。一方面，访问者模式的基本结构相当复杂，涉及许多必须协同工作以形成模式的协调类。另一方面，即使是访问者模式的描述也很复杂——有几种非常不同的方式来描述同一个模式。许多模式可以应用于多种问题，但访问者模式超越了这一点——有几种方式来描述它的作用，这些方式使用完全不同的语言，谈论看似无关的问题，总体上没有任何共同点。然而，它们都描述了同一个模式。让我们首先审视访问者模式的多个面孔，然后转向实现。
 
-\subsection{What is the Visitor pattern?}
+\subsection{什么是访问者模式？}
 
-The Visitor pattern is a pattern that separates the algorithm from the object structure, which is the data for this algorithm. Using the Visitor pattern, we can add a new operation to the class hierarchy without modifying the classes themselves. The use of the Visitor pattern follows the \textbf{open/closed principle} of software design - a class (or another unit of code, such as a module) should be closed for modifications; once the class presents an interface to its clients, the clients come to depend on this interface and the functionality it provides. This interface should remain stable; it should not be necessary to modify the classes in order to maintain the software and continue its development. At the same time, a class should be open for extensions - new functionality can be added to satisfy new requirements. As with all very general principles, a counter-example can be found where the rigorous application of a rule is worse than breaking it. Again, as with all general principles, its value lies not in being an absolute rule for every case, but rather a \emph{default} rule, a guideline that should be followed in the absence of a good reason not to; the reality is that the majority of everyday work is \emph{not special} and the result is better if this principle is followed.
+访问者模式是一个将算法从对象结构中分离出来的模式，对象结构是该算法的数据。使用访问者模式，我们可以在不修改类本身的情况下向类层次结构添加新操作。访问者模式的使用遵循软件设计的\textbf{开放/封闭原则}——一个类（或另一个代码单元，如模块）应该对修改封闭；一旦类向其客户端呈现接口，客户端就会依赖于这个接口及其提供的功能。这个接口应该保持稳定；为了维护软件并继续其开发，不应该需要修改类。同时，一个类应该对扩展开放——可以添加新功能来满足新需求。与所有非常通用的原则一样，可以找到反例，其中严格应用规则比违反它更糟糕。同样，与所有通用原则一样，其价值不在于成为每种情况的绝对规则，而是一个\emph{默认}规则，一个在没有充分理由不遵循的情况下应该遵循的指导原则；现实是大多数日常工作都\emph{不特殊}，如果遵循这个原则，结果会更好。
 
-When viewed this way, the Visitor pattern allows us to add functionality to a class or an entire class hierarchy without having to modify the class. This feature can be particularly useful when dealing with public APIs - the users of the API can extend it with additional operations without having to modify the source code.
+从这个角度来看，访问者模式允许我们在不必修改类的情况下向类或整个类层次结构添加功能。这个特性在处理公共API时特别有用——API的用户可以用额外的操作扩展它，而不必修改源代码。
 
-A very different, more technical way to describe the Visitor pattern is to say that it implements \textbf{double dispatch}. This requires some explanation. Let's start with the regular virtual function calls:
+描述访问者模式的一种非常不同的、更技术性的方式是说它实现了\textbf{双重分派}。这需要一些解释。让我们从常规的虚函数调用开始：
 
 \begin{code}
 class Base {
@@ -45,9 +45,9 @@ class Derived2 : public Base {
 };
 \end{code}
 
-If we invoke the \texttt{b-\textgreater{}f()} virtual function through a pointer to the \texttt{b} base class, the call is dispatched to \texttt{Derived1::f()} or \texttt{Derived2::f()}, depending on the real type of the object. This is the \textbf{single dispatch} - the function that is actually called is determined by a single factor, the type of the object.
+如果我们通过指向\texttt{b}基类的指针调用\texttt{b-\textgreater{}f()}虚函数，调用会分派到\texttt{Derived1::f()}或\texttt{Derived2::f()}，取决于对象的真实类型。这是\textbf{单一分派}——实际调用的函数由单一因素决定，即对象的类型。
 
-Now let\textquotesingle s assume that the function \texttt{f()} also takes an argument that is a pointer to a base class:
+现在让我们假设函数\texttt{f()}也接受一个参数，该参数是指向基类的指针：
 
 \begin{code}
 class Base {
@@ -61,21 +61,21 @@ class Derived2 : public Base {
 };
 \end{code}
 
-The actual type of the \texttt{*p} object is also one of the derived classes. Now, the \texttt{b-\textgreater{}f(p)} call can have four different versions; both the \texttt{*b} and \texttt{*p} objects can be of either of the two derived types. It is reasonable to want the implementation to do something different in each of these cases. This would be double dispatch - the code that ultimately runs is determined by two separate factors. Virtual functions do not provide a way to implement double dispatch directly, but the Visitor pattern does exactly that.
+\texttt{*p}对象的实际类型也是派生类之一。现在，\texttt{b-\textgreater{}f(p)}调用可以有四个不同的版本；\texttt{*b}和\texttt{*p}对象都可以是两种派生类型中的任一种。在每种情况下希望实现做不同的事情是合理的。这将是双重分派——最终运行的代码由两个独立的因素决定。虚函数不提供直接实现双重分派的方法，但访问者模式正是做到了这一点。
 
-When presented this way, it is not obvious that the \textbf{double-dispatch} Visitor pattern has anything to do with the \textbf{operation-adding} Visitor pattern. However, they are exactly the same pattern, and the two requirements are really one and the same. Here is a way to look at it that might help - if we want to add an operation to all classes in a hierarchy, that is equivalent to adding a virtual function, so we have one factor controlling the final disposition of each call, the object type. But, if we can effectively add virtual functions, we can add more than one - one for each operation we need to support. The type of operation is the second factor controlling the dispatch, similar to the argument to the function in our previous example. Thus, the operation-adding visitor is able to provide double dispatch. Alternatively, if we had a way to implement double dispatch, we could do what the Visitor pattern does - effectively add a virtual function for each operation we want to support.
+当以这种方式呈现时，\textbf{双重分派}访问者模式与\textbf{操作添加}访问者模式有任何关系并不明显。然而，它们正是同一个模式，这两个需求实际上是同一个。这里有一种可能有帮助的看法——如果我们想向层次结构中的所有类添加操作，这等同于添加虚函数，所以我们有一个因素控制每个调用的最终处置，即对象类型。但是，如果我们能有效地添加虚函数，我们可以添加不止一个——为我们需要支持的每个操作添加一个。操作类型是控制分派的第二个因素，类似于我们之前例子中函数的参数。因此，操作添加访问者能够提供双重分派。或者，如果我们有实现双重分派的方法，我们可以做访问者模式所做的事情——为我们想要支持的每个操作有效地添加虚函数。
 
-Now that we know what the Visitor pattern does, it is reasonable to ask, \emph{why} would we want to do it? \emph{What} is the use of double dispatch? And why would we want \emph{another way} to add a virtual function substitute to a class when we can just add a \emph{genuine} virtual function? Setting aside the case of the public API with unavailable source code, why would we want to add an operation \emph{externally} instead of implementing it in every class? Consider the example of the serialization/deserialization problem. Serialization is an operation that converts an object into a format that can be stored or transmitted (for example, written into a file). Deserialization is the inverse operation - it constructs a new object from its serialized and stored image. To support serialization and deserialization in a straightforward, object-oriented way, each class in the hierarchy would need two methods, one for each operation. But what if there is more than one way to store an object? For example, we may need to write an object into a memory buffer, to be transmitted across the network and deserialized on another machine. Alternatively, we may need to save the object to disk, or else we may need to convert all objects in a container to a markup format such as JSON. The straightforward approach would have us add a serialization and a deserialization method to every object for every serialization mechanism. If a new and different serialization approach is needed, we have to go over the entire class hierarchy and add support for it.
+现在我们知道了访问者模式做什么，合理的问题是，\emph{为什么}我们想要这样做？双重分派的\emph{用途}是什么？当我们可以只添加一个\emph{真正的}虚函数时，为什么我们需要\emph{另一种方式}来向类添加虚函数替代品？撇开源代码不可用的公共API的情况，为什么我们想要\emph{外部}添加操作而不是在每个类中实现它？考虑序列化/反序列化问题的例子。序列化是一个将对象转换为可以存储或传输的格式（例如，写入文件）的操作。反序列化是逆操作——它从其序列化和存储的映像构造新对象。为了以直接的面向对象方式支持序列化和反序列化，层次结构中的每个类都需要两个方法，每个操作一个。但是如果有不止一种存储对象的方式怎么办？例如，我们可能需要将对象写入内存缓冲区，以便通过网络传输并在另一台机器上反序列化。或者，我们可能需要将对象保存到磁盘，或者我们可能需要将容器中的所有对象转换为标记格式，如JSON。直接的方法是为每种序列化机制向每个对象添加序列化和反序列化方法。如果需要新的不同的序列化方法，我们必须遍历整个类层次结构并为其添加支持。
 
-An alternative is to implement the entire serialization/deserialization operation in a separate function that can handle all classes. The resulting code is a loop that iterates over all objects, with a large decision tree inside of it. The code must interrogate every object and determine its type, for example, using dynamic casts. When a new class is added to the hierarchy, all serialization and deserialization implementations must be updated to handle the new objects.
+另一种选择是在可以处理所有类的单独函数中实现整个序列化/反序列化操作。生成的代码是一个遍历所有对象的循环，其中有一个大的决策树。代码必须询问每个对象并确定其类型，例如，使用动态转换。当新类添加到层次结构时，所有序列化和反序列化实现都必须更新以处理新对象。
 
-Both implementations are difficult to maintain for large hierarchies. The Visitor pattern offers a solution - it allows us to implement a new operation - in our case, the serialization - outside of the classes and without modifying them, but also without the downside of a huge decision tree in a loop (note that the Visitor pattern is not the only solution to the serialization problem; C++ offers other possible approaches as well, but we focus on the Visitor pattern in this chapter).
+这两种实现对于大型层次结构都难以维护。访问者模式提供了一个解决方案——它允许我们在类外部实现新操作——在我们的情况下是序列化——而不修改它们，但也没有循环中巨大决策树的缺点（注意访问者模式不是序列化问题的唯一解决方案；C++还提供其他可能的方法，但我们在本章中专注于访问者模式）。
 
-As we stated at the beginning, the Visitor pattern is a complex pattern with a complex description. We can best handle this difficult pattern by studying concrete examples, starting from the very simple ones in the next section.
+正如我们在开始时所说，访问者模式是一个复杂的模式，有复杂的描述。我们可以通过研究具体的例子来最好地处理这个困难的模式，从下一节中非常简单的例子开始。
 
-\subsection{Basic Visitor in C++}
+\subsection{C++中的基本访问者}
 
-The only way to really understand how the Visitor pattern operates is to work through an example. Let's start with a very simple one. First, we need a class hierarchy:
+真正理解访问者模式如何操作的唯一方法是通过一个例子来工作。让我们从一个非常简单的开始。首先，我们需要一个类层次结构：
 
 \begin{code}
 // Example 01
@@ -97,7 +97,7 @@ class Dog : public Pet {
 };
 \end{code}
 
-In this hierarchy, we have the \texttt{Pet} base class and several derived classes for different pet animals. Now we want to add some operations to our classes, such as ``feed the pet'' or ``play with the pet.'' The implementation depends on the type of pet, so these would have to be virtual functions if added directly to each class. This is not a problem for such a simple class hierarchy, but we are anticipating the future need for maintaining a much larger system in which modifying every class in the hierarchy is going to be expensive and time-consuming. We need a better way, and we begin by creating a new class, \texttt{PetVisitor}, which will be applied to every \texttt{Pet} object (visit it) and perform the operations we need. First, we need to declare the class:
+在这个层次结构中，我们有\texttt{Pet}基类和几个用于不同宠物动物的派生类。现在我们想要向我们的类添加一些操作，比如"喂宠物"或"和宠物玩"。实现取决于宠物的类型，所以如果直接添加到每个类中，这些必须是虚函数。对于如此简单的类层次结构，这不是问题，但我们正在预见未来需要维护更大系统的需求，在这种系统中修改层次结构中的每个类将是昂贵和耗时的。我们需要一个更好的方法，我们首先创建一个新类\texttt{PetVisitor}，它将应用于每个\texttt{Pet}对象（访问它）并执行我们需要的操作。首先，我们需要声明这个类：
 
 \begin{code}
 // Example 01
@@ -110,7 +110,7 @@ class PetVisitor {
 };
 \end{code}
 
-We had to forward-declare the \texttt{Pet} hierarchy classes because \texttt{PetVisitor} has to be declared before the concrete \texttt{Pet} classes. Now we need to make the \texttt{Pet} hierarchy visitable, which means we do need to modify it, but only once, regardless of how many operations we want to add later. We need to add a virtual function to accept the Visitor pattern to every class that can be visited:
+我们必须前向声明\texttt{Pet}层次结构类，因为\texttt{PetVisitor}必须在具体的\texttt{Pet}类之前声明。现在我们需要使\texttt{Pet}层次结构可访问，这意味着我们确实需要修改它，但只需要一次，无论我们稍后想要添加多少操作。我们需要向每个可以被访问的类添加一个虚函数来接受访问者模式：
 
 \begin{code}
 // Example 01
@@ -131,7 +131,7 @@ class Dog : public Pet {
 };
 \end{code}
 
-Now our \texttt{Pet} hierarchy is visitable, and we have an abstract \texttt{PetVisitor} class. Everything is ready to implement new operations for our classes (note that nothing we have done so far depends on what operations we are going to add; we have created the visiting infrastructure that has to be implemented once). The operations are added by implementing concrete Visitor classes derived from \texttt{PetVisitor}:
+现在我们的\texttt{Pet}层次结构是可访问的，我们有一个抽象的\texttt{PetVisitor}类。一切都准备好为我们的类实现新操作了（注意到目前为止我们所做的任何事情都不依赖于我们要添加什么操作；我们已经创建了必须实现一次的访问基础设施）。通过实现从\texttt{PetVisitor}派生的具体访问者类来添加操作：
 
 \begin{code}
 // Example 01
@@ -159,7 +159,7 @@ class PlayingVisitor : public PetVisitor {
 };
 \end{code}
 
-Assuming the visitation infrastructure is already built into our class hierarchy, we can implement a new operation by implementing a derived Visitor class, and all its virtual functions overrides for \texttt{visit()}. To invoke one of the new operations on an object from our class hierarchy, we need to create a visitor and visit the object:
+假设访问基础设施已经内置到我们的类层次结构中，我们可以通过实现派生访问者类及其所有\texttt{visit()}的虚函数重写来实现新操作。要在我们类层次结构中的对象上调用新操作之一，我们需要创建一个访问者并访问对象：
 
 \begin{code}
 // Example 01
@@ -168,7 +168,7 @@ FeedingVisitor fv;
 c.accept(fv); // Feed tuna to the orange cat
 \end{code}
 
-The latest example of the call is too simple in one important way - at the point of calling the visitor, we know the exact type of the object we are visiting. To make the example more realistic, we have to visit an object polymorphically:
+最新的调用例子在一个重要方面过于简单——在调用访问者的点上，我们知道我们正在访问的对象的确切类型。为了使例子更现实，我们必须多态地访问对象：
 
 \begin{code}
 // Example 02
@@ -178,7 +178,7 @@ FeedingVisitor fv;
 p->accept(fv);
 \end{code}
 
-Here we do not know at compile time the actual type of the object pointed to by \texttt{p}; at the point where the visitor is accepted, \texttt{p} could have come from different sources. While less common, the visitor can also be used polymorphically:
+这里我们在编译时不知道\texttt{p}指向的对象的实际类型；在接受访问者的点上，\texttt{p}可能来自不同的来源。虽然不太常见，访问者也可以多态地使用：
 
 \begin{code}
 // Example 03
@@ -188,7 +188,7 @@ std::unique_ptr<PetVisitor> v(new FeedingVisitor);
 p->accept(*v);
 \end{code}
 
-When written this way, the code highlights the double-dispatch aspect of the Visitor pattern - the call to \texttt{accept()} ends up dispatched to a particular \texttt{visit()} function based on two factors - the type of the visitable \texttt{*p} object and the type of the \texttt{*v} visitor. If we wish to stress this aspect of the Visitor pattern, we can invoke the visitors using a helper function:
+以这种方式编写时，代码突出了访问者模式的双重分派方面——对\texttt{accept()}的调用最终分派到特定的\texttt{visit()}函数，基于两个因素——可访问的\texttt{*p}对象的类型和\texttt{*v}访问者的类型。如果我们希望强调访问者模式的这个方面，我们可以使用辅助函数调用访问者：
 
 \begin{code}
 // Example 03
@@ -198,15 +198,15 @@ std::unique_ptr<PetVisitor> v = ...;
 dispatch(*p, *v); // Double dispatch
 \end{code}
 
-We now have the most bare-bones example of the classic object-oriented visitor in C++. Despite its simplicity, it has all the necessary components; an implementation for a large real-life class hierarchy and multiple visitor operations has a lot more code, but no new kinds of code, just more of the things we have already done. This example shows both aspects of the Visitor pattern; on the one hand, if we focus on the functionality of the software, with the visitation infrastructure now in place, we can add new operations without any changes to the classes themselves. On the other hand, if we look just at the way the operation is invoked, the \texttt{accept()} call, we have implemented double dispatch.
+我们现在有了C++中经典面向对象访问者的最基本例子。尽管它很简单，但它具有所有必要的组件；大型现实类层次结构和多个访问者操作的实现有更多代码，但没有新类型的代码，只是我们已经做过的事情的更多。这个例子显示了访问者模式的两个方面；一方面，如果我们专注于软件的功能，有了现在的访问基础设施，我们可以添加新操作而不对类本身进行任何更改。另一方面，如果我们只看操作调用的方式，即\texttt{accept()}调用，我们已经实现了双重分派。
 
-We can immediately see the appeal of the Visitor pattern, we can add any number of new operations without having to modify every class in the hierarchy. If a new class is added to the \texttt{Pet} hierarchy, it is impossible to forget to handle it - if we do nothing at all to the visitor, the \texttt{accept()} call on the new class will not compile since there is no corresponding \texttt{visit()} function to call. Once we add the new \texttt{visit()} overload to the \texttt{PetVisitor} base class, we have to add it to all derived classes as well; otherwise, the compiler will let us know that we have a pure virtual function without an override. The latter is also one of the main disadvantages of the Visitor pattern - if a new class is added to the hierarchy, all visitors must be updated, whether the new classes actually need to support these operations or not. For this reason, it is sometimes recommended to use the visitor only on \emph{relatively stable} hierarchies that do not have new classes added often. There is also an alternative visitor implementation that somewhat mitigates this problem; we will see it later in this chapter.
+我们可以立即看到访问者模式的吸引力，我们可以添加任意数量的新操作而不必修改层次结构中的每个类。如果新类被添加到\texttt{Pet}层次结构中，不可能忘记处理它——如果我们对访问者什么都不做，新类上的\texttt{accept()}调用将不会编译，因为没有相应的\texttt{visit()}函数可调用。一旦我们向\texttt{PetVisitor}基类添加新的\texttt{visit()}重载，我们也必须将其添加到所有派生类中；否则，编译器会让我们知道我们有一个没有重写的纯虚函数。后者也是访问者模式的主要缺点之一——如果新类被添加到层次结构中，所有访问者都必须更新，无论新类是否实际需要支持这些操作。因此，有时建议只在不经常添加新类的\emph{相对稳定}的层次结构上使用访问者。还有一种替代访问者实现在某种程度上缓解了这个问题；我们将在本章后面看到它。
 
-The example in this section is very simple - our new operations take no arguments and return no results. We will now consider whether these limitations are significant, and how they can be removed.
+本节中的例子非常简单——我们的新操作不接受参数也不返回结果。我们现在将考虑这些限制是否重要，以及如何消除它们。
 
-\subsection{Visitor generalizations and limitations}
+\subsection{访问者的通用化和限制}
 
-Our very first visitor, in the previous section, allowed us to effectively add a virtual function to every class in the hierarchy. That virtual function had no parameters and no return value. The former is easy to extend; there is no reason at all why our \texttt{visit()} functions cannot have parameters. Let's expand our class hierarchy by allowing our pets to have kittens and puppies. This extension cannot be done using only the Visitor pattern - we need to add not only new operations but also new data members. The Visitor pattern can be used for the former, but the latter requires code changes. A policy-based design could have let us factor out this change into a new implementation of an existing policy if we had the foresight to provide the appropriate policy. We do have a separate chapter on \emph{Chapter 15, Policy-Based Design} in this book, so here we will avoid mixing several patterns together and just add the new data members:
+在前一节中，我们的第一个访问者允许我们有效地向层次结构中的每个类添加虚函数。该虚函数没有参数也没有返回值。前者很容易扩展；我们的\texttt{visit()}函数没有理由不能有参数。让我们通过允许我们的宠物有小猫和小狗来扩展我们的类层次结构。这种扩展不能仅使用访问者模式完成——我们不仅需要添加新操作，还需要添加新的数据成员。访问者模式可以用于前者，但后者需要代码更改。如果我们有远见提供适当的策略，基于策略的设计可以让我们将这种更改分解为现有策略的新实现。我们在本书中有关于\emph{第15章，基于策略的设计}的单独章节，所以这里我们将避免混合几个模式，只添加新的数据成员：
 
 \begin{code}
 // Example 04
@@ -220,7 +220,7 @@ class Pet {
 };
 \end{code}
 
-Each parent \texttt{Pet} object tracks its child objects (note that the container is a vector of pointers, not a vector of unique pointers, so the object does not own its children, but merely has access to them). We have also added the new \texttt{add\_child()} member function to add objects to the vector. We could have done this with a visitor, but this function is non-virtual, so we have to add it only once to the base class, not to every derived class - the visitor is unnecessary here. The \texttt{accept()} function has been modified to have an additional parameter that would have to be added to all derived classes as well, where it is simply forwarded to the \texttt{visit()} function:
+每个父\texttt{Pet}对象跟踪其子对象（注意容器是指针向量，不是unique指针向量，所以对象不拥有其子对象，而只是可以访问它们）。我们还添加了新的\texttt{add\_child()}成员函数来向向量添加对象。我们可以用访问者来做这件事，但这个函数是非虚的，所以我们只需要将其添加到基类一次，而不是每个派生类——这里访问者是不必要的。\texttt{accept()}函数已被修改为具有额外参数，这也必须添加到所有派生类中，在那里它简单地转发给\texttt{visit()}函数：
 
 \begin{code}
 // Example 04
@@ -240,9 +240,9 @@ class Dog : public Pet {
 };
 \end{code}
 
-The \texttt{visit()} function also has to be modified to accept the additional argument, even for the visitors that do not need it. Changing the parameters of the \texttt{accept()} function is, therefore, an expensive global operation that should not be done often, if at all. Note that all overrides for the same virtual function in the hierarchy already have to have the same parameters. The Visitor pattern extends this restriction to all operations added using the same base Visitor object. A common workaround for this problem is to pass parameters using aggregates (classes or structures that combine multiple parameters together). The \texttt{visit()} function is declared to accept a pointer to the base aggregate class, while each visitor receives a pointer to a derived class that may have additional fields, and uses them as needed.
+\texttt{visit()}函数也必须修改以接受额外的参数，即使对于不需要它的访问者也是如此。因此，更改\texttt{accept()}函数的参数是一个昂贵的全局操作，应该很少进行，如果有的话。注意层次结构中同一虚函数的所有重写已经必须具有相同的参数。访问者模式将这种限制扩展到使用相同基访问者对象添加的所有操作。这个问题的常见解决方法是使用聚合（将多个参数组合在一起的类或结构）传递参数。\texttt{visit()}函数被声明为接受指向基聚合类的指针，而每个访问者接收指向可能具有额外字段的派生类的指针，并根据需要使用它们。
 
-Now, our additional argument is forwarded through the chain of virtual function calls to the visitor, where we can make use of it. Let's create a visitor that records the pet births and adds new pet objects as children to their parent objects:
+现在，我们的额外参数通过虚函数调用链转发到访问者，在那里我们可以使用它。让我们创建一个记录宠物出生并将新宠物对象作为子对象添加到其父对象的访问者：
 
 \begin{code}
 // Example 04
@@ -259,7 +259,7 @@ class BirthVisitor : public PetVisitor {
 };
 \end{code}
 
-Note that if we want to make sure that there are no biological impossibilities in our family tree, the verification has to be done at run time - at compile time, we do not know the actual types of the polymorphic objects. The new visitor is just as easy to use as the ones from the last section:
+注意，如果我们想确保在我们的家谱中没有生物学上的不可能性，验证必须在运行时完成——在编译时，我们不知道多态对象的实际类型。新访问者与上一节中的访问者一样容易使用：
 
 \begin{code}
 Pet* parent; // A cat
@@ -268,7 +268,7 @@ Pet* child(new Cat("calico"));
 parent->accept(bv, child);
 \end{code}
 
-Once we have established the parenthood relationships, we may want to examine our pet families. That is another operation we want to add, which calls for another Visitor:
+一旦我们建立了亲子关系，我们可能想要检查我们的宠物家庭。这是我们想要添加的另一个操作，需要另一个访问者：
 
 \begin{code}
 // Example 04
@@ -291,7 +291,7 @@ class FamilyTreeVisitor : public PetVisitor {
 };
 \end{code}
 
-We have hit a slight problem, though, because as written, the code will not compile. The reason is that the \texttt{FamilyTreeVisitor} class is trying to access the \texttt{Pet::children\_} data member, which is private. This is another weakness of the Visitor pattern - from our point of view, the visitors add new operations to the classes, just like virtual functions, but from the compiler's point of view, they are completely separate classes, not at all like member functions of the \texttt{Pet} classes and have no special access. Application of the Visitor pattern usually requires that the encapsulation is relaxed in one of two ways - we can either allow public access to the data (directly or through accessor member functions) or declare the Visitor classes to be friends (which does require changes to the source code). In our example, we will follow the second route:
+不过，我们遇到了一个小问题，因为按所写的代码将不会编译。原因是\texttt{FamilyTreeVisitor}类试图访问\texttt{Pet::children\_}数据成员，这是私有的。这是访问者模式的另一个弱点——从我们的角度来看，访问者向类添加新操作，就像虚函数一样，但从编译器的角度来看，它们是完全独立的类，完全不像\texttt{Pet}类的成员函数，没有特殊访问权限。访问者模式的应用通常需要以两种方式之一放松封装——我们可以允许对数据的公共访问（直接或通过访问器成员函数）或声明访问者类为友元（这确实需要对源代码进行更改）。在我们的例子中，我们将遵循第二条路线：
 
 \begin{code}
 class Pet {
@@ -300,18 +300,18 @@ class Pet {
 };
 \end{code}
 
-Now the family tree visitor works as expected:
+现在家谱访问者按预期工作：
 
 \begin{code}
 Pet* parent; // A cat
 ...
-amilyTreeVisitor tv;
+FamilyTreeVisitor tv;
 parent->accept(tv); // Prints kitten colors
 \end{code}
 
-Unlike \texttt{BirthVisitor}, \texttt{FamilyTreeVisitor} does not need the additional argument.
+与\texttt{BirthVisitor}不同，\texttt{FamilyTreeVisitor}不需要额外的参数。
 
-Now we have visitors that implement operations with parameters. What about the return values? Technically, there is no requirement for the \texttt{visit()} and \texttt{accept()} functions to return \texttt{void}. They can return anything else. However, the limitation that they have to all return the same type usually makes this capability useless. Virtual functions can have covariant return types, where the base class virtual function returns an object of some class and the derived class overrides return objects derived from that class, but even that is usually too limiting. There is another, much simpler solution - the \texttt{visit()} functions of every Visitor object have full access to the data members of that object. There is no reason why we cannot store the return value in the Visitor class itself and access it later. This fits well with the most common use where each visitor adds a different operation and is likely to have a unique return type, but the operation itself usually has the same return type for all classes in the hierarchy. For example, we can make our \texttt{FamilyTreeVisitor} count the total number of children and return the value through the Visitor object:
+现在我们有了实现带参数操作的访问者。返回值呢？技术上，\texttt{visit()}和\texttt{accept()}函数没有要求返回\texttt{void}。它们可以返回任何其他东西。然而，它们必须全部返回相同类型的限制通常使这种能力无用。虚函数可以有协变返回类型，其中基类虚函数返回某个类的对象，派生类重写返回从该类派生的对象，但即使这样通常也太限制了。有另一个更简单的解决方案——每个访问者对象的\texttt{visit()}函数完全访问该对象的数据成员。我们没有理由不能将返回值存储在访问者类本身中并稍后访问它。这很好地适合最常见的用法，其中每个访问者添加不同的操作并且可能具有唯一的返回类型，但操作本身通常对层次结构中的所有类具有相同的返回类型。例如，我们可以使我们的\texttt{FamilyTreeVisitor}计算子对象的总数并通过访问者对象返回值：
 
 \begin{code}
 // Example 05
@@ -348,15 +348,15 @@ This approach imposes some limitations in multithreaded programs - the visitor i
 
 Let's return for a moment and examine the \texttt{FamilyTreeVisitor} implementation again. Note that it iterates over the child objects of the parent object and calls the same operation on each one, in turn. It does not, however, process the children of the child object - our family tree is only one-generation deep. The problem of visiting objects that contain other objects is very general and occurs rather often. Our motivational example from the very beginning of this chapter, the problem of serialization, demonstrates this need perfectly - every complex object is serialized by serializing its components, one by one, and they, in turn, are serialized the same way, until we get all the way down to the built-in types such as \texttt{int} and \texttt{double}, which we know how to read and write. The next section deals with visiting complex objects in a more comprehensive way than what we have done so far.
 
-\section{Visiting complex objects}
+\section{访问复杂对象}
 
-In the last section, we saw how the Visitor pattern allows us to add new operations to the existing hierarchy. In one of the examples, we visited a complex object that contained pointers to other objects. The visitor iterated over these pointers, in a limited way. We are now going to consider the general problem of visiting objects that are composed of other objects, or objects that contain other objects and build up to the demonstration of a working serialization/deserialization solution at the end.
+在上一节中，我们看到了访问者模式如何允许我们向现有层次结构添加新操作。在其中一个例子中，我们访问了包含指向其他对象的指针的复杂对象。访问者以有限的方式遍历这些指针。我们现在将考虑访问由其他对象组成的对象或包含其他对象的对象的一般问题，并构建到最后一个有效的序列化/反序列化解决方案的演示。
 
-\subsection{Visiting composite objects}
+\subsection{访问复合对象}
 
-The general idea of visiting complex objects is quite straightforward - when visiting the object itself, we generally do not know all the details of how to handle each component or contained object. But there is something else that does - the visitor for that object type is written specifically to handle that class and nothing else. This observation suggests that the correct way to handle the component objects is to simply visit each one, and thus delegate the problem to someone else (a generally powerful technique, in programming and otherwise).
+访问复杂对象的一般思想非常直接——当访问对象本身时，我们通常不知道如何处理每个组件或包含对象的所有细节。但是有其他东西知道——该对象类型的访问者专门为处理该类而不是其他任何东西而编写。这个观察表明处理组件对象的正确方法是简单地访问每一个，从而将问题委托给其他人（在编程和其他方面都是一般强大的技术）。
 
-Let's first demonstrate this idea on the example of a simple container class, such as the \texttt{Shelter} class, which can contain any number of pet objects representing the pets waiting for adoption:
+让我们首先在简单容器类的例子上演示这个想法，例如\texttt{Shelter}类，它可以包含任意数量的表示等待收养的宠物的宠物对象：
 
 \begin{code}
 // Example 06
@@ -375,11 +375,11 @@ class Shelter {
 };
 \end{code}
 
-This class is essentially an adapter to make a vector of pet objects visitable (we have discussed the Adapter pattern in detail in the eponymous chapter). Note that the objects of this class do own the pet objects they contain - when the \texttt{Shelter} object is destroyed, so are all the \texttt{Pet} objects in the vector. Any container of unique pointers is a container that owns its contained objects; this is how polymorphic objects should be stored in a container such as \texttt{std::vector} (For non-polymorphic objects we can store objects themselves, but that won't work in our case, objects derived from \texttt{Pet} are of different types.)
+这个类本质上是一个适配器，使宠物对象的向量可访问（我们已经在同名章节中详细讨论了适配器模式）。注意这个类的对象确实拥有它们包含的宠物对象——当\texttt{Shelter}对象被销毁时，向量中的所有\texttt{Pet}对象也被销毁。任何unique指针的容器都是拥有其包含对象的容器；这是多态对象应该存储在像\texttt{std::vector}这样的容器中的方式（对于非多态对象，我们可以存储对象本身，但在我们的情况下不起作用，从\texttt{Pet}派生的对象是不同类型的）。
 
-The code relevant to our current problem is, of course, \texttt{Shelter::accept()}, which determines how a \texttt{Shelter} object is visited. As you can see, we do not invoke the Visitor on the \texttt{Shelter} object itself. Instead, we delegate the visitation to each of the containing objects. Since our Visitors are already written to handle Pet objects, nothing more needs to be done. When \texttt{Shelter} is visited by, say, \texttt{FeedingVisitor}, every pet in the shelter gets fed, and we didn't have to write any special code to make it happen.
+与我们当前问题相关的代码当然是\texttt{Shelter::accept()}，它确定如何访问\texttt{Shelter}对象。如你所见，我们不在\texttt{Shelter}对象本身上调用访问者。相反，我们将访问委托给每个包含的对象。由于我们的访问者已经编写来处理Pet对象，不需要做更多事情。当\texttt{Shelter}被比如\texttt{FeedingVisitor}访问时，收容所中的每只宠物都得到喂食，我们不必编写任何特殊代码来实现它。
 
-Visitation of composite objects is done in a similar manner - if an object is composed of several smaller objects, we have to visit each of these objects. Let's consider an object representing a family with two family pets, a dog and a cat (the humans who serve the pets are not included in the following code, but we assume they are there too):
+复合对象的访问以类似的方式完成——如果对象由几个较小的对象组成，我们必须访问这些对象中的每一个。让我们考虑一个表示有两只家庭宠物（一只狗和一只猫）的家庭的对象（服务宠物的人类没有包括在以下代码中，但我们假设他们也在那里）：
 
 \begin{code}
 // Example 07
@@ -397,15 +397,15 @@ class Family {
 };
 \end{code}
 
-Again, visiting the family with a visitor from the \texttt{PetVisitor} hierarchy is delegated so that each \texttt{Pet} object is visited, and the visitors already have everything they need to handle these objects (of course, a \texttt{Family} object could accept visitors of other types as well, we would have to write separate \texttt{accept()} methods for them).
+同样，用来自\texttt{PetVisitor}层次结构的访问者访问家庭被委托，以便每个\texttt{Pet}对象被访问，访问者已经拥有处理这些对象所需的一切（当然，\texttt{Family}对象也可以接受其他类型的访问者，我们必须为它们编写单独的\texttt{accept()}方法）。
 
-Now, at last, we have all the pieces we need to tackle the problem of serialization and deserialization of arbitrary objects. The next subsection shows how this can be done using the Visitor pattern.
+现在，最后，我们拥有了解决任意对象序列化和反序列化问题所需的所有部分。下一个小节展示了如何使用访问者模式来完成这项工作。
 
-\subsection{Serialization and deserialization with Visitor}
+\subsection{使用访问者进行序列化和反序列化}
 
-The problem itself was described in detail in the previous section - for serialization, each object needs to be converted to a sequence of bits, and these bits need to be stored, copied, or sent. The first part of the action depends on the object (each object is converted differently) but the second part depends on the specific application of the serialization (saving to disk is different from sending across the network). The implementation depends on two factors, hence the need for double dispatch, which is exactly what the Visitor pattern provides. Furthermore, if we have a way to serialize some object and then deserialize it (reconstruct the object from the sequence of bits), we should use the same method when this object is included in another object.
+问题本身在前一节中已经详细描述——对于序列化，每个对象需要转换为位序列，这些位需要被存储、复制或发送。动作的第一部分取决于对象（每个对象的转换方式不同），但第二部分取决于序列化的具体应用（保存到磁盘与通过网络发送不同）。实现取决于两个因素，因此需要双重分派，这正是访问者模式提供的。此外，如果我们有一种序列化某个对象然后反序列化它（从位序列重构对象）的方法，当这个对象包含在另一个对象中时，我们应该使用相同的方法。
 
-To demonstrate serialization/deserialization of a class hierarchy using the Visitor pattern, we need a more complex hierarchy than the toy examples we have used so far. Let's consider this hierarchy of two-dimensional geometric objects:
+为了演示使用访问者模式对类层次结构进行序列化/反序列化，我们需要一个比迄今为止使用的玩具例子更复杂的层次结构。让我们考虑这个二维几何对象的层次结构：
 
 \begin{code}
 // Example 08
@@ -439,9 +439,9 @@ class Line : public Geometry {
 };
 \end{code}
 
-All objects are derived from the abstract \texttt{Geometry} base class, but the more complex object contains one or more of the simpler objects; for example, \texttt{Line} is defined by two \texttt{Point} objects. Note that, at the end of the day, all our objects are made of \texttt{double} numbers, and, therefore, will serialize into a sequence of numbers. The key is knowing which \texttt{double} represents which field of which object; we need this to restore the original objects correctly.
+所有对象都从抽象的\texttt{Geometry}基类派生，但更复杂的对象包含一个或多个更简单的对象；例如，\texttt{Line}由两个\texttt{Point}对象定义。注意，归根结底，我们所有的对象都是由\texttt{double}数字组成的，因此将序列化为数字序列。关键是知道哪个\texttt{double}代表哪个对象的哪个字段；我们需要这个来正确恢复原始对象。
 
-To serialize these objects using the Visitor pattern, we follow the same process we used in the last section. First, we need to declare the base Visitor class:
+要使用访问者模式序列化这些对象，我们遵循在上一节中使用的相同过程。首先，我们需要声明基访问者类：
 
 \begin{code}
 // Example 08
@@ -454,9 +454,9 @@ public:
 };
 \end{code}
 
-There is one additional detail here - we can also visit double values; each visitor would need to handle them appropriately (write them, read them, and so on). Visiting any geometry object will result, eventually, in visiting the numbers it is composed of.
+这里有一个额外的细节——我们也可以访问double值；每个访问者需要适当地处理它们（写入它们、读取它们等等）。访问任何几何对象最终将导致访问组成它的数字。
 
-Our base \texttt{Geometry} class and all the classes derived from it need to accept this visitor:
+我们的基\texttt{Geometry}类和从它派生的所有类都需要接受这个访问者：
 
 \begin{code}
 // Example 08
@@ -467,7 +467,7 @@ class Geometry {
 };
 \end{code}
 
-There is, of course, no way to add an \texttt{accept()} member function to double, but we won't have to. The \texttt{accept()} member functions for the derived classes, each of which is composed of one or more numbers and other classes, visit every data member in order:
+当然，没有办法向double添加\texttt{accept()}成员函数，但我们不必这样做。派生类的\texttt{accept()}成员函数，每个都由一个或多个数字和其他类组成，按顺序访问每个数据成员：
 
 \begin{code}
 // Example 08
@@ -477,15 +477,23 @@ void Point::accept(Visitor& v) {
 }
 void Circle::accept(Visitor& v) {
   v.visit(c_); // Point
+  \begin{code}
+// Example 08
+void Point::accept(Visitor& v) {
+  v.visit(x_); // double
+  v.visit(y_); // double
+}
+void Circle::accept(Visitor& v) {
+  v.visit(c_); // Point
   v.visit(r_); // double
 }
-void Point::accept(Visitor& v) {
+void Line::accept(Visitor& v) {
   v.visit(p1_); // Point
   v.visit(p2_); // Point
 }
 \end{code}
 
-The concrete Visitor classes, all derived from the base \texttt{Visitor} class, are responsible for the specific mechanisms of serialization and deserialization. The order in which the objects are broken down into their parts, all the way down to the numbers, is controlled by each object, but the visitors determine what is done with these numbers. For example, we can serialize all objects into a string using the formatted I/O (similar to what we get if we print the numbers into \texttt{cout}):
+具体的访问者类，全部从基\texttt{Visitor}类派生，负责序列化和反序列化的具体机制。对象被分解为其组成部分直到数字的顺序由每个对象控制，但访问者决定对这些数字做什么。例如，我们可以使用格式化I/O将所有对象序列化为字符串（类似于我们将数字打印到\texttt{cout}时得到的结果）：
 
 \begin{code}
 // Example 08
@@ -501,7 +509,7 @@ public:
 };
 \end{code}
 
-The string is accumulated in \texttt{stringstream} until all the necessary objects are serialized:
+字符串在\texttt{stringstream}中累积，直到所有必要的对象被序列化：
 
 \begin{code}
 // Example 08
@@ -513,7 +521,7 @@ serializer.visit(c);
 std::string s(serializer.str());
 \end{code}
 
-Now that we have the objects printed into the \texttt{s} string, we can restore them from this string, perhaps on a different machine (if we arranged for the string to be sent there). First, we need the deserializing Visitor:
+现在我们将对象打印到\texttt{s}字符串中，我们可以从这个字符串恢复它们，也许在不同的机器上（如果我们安排将字符串发送到那里）。首先，我们需要反序列化访问者：
 
 \begin{code}
 // Example 08
@@ -531,7 +539,7 @@ class StringDeserializeVisitor : public Visitor {
 };
 \end{code}
 
-This Visitor reads the numbers from the string and saves them in the variables given to it by the object that is visited. The key to successful deserialization is to read the numbers in the same order as they were saved - for example, if we started by writing \emph{X} and \emph{Y} coordinates of a point, we should construct a point from the first two numbers we read and use them as \emph{X} and \emph{Y} coordinates. If the first point we wrote was the endpoint of a line, we should use the point we constructed as the endpoint of the new line. The beauty of the Visitor pattern is that the functions that do the actual reading and writing don't need to do anything special to preserve this order - the order is determined by each object and is guaranteed to be the same for all visitors (the object makes no distinction between the specific visitors and doesn't even know what kind of visitor is it). All we need to do is to visit the objects in the same order they were serialized in:
+这个访问者从字符串中读取数字并将它们保存在被访问对象给它的变量中。成功反序列化的关键是按照保存时的相同顺序读取数字——例如，如果我们开始时写入点的\emph{X}和\emph{Y}坐标，我们应该从我们读取的前两个数字构造一个点，并将它们用作\emph{X}和\emph{Y}坐标。如果我们写入的第一个点是线的端点，我们应该使用我们构造的点作为新线的端点。访问者模式的美妙之处在于执行实际读写的函数不需要做任何特殊的事情来保持这个顺序——顺序由每个对象确定，并保证对所有访问者都是相同的（对象不区分特定的访问者，甚至不知道它是什么类型的访问者）。我们需要做的就是按照它们被序列化的相同顺序访问对象：
 
 \begin{code}
 // Example 08
@@ -543,7 +551,7 @@ deserializer.visit(l1); // Restored Line l
 deserializer.visit(c1); // Restored Circle c
 \end{code}
 
-So far, we have known which objects are serialized and in what order. Therefore, we can deserialize the same objects in the same order. A more general case is when we don't know what objects to expect during deserialization - the objects are stored in a visitable container, similar to \texttt{Shelter} in the earlier example, which has to ensure that the objects are serialized and deserialized in the same order. For example, consider this class, which stores a geometry represented as an intersection of two other geometries:
+到目前为止，我们已经知道哪些对象被序列化以及以什么顺序。因此，我们可以按相同顺序反序列化相同的对象。更一般的情况是当我们在反序列化期间不知道期望什么对象时——对象存储在可访问的容器中，类似于前面例子中的\texttt{Shelter}，它必须确保对象以相同的顺序序列化和反序列化。例如，考虑这个类，它存储表示为两个其他几何图形交集的几何图形：
 
 \begin{code}
 // Example 09
@@ -562,9 +570,9 @@ class Intersection : public Geometry {
 };
 \end{code}
 
-Serialization of this object is straightforward - we serialize both geometries, in order, by delegating the details to these objects. We cannot call \texttt{v.visit()} directly because we do not know the types of the \texttt{*g1\_} and \texttt{*g2\_} geometries, but we can let these objects dispatch the call as appropriate. But deserialization, as written, will fail - the geometry pointers are \texttt{null}, there are no objects allocated yet, and we do not know what type of objects should be allocated. Somehow, we need to encode the types of objects in the serialized stream first, then construct them based on these encoded types. There is another pattern that offers the standard solution for this problem, and that is the Factory pattern (it is quite common to have to use more than one design pattern when building a complex system).
+这个对象的序列化很直接——我们按顺序序列化两个几何图形，通过将细节委托给这些对象。我们不能直接调用\texttt{v.visit()}，因为我们不知道\texttt{*g1\_}和\texttt{*g2\_}几何图形的类型，但我们可以让这些对象适当地分派调用。但反序列化，如所写的，将失败——几何图形指针是\texttt{null}，还没有分配对象，我们不知道应该分配什么类型的对象。不知何故，我们需要首先在序列化流中编码对象的类型，然后基于这些编码类型构造它们。有另一个模式为这个问题提供标准解决方案，那就是工厂模式（在构建复杂系统时必须使用多个设计模式是很常见的）。
 
-There are several ways in which this can be done, but they all boil down to converting types to numbers and serializing those numbers. In our case, we have to know the complete list of geometry types when we declare the base \texttt{Visitor} class, so that we can also define an enumeration for all these types at the same time:
+有几种方法可以做到这一点，但它们都归结为将类型转换为数字并序列化这些数字。在我们的情况下，当我们声明基\texttt{Visitor}类时，我们必须知道几何类型的完整列表，以便我们也可以同时为所有这些类型定义枚举：
 
 \begin{code}
 // Example 09
@@ -581,7 +589,7 @@ class Visitor {
 };
 \end{code}
 
-It is not essential that \texttt{enum\ type\_tag} be defined inside the \texttt{Geometry} class, or that the \texttt{make\_geometry} factory constructor be a static member function of the \texttt{Visitor} class. They can be declared outside of any class as well, but the virtual \texttt{tag()} method that will return the correct tag for every derived geometry type needs to be declared exactly as shown. The \texttt{tag()} overrides must be defined in every derived \texttt{Geometry} class, for example, the \texttt{Point} class:
+\texttt{enum\ type\_tag}在\texttt{Geometry}类内部定义，或者\texttt{make\_geometry}工厂构造函数是\texttt{Visitor}类的静态成员函数，这些并不是必要的。它们也可以在任何类之外声明，但将为每个派生几何类型返回正确标签的虚\texttt{tag()}方法需要完全按所示声明。\texttt{tag()}重写必须在每个派生\texttt{Geometry}类中定义，例如，\texttt{Point}类：
 
 \begin{code}
 // Example 09
@@ -592,9 +600,9 @@ class Point : public Geometry {
 };
 \end{code}
 
-Other derived classes have to be similarly modified.
+其他派生类必须类似地修改。
 
-Then we need to define the factory constructor:
+然后我们需要定义工厂构造函数：
 
 \begin{code}
 // Example 09
@@ -608,7 +616,7 @@ Geometry* Visitor::make_geometry(Geometry::type_tag tag) {
 }
 \end{code}
 
-This factory function constructs the right derived object depending on the specified type tag. All that is left is for the \texttt{Intersection} object to serialize and deserialize the tags of the two geometries that form the intersection:
+这个工厂函数根据指定的类型标签构造正确的派生对象。剩下的就是让\texttt{Intersection}对象序列化和反序列化构成交集的两个几何图形的标签：
 
 \begin{code}
 // Example 09
@@ -629,7 +637,7 @@ class Intersection : public Geometry {
 };
 \end{code}
 
-First, the tags are sent to the visitor. The serializing visitor should write the tags along with the rest of the data:
+首先，标签被发送到访问者。序列化访问者应该与其余数据一起写入标签：
 
 \begin{code}
 // Example 09
@@ -642,7 +650,7 @@ class StringSerializeVisitor : public Visitor {
 };
 \end{code}
 
-The deserializing visitor has to read the tag (actually, it reads a \texttt{size\_t} number and converts it to the tag):
+反序列化访问者必须读取标签（实际上，它读取一个\texttt{size\_t}数字并将其转换为标签）：
 
 \begin{code}
 // Example 09
@@ -657,17 +665,17 @@ class StringDeserializeVisitor : public Visitor {
 };
 \end{code}
 
-Once the tag is restored by the deserializing visitor, the \texttt{Intersection} object can invoke the factory constructor to construct the right geometry object. Now we can deserialize this object from the stream, and our \texttt{Intersection} is restored as an exact copy of the one we serialized. Note that there are other ways to package visiting the tags and the calls to the factory constructor; the optimal solution depends on the roles of different objects in the system - for example, the deserializing visitor may construct the objects based on the tag instead of the composite object that owns these geometries. The sequence of events that need to take place, however, remains the same.
+一旦标签被反序列化访问者恢复，\texttt{Intersection}对象可以调用工厂构造函数来构造正确的几何对象。现在我们可以从流中反序列化这个对象，我们的\texttt{Intersection}被恢复为我们序列化的对象的精确副本。注意有其他方法来打包访问标签和对工厂构造函数的调用；最佳解决方案取决于系统中不同对象的角色——例如，反序列化访问者可以基于标签构造对象，而不是拥有这些几何图形的复合对象。然而，需要发生的事件序列保持相同。
 
-So far, we have been learning about the classic object-oriented Visitor pattern. Before we see what the C++-specific twists on the classic pattern are, we should learn about another type of visitor that addresses some of the inconveniences in the Visitor pattern.
+到目前为止，我们一直在学习经典的面向对象访问者模式。在我们看到经典模式的C++特定变化之前，我们应该了解另一种类型的访问者，它解决了访问者模式中的一些不便之处。
 
-\section{Acyclic Visitor}
+\section{无环访问者}
 
-The Visitor pattern, as we have seen it so far, does what we wanted it to do. It separates the implementation of the algorithm from the object that is the data for the algorithm, and it allows us to select the correct implementation based on two run-time factors - the specific object type and the concrete operation we want to perform, both of which are selected from their corresponding class hierarchies. There is, however, a fly in the ointment - we wanted to reduce complexity and simplified the code maintenance, and we did, but now we have to maintain two parallel class hierarchies, the visitable objects and the visitors, and the dependencies between the two are non-trivial. The worst part of these dependencies is that they form a cycle - the Visitor object depends on the types of the visitable objects (there is an overload of the \texttt{visit()} methods for every visitable type), and the base visitable type depends on the base visitor type. The first half of this dependency is the worst. Every time a new object is added to the hierarchy, every visitor must be updated. The second half does not take much work from the programmer as new visitors can be added at any time and without any other changes - this is the whole point of the Visitor pattern. But there is still the compile-time dependency of the base visitable class, and, perforce, all derived classes, on the base Visitor class. Were the Visitor class to change, every file that uses one of the visitable classes would need to be recompiled. The visitors are, for the most part, stable in their interface and implementation, except for one case - adding a new visitable class. Thus, the cycle in action looks like this - a new class is added to the hierarchy of the visitable objects. The Visitor classes need to be updated with the new type. Since the base Visitor class was changed, the base visitable class and every line of code that depends on it must be recompiled, including the code that does not use the new visitable class, only the old ones. Even using forward declarations whenever possible does not help - if a new visitable class is added, all the old ones must be recompiled.
+正如我们迄今为止所看到的，访问者模式做了我们想要它做的事情。它将算法的实现与作为算法数据的对象分离，它允许我们基于两个运行时因素选择正确的实现——特定对象类型和我们想要执行的具体操作，两者都从其相应的类层次结构中选择。然而，美中不足的是——我们想要减少复杂性并简化代码维护，我们做到了，但现在我们必须维护两个并行的类层次结构，可访问对象和访问者，两者之间的依赖关系是非平凡的。这些依赖关系的最坏部分是它们形成了一个循环——访问者对象依赖于可访问对象的类型（每个可访问类型都有\texttt{visit()}方法的重载），基本可访问类型依赖于基本访问者类型。这种依赖的前半部分是最糟糕的。每次向层次结构添加新对象时，每个访问者都必须更新。后半部分不需要程序员做太多工作，因为可以随时添加新访问者而无需任何其他更改——这是访问者模式的全部要点。但基本可访问类对基本访问者类仍然存在编译时依赖，因此，所有派生类也是如此。如果访问者类发生更改，使用可访问类之一的每个文件都需要重新编译。访问者在其接口和实现方面大多是稳定的，除了一种情况——添加新的可访问类。因此，实际的循环看起来像这样——向可访问对象的层次结构添加新类。访问者类需要用新类型更新。由于基本访问者类已更改，基本可访问类和依赖于它的每行代码都必须重新编译，包括不使用新可访问类的代码，只使用旧的。即使尽可能使用前向声明也无济于事——如果添加了新的可访问类，所有旧的都必须重新编译。
 
-The additional problem of the traditional Visitor pattern is that every possible combination of the object type and the visitor type must be handled. Often there are cases when some combinations do not make sense, and certain objects will never be visited by some types of visitors. But we cannot take advantage of this as every combination must have a defined action (the action could be very simple, but still, every Visitor class must have the full set of \texttt{visit()} member functions defined).
+传统访问者模式的另一个问题是必须处理对象类型和访问者类型的每种可能组合。通常存在一些组合没有意义的情况，某些对象永远不会被某些类型的访问者访问。但我们不能利用这一点，因为每种组合都必须有定义的动作（动作可能非常简单，但每个访问者类仍然必须定义完整的\texttt{visit()}成员函数集）。
 
-The Acyclic Visitor pattern is a variant of the Visitor pattern that is specifically designed to break the dependency cycle and allow partial visitation. The base visitable class for the Acyclic Visitor pattern is the same as for the regular Visitor pattern:
+无环访问者模式是访问者模式的变体，专门设计用于打破依赖循环并允许部分访问。无环访问者模式的基本可访问类与常规访问者模式相同：
 
 \begin{code}
 // Example 10
@@ -679,7 +687,7 @@ class Pet {
 };
 \end{code}
 
-However, that is where the similarity ends. The base Visitor class does not have the \texttt{visit()} overloads for every visitable. In fact, it has no \texttt{visit()} member function at all:
+然而，这就是相似性结束的地方。基本访问者类没有每个可访问对象的\texttt{visit()}重载。事实上，它根本没有\texttt{visit()}成员函数：
 
 \begin{code}
 // Example 10
@@ -689,7 +697,7 @@ class PetVisitor {
 };
 \end{code}
 
-So, who does the visiting then? For every derived class in the original hierarchy, we also declare the corresponding Visitor class, and that is where the \texttt{visit()} function is:
+那么，谁来做访问呢？对于原始层次结构中的每个派生类，我们还声明相应的访问者类，这就是\texttt{visit()}函数所在的地方：
 
 \begin{code}
 // Example 10
@@ -711,7 +719,7 @@ class Cat : public Pet {
 };
 \end{code}
 
-Note that each visitor can visit only the class it was designed for - the \texttt{CatVisitor} visits only \texttt{Cat} objects, the \texttt{DogVisitor} visits only \texttt{Dog} objects, and so on. The magic is in the new \texttt{accept()} function - when a class is asked to accept a visitor, it first uses \texttt{dynamic\_cast} to check whether this is the right type of visitor. If it is, all is well, and the visitor is accepted. If it isn't, we have a problem and must handle the error (the exact mechanism of error handling depends on the application; for example, an exception can be thrown). The concrete Visitor classes, therefore, must be derived from both the common \texttt{PetVisitor} base class and the class-specific base class such as \texttt{CatVisitor}:
+注意每个访问者只能访问它设计访问的类——\texttt{CatVisitor}只访问\texttt{Cat}对象，\texttt{DogVisitor}只访问\texttt{Dog}对象，依此类推。魔法在于新的\texttt{accept()}函数——当一个类被要求接受访问者时，它首先使用\texttt{dynamic\_cast}检查这是否是正确类型的访问者。如果是，一切都好，访问者被接受。如果不是，我们就有问题了，必须处理错误（确切的错误处理机制取决于应用程序；例如，可以抛出异常）。因此，具体的访问者类必须从通用的\texttt{PetVisitor}基类和特定类的基类（如\texttt{CatVisitor}）派生：
 
 \begin{code}
 // Example 10
@@ -730,7 +738,7 @@ class FeedingVisitor : public PetVisitor,
 };
 \end{code}
 
-Each concrete visitor class is derived from the common visitor base and from every per-type visitor base (\texttt{CatVisitor}, \texttt{DogVisitor}, and so on) for every type that must be handled by this visitor. On the other hand, if this visitor is not designed to visit some of the classes in the hierarchy, we can simply omit the corresponding visitor base, and then we won't need to implement the virtual function override either:
+每个具体访问者类都从通用访问者基类和每个必须由该访问者处理的类型的每个按类型访问者基类（\texttt{CatVisitor}、\texttt{DogVisitor}等）派生。另一方面，如果这个访问者不是为了访问层次结构中的某些类而设计的，我们可以简单地省略相应的访问者基类，然后我们也不需要实现虚函数重写：
 
 \begin{code}
 // Example 10
@@ -746,7 +754,7 @@ class BathingVisitor : public PetVisitor,
 };
 \end{code}
 
-The invocation of the Acyclic Visitor pattern is done in exactly the same way as with the regular Visitor pattern:
+无环访问者模式的调用与常规访问者模式完全相同：
 
 \begin{code}
 // Example 10
@@ -760,19 +768,19 @@ BathingVisitor bv;
 d->accept(bv);
 \end{code}
 
-If we try to visit an object that is not supported by the particular Visitor, the error is detected. Therefore, we have solved the problem of partial visitation. What about the dependency cycle? That is taken care of as well - the common \texttt{PetVisitor} base class does not need to list the complete hierarchy of visitable objects, and the concrete visitable classes depend only on their per-class visitors, but not on any visitors for other types. Therefore, when another visitable object is added to the hierarchy, the existing ones do not need to be recompiled.
+如果我们试图访问特定访问者不支持的对象，会检测到错误。因此，我们解决了部分访问的问题。那循环依赖呢？这也得到了解决——通用的\texttt{PetVisitor}基类不需要列出可访问对象的完整层次结构，具体的可访问类只依赖于其按类访问者，而不依赖于其他类型的任何访问者。因此，当向层次结构添加另一个可访问对象时，现有的对象不需要重新编译。
 
-The Acyclic Visitor pattern looks so good that one has to wonder, \emph{why not use it all the time instead of the regular Visitor pattern?} There are a few reasons. First of all, the Acyclic Visitor pattern uses \texttt{dynamic\_cast} to cast from one base class to another (sometimes called cross-cast). This operation is typically more expensive than the virtual function call, so the Acyclic Visitor pattern is slower than the alternative. Also, the Acyclic Visitor pattern requires a Visitor class for every visitable class, so twice as many classes, and it uses multiple inheritance with a lot of base classes. That second issue is not much of a problem for most modern compilers, but many programmers find it difficult to deal with multiple inheritance. Whether the first issue - the runtime cost of the dynamic cast - is a problem depends on the application, but it is something you need to be aware of. On the other hand, the Acyclic Visitor pattern really shines when the visitable object hierarchy changes frequently or when the cost of recompiling the entire code base is significant.
+无环访问者模式看起来如此之好，人们不得不想，\emph{为什么不一直使用它而不是常规访问者模式？}有几个原因。首先，无环访问者模式使用\texttt{dynamic\_cast}从一个基类转换到另一个基类（有时称为交叉转换）。这个操作通常比虚函数调用更昂贵，所以无环访问者模式比替代方案更慢。另外，无环访问者模式需要为每个可访问类设置一个访问者类，所以类的数量是两倍，并且它使用多重继承与许多基类。第二个问题对于大多数现代编译器来说不是什么大问题，但许多程序员发现处理多重继承很困难。第一个问题——动态转换的运行时成本——是否是问题取决于应用程序，但这是你需要注意的。另一方面，当可访问对象层次结构经常变化或重新编译整个代码库的成本很大时，无环访问者模式真的很出色。
 
-You may have noticed one more issue with the Acyclic Visitor pattern - it has a lot of boilerplate code. Several lines of code have to be copied for every visitable class. In fact, the regular Visitor pattern suffers from the same problem in that implementing either kind of visitor involves a lot of repetitive typing. But C++ has a special set of tools to replace code repetition with code reuse: that is exactly what generic programming is for. We shall see next how the Visitor pattern is adapted to modern C++.
+你可能已经注意到无环访问者模式的另一个问题——它有很多样板代码。每个可访问类都必须复制几行代码。事实上，常规访问者模式也受到同样的问题困扰，因为实现任何一种访问者都涉及大量重复的输入。但C++有一套特殊的工具来用代码重用代替代码重复：这正是泛型编程的用途。接下来我们将看到访问者模式如何适应现代C++。
 
-\section{Visitors in modern C++}
+\section{现代C++中的访问者}
 
-As we have just seen, the Visitor pattern promotes the separation of concerns; for example, the order of serialization and the mechanism of serialization are made independent, and a separate class is responsible for each. The pattern also simplifies code maintenance by collecting all code that performs a given task in one place. What the Visitor pattern does not promote is code reuse with no duplication. But that's the object-oriented Visitor pattern, before modern C++. Let's see what we can do with the generic capabilities of C++, starting from the regular Visitor pattern.
+正如我们刚才看到的，访问者模式促进了关注点的分离；例如，序列化的顺序和序列化的机制是独立的，单独的类负责每一个。该模式还通过将执行给定任务的所有代码收集在一个地方来简化代码维护。访问者模式不提倡的是没有重复的代码重用。但那是面向对象的访问者模式，在现代C++之前。让我们看看我们可以用C++的泛型能力做什么，从常规访问者模式开始。
 
-\subsection{Generic Visitor}
+\subsection{泛型访问者}
 
-We are going to try to reduce the boilerplate code in the implementation of the Visitor pattern. Let's start with the \texttt{accept()} member function, which must be copied into every visitable class; it always looks the same:
+我们将尝试减少访问者模式实现中的样板代码。让我们从\texttt{accept()}成员函数开始，它必须复制到每个可访问类中；它总是看起来相同：
 
 \begin{code}
 class Cat : public Pet {
@@ -780,7 +788,7 @@ class Cat : public Pet {
 };
 \end{code}
 
-This function cannot be moved to the base class because we need to call the visitor with the actual type, not the base type - \texttt{visit()} accepts \texttt{Cat*}, \texttt{Dog*}, and so on, but not \texttt{Pet*}. We can get a template to generate this function for us if we introduce an intermediate templated base class:
+这个函数不能移动到基类，因为我们需要用实际类型调用访问者，而不是基类型——\texttt{visit()}接受\texttt{Cat*}、\texttt{Dog*}等，但不接受\texttt{Pet*}。如果我们引入一个中间模板化基类，我们可以让模板为我们生成这个函数：
 
 \begin{code}
 // Example 11
@@ -803,7 +811,7 @@ class Visitable : public Pet {
 };
 \end{code}
 
-The template is parameterized by the derived class. In this regard, it is similar to the \textbf{Curiously Recurring Template Pattern} (\textbf{CRTP}), but here we do not inherit from the template parameter - we use it to cast the \texttt{this} pointer to the correct derived class pointer. Now we just need to derive each pet class from the right instantiation of the template, and we get the \texttt{accept()} function automatically:
+模板由派生类参数化。在这方面，它类似于\textbf{奇异递归模板模式}（\textbf{CRTP}），但这里我们不从模板参数继承——我们使用它将\texttt{this}指针转换为正确的派生类指针。现在我们只需要从模板的正确实例化派生每个宠物类，我们就自动获得了\texttt{accept()}函数：
 
 \begin{code}
 // Example 11
@@ -815,9 +823,9 @@ class Dog : public Visitable<Dog> {
 };
 \end{code}
 
-That takes care of half of the boilerplate code - the code inside the derived visitable objects. Now there is only the other half left: the code inside the Visitor classes, where we have to type the same declaration over and over again for every visitable class. We can't do much about the specific visitors; after all, that's where the real work is done, and, presumably, we need to do different things for different visitable classes (otherwise why use double dispatch at all?)
+这解决了一半的样板代码——派生可访问对象内部的代码。现在只剩下另一半：访问者类内部的代码，我们必须为每个可访问类一遍又一遍地输入相同的声明。我们对特定访问者无能为力；毕竟，这是真正工作完成的地方，而且，大概我们需要为不同的可访问类做不同的事情（否则为什么要使用双重分派？）
 
-However, we can simplify the declaration of the base Visitor class if we introduce this generic Visitor template:
+但是，如果我们引入这个泛型访问者模板，我们可以简化基本访问者类的声明：
 
 \begin{code}
 // Example 12
@@ -834,13 +842,13 @@ class Visitor<T, Types ...> : public Visitor<Types ...> {
 };
 \end{code}
 
-Note that we have to implement this template only once: not once for each class hierarchy, but once forever (or at least until we need to change the signature of the \texttt{visit()} function, for example, to add arguments). This is a good generic library class. Once we have it, declaring a visitor base for a particular class hierarchy becomes so trivial that it feels anticlimactic:
+注意我们只需要实现这个模板一次：不是为每个类层次结构实现一次，而是永远实现一次（或者至少直到我们需要更改\texttt{visit()}函数的签名，例如添加参数）。这是一个很好的泛型库类。一旦我们有了它，为特定类层次结构声明访问者基类就变得如此简单，感觉虎头蛇尾：
 
 \begin{code}
 // Example 12
 \end{code}
 
-Notice the somewhat unusual syntax with the \texttt{class} keyword - it combines the template argument list with a forward declaration and is equivalent to the following:
+注意带有\texttt{class}关键字的有些不寻常的语法——它将模板参数列表与前向声明结合起来，等价于以下内容：
 
 \begin{code}
 class Cat;
@@ -848,9 +856,9 @@ class Dog;
 using PetVisitor = Visitor<Cat, Dog>;
 \end{code}
 
-How does the Generic Visitor base work? It uses the variadic template to capture an arbitrary number of type arguments, but the primary template is only declared, not defined. The rest are specializations. First, we have the special case of one type argument. We declare the pure \texttt{visit()} virtual member function for that type. Then we have a specialization for more than one type argument, where the first argument is explicit, and the rest are in the parameter pack. We generate the \texttt{visit()} function for the explicitly specified type and inherit the rest of them from an instantiation of the same variadic template but with one less argument. The instantiation is recursive until we are down to only one type argument, and then the first specialization is used.
+泛型访问者基类是如何工作的？它使用可变参数模板来捕获任意数量的类型参数，但主模板只是声明的，未定义的。其余的是特化。首先，我们有一个类型参数的特殊情况。我们为该类型声明纯\texttt{visit()}虚成员函数。然后我们有一个超过一个类型参数的特化，其中第一个参数是显式的，其余的在参数包中。我们为显式指定的类型生成\texttt{visit()}函数，并从同一个可变参数模板的实例化继承其余的函数，但参数少一个。实例化是递归的，直到我们只剩下一个类型参数，然后使用第一个特化。
 
-This generic and reusable code has one restriction: it does not handle deep hierarchies. Recall that each visitable class is derived from a common base:
+这个泛型和可重用的代码有一个限制：它不能处理深层次结构。回想一下，每个可访问类都派生自一个通用基类：
 
 \begin{code}
 template <typename Derived>
@@ -858,20 +866,20 @@ class Visitable : public Pet {...};
 class Cat : public Visitable<Cat> {...};
 \end{code}
 
-If we were to derive another class from \texttt{Cat}, it would have to be derived from \texttt{Visitable} as well:
+如果我们要从\texttt{Cat}派生另一个类，它也必须从\texttt{Visitable}派生：
 
 \begin{code}
 class SiameseCat : public Cat,
                    public Visitable<SiameseCat> {...};
 \end{code}
 
-We cannot just derive \texttt{SiameseCat} from \texttt{Cat} because it is the Visitable template that provides the \texttt{accept()} method for each derived class. But we can't use the double inheritance as we just tried either, because now, the \texttt{SiameseCat} class inherits from Pet twice: once through the \texttt{Cat} base and once through the \texttt{Visitable} base. The only solution to this, if you still want to use the templates to generate \texttt{accept()} methods, is to separate the hierarchy so each visitable class such as \texttt{Cat} inherits from \texttt{Visitable} and from a corresponding base class \texttt{CatBase} that has all the ``cat-specific'' functionality except for the visitation support. This doubles the number of classes in the hierarchy and is a major drawback.
+我们不能只是从\texttt{Cat}派生\texttt{SiameseCat}，因为是Visitable模板为每个派生类提供了\texttt{accept()}方法。但我们也不能使用我们刚才尝试的双重继承，因为现在，\texttt{SiameseCat}类从Pet继承了两次：一次通过\texttt{Cat}基类，一次通过\texttt{Visitable}基类。如果你仍然想使用模板来生成\texttt{accept()}方法，唯一的解决方案是分离层次结构，使每个可访问类（如\texttt{Cat}）从\texttt{Visitable}和相应的基类\texttt{CatBase}继承，后者具有除了访问支持之外的所有"猫特定"功能。这使层次结构中的类数量翻倍，是一个主要缺点。
 
-Now that we have the boilerplate visitor code generated by templates, we can also make it simpler to define concrete visitors.
+现在我们有了由模板生成的样板访问者代码，我们也可以简化具体访问者的定义。
 
-\subsection{Lambda Visitor}
+\subsection{Lambda访问者}
 
-Most of the work in defining a concrete visitor is writing code for the actual work that has to happen for every visitable object. There is not a lot of boilerplate code in a specific visitor class. But sometimes we may not want to declare the class itself. Think about lambda expressions - anything that can be done with a lambda expression can also be done with an explicitly declared callable class because lambdas are (anonymous) callable classes. Nonetheless, we find lambda expressions very useful for writing one-off callable objects. Similarly, we may want to write a visitor without explicitly naming it - a lambda Visitor. We would want it to look something like this:
+定义具体访问者的大部分工作是为每个可访问对象编写必须发生的实际工作的代码。在特定访问者类中没有很多样板代码。但有时我们可能不想声明类本身。想想lambda表达式——任何可以用lambda表达式完成的事情也可以用显式声明的可调用类来完成，因为lambda是（匿名）可调用类。尽管如此，我们发现lambda表达式对于编写一次性可调用对象非常有用。类似地，我们可能想要编写一个访问者而不显式命名它——一个lambda访问者。我们希望它看起来像这样：
 
 \begin{code}
 auto v(lambda_visitor<PetVisitor>(
@@ -885,17 +893,17 @@ auto v(lambda_visitor<PetVisitor>(
 pet->accept(v);
 \end{code}
 
-There are two problems to be solved - how to create a class that handles a list of types and corresponding objects (in our case, the visitable types and the corresponding lambdas), and how to generate a set of overloaded functions using lambda expressions.
+有两个问题需要解决——如何创建一个处理类型列表和相应对象的类（在我们的情况下，可访问类型和相应的lambda），以及如何使用lambda表达式生成一组重载函数。
 
-The former problem will require us to recursively instantiate a template on the parameter pack, peeling off one argument at a time. The solution to the latter problem is similar to the overload set of the lambda expression, which was described in the chapter on class templates. We could use the overload set from that chapter, but we can use the recursive template instantiation that we need anyway, to build the overloaded set of functions directly.
+前一个问题将需要我们在参数包上递归实例化模板，每次剥离一个参数。后一个问题的解决方案类似于lambda表达式的重载集，这在类模板章节中已经描述过。我们可以使用那一章的重载集，但我们可以使用我们需要的递归模板实例化来直接构建重载函数集。
 
-There is going to be one new challenge in this implementation - we have to process not one but two lists of types. The first list has all visitable types in it; in our case, \texttt{Cat} and \texttt{Dog}. The second list has the types of lambda expressions, one for each visitable type. We have not seen a variadic template with two parameter packs yet, and for a good reason - it is not possible to simply declare \texttt{template\textless{}typename...\ A,\ typename...\ B\textgreater{}} as the compiler would not know where the first list ends and the second begins. The trick is to hide one or both lists of types inside other templates. In our case, we already have the \texttt{Visitor} template that is instantiated on the list of visitable types:
+这个实现中将有一个新的挑战——我们必须处理不是一个而是两个类型列表。第一个列表包含所有可访问类型；在我们的情况下，\texttt{Cat}和\texttt{Dog}。第二个列表具有lambda表达式的类型，每个可访问类型一个。我们还没有看到带有两个参数包的可变参数模板，这是有充分理由的——不可能简单地声明\texttt{template\textless{}typename...\ A,\ typename...\ B\textgreater{}}，因为编译器不知道第一个列表在哪里结束，第二个列表在哪里开始。诀窍是将一个或两个类型列表隐藏在其他模板中。在我们的情况下，我们已经有了在可访问类型列表上实例化的\texttt{Visitor}模板：
 
 \begin{code}
 using PetVisitor = Visitor<class Cat, class Dog>;
 \end{code}
 
-We can extract this list from the \texttt{Visitor} template and match each type with its lambda expression. The partial specialization syntax used to process two parameter packs in sync is tricky, so we will work through it in steps. First of all, we need to declare the general template for our \texttt{LambdaVisitor} class:
+我们可以从\texttt{Visitor}模板中提取这个列表，并将每个类型与其lambda表达式匹配。用于同步处理两个参数包的偏特化语法很棘手，所以我们将分步骤进行。首先，我们需要为我们的\texttt{LambdaVisitor}类声明一般模板：
 
 \begin{code}
 // Example 13
@@ -903,7 +911,7 @@ template <typename Base, typename...>
 class LambdaVisitor;
 \end{code}
 
-Note that there is only one general parameter pack here, plus the base class for the visitor (in our case, it will be \texttt{PetVisitor}). This template must be declared, but it is never going to be used - we will provide a specialization for every case that needs to be handled. The first specialization is used when there is only one visitable type and one corresponding lambda expression:
+注意这里只有一个通用参数包，加上访问者的基类（在我们的情况下，它将是\texttt{PetVisitor}）。这个模板必须声明，但它永远不会被使用——我们将为每个需要处理的情况提供特化。第一个特化用于只有一个可访问类型和一个相应lambda表达式的情况：
 
 \begin{code}
 // Example 13
@@ -919,9 +927,9 @@ class LambdaVisitor<Base, Visitor<T1>, F1> :
 };
 \end{code}
 
-This specialization, in addition to handling the case where we have only one visitable type, is used as the last instantiation in every chain of recursive template instantiations. Since it is always the first base class in the recursive hierarchy of \texttt{LambdaVisitor} instantiations, it is the only one that directly inherits from the base Visitor class such as \texttt{PetVisitor}. Note that, even with a single \texttt{T1} visitable type, we use the \texttt{Visitor} template as a wrapper for it. This is done in preparation for the general case where we will have a list of types whose length is unknown. The two constructors store the \texttt{f1} lambda expression inside the \texttt{LambdaVisitor} class, using move instead of copy if possible. Finally, the \texttt{visit(T1*)} virtual function override simply forwards the call to the lambda expression. It may appear simpler, at first glance, to inherit publicly from \texttt{F1} and just agree to use the functional calling syntax (in other words, to rename all calls to \texttt{visit()} to calls to \texttt{operator()} everywhere). This is not going to work; we need the indirection because the \texttt{operator()} instance of the lambda expression itself cannot be a virtual function override. By the way, the \texttt{override} keyword here is invaluable in detecting bugs in code where the template is not inherited from the right base class or the virtual function declarations do not match exactly.
+这个特化除了处理我们只有一个可访问类型的情况外，还用作每个递归模板实例化链中的最后一个实例化。由于它总是\texttt{LambdaVisitor}实例化递归层次结构中的第一个基类，它是唯一直接从基访问者类（如\texttt{PetVisitor}）继承的。注意，即使只有一个\texttt{T1}可访问类型，我们也使用\texttt{Visitor}模板作为它的包装器。这是为了准备一般情况，我们将有一个长度未知的类型列表。两个构造函数将\texttt{f1} lambda表达式存储在\texttt{LambdaVisitor}类中，如果可能的话使用移动而不是复制。最后，\texttt{visit(T1*)}虚函数重写只是将调用转发给lambda表达式。乍一看，从\texttt{F1}公开继承并同意使用函数调用语法（换句话说，将所有对\texttt{visit()}的调用重命名为对\texttt{operator()}的调用）可能看起来更简单。这不会工作；我们需要间接性，因为lambda表达式本身的\texttt{operator()}实例不能是虚函数重写。顺便说一下，这里的\texttt{override}关键字在检测代码中的错误方面是无价的，其中模板不是从正确的基类继承的，或者虚函数声明不完全匹配。
 
-The general case of any number of visitable types and lambda expressions is handled by this partial specialization, which explicitly deals with the first types in both lists, then recursively instantiates itself to process the rest of the lists:
+任意数量的可访问类型和lambda表达式的一般情况由这个偏特化处理，它显式处理两个列表中的第一个类型，然后递归实例化自身来处理列表的其余部分：
 
 \begin{code}
 // Example 13
@@ -948,9 +956,9 @@ class LambdaVisitor<Base, Visitor<T1, T...>, F1, F...> :
 };
 \end{code}
 
-Again, we have two constructors that store the first lambda expression in the class and forward the rest to the next instantiation. One virtual function override is generated on each step of the recursion, always for the first type in the remaining list of the visitable classes. That type is then removed from the list, and the processing continues in the same manner until we reach the last instantiation, the one for a single visitable type.
+再次，我们有两个构造函数，它们在类中存储第一个lambda表达式，并将其余的转发给下一个实例化。在递归的每一步都生成一个虚函数重写，总是针对可访问类剩余列表中的第一个类型。然后从列表中删除该类型，处理以相同的方式继续，直到我们到达最后一个实例化，即单个可访问类型的实例化。
 
-Since it is not possible to explicitly name the types of lambda expressions, we also cannot explicitly declare the type of the lambda visitor. Instead, the lambda expression types must be deduced by the template argument deduction, so we need a \texttt{lambda\_visitor()} template function that accepts multiple lambda expression arguments and constructs the \texttt{LambdaVisitor} object from all of them:
+由于不可能显式命名lambda表达式的类型，我们也不能显式声明lambda访问者的类型。相反，lambda表达式类型必须通过模板参数推导来推导，所以我们需要一个\texttt{lambda\_visitor()}模板函数，它接受多个lambda表达式参数并从所有这些参数构造\texttt{LambdaVisitor}对象：
 
 \begin{code}
 // Example 13
@@ -961,7 +969,7 @@ auto lambda_visitor(F&& ... f) {
 }
 \end{code}
 
-In C++17, the same can be accomplished with a deduction guide. Now that we have a class that stores any number of lambda expressions and binds each one to the corresponding \texttt{visit()} override, we can write lambda visitors just as easily as we write lambda expressions:
+在C++17中，可以用推导指南完成同样的事情。现在我们有了一个存储任意数量lambda表达式的类，并将每个表达式绑定到相应的\texttt{visit()}重写，我们可以像编写lambda表达式一样轻松地编写lambda访问者：
 
 \begin{code}
 // Example 13
@@ -976,9 +984,9 @@ void walk(Pet& p) {
 }
 \end{code}
 
-Note that, because of the way we declare the \texttt{visit()} function in the same class that inherits from the corresponding lambda expression, the order of the lambda expression in the argument list of the \texttt{lambda\_visitor()} function must match the order of classes in the list of types in \texttt{PetVisitor} definition. This restriction can be removed, if desired, at the cost of some additional complexity of the implementation.
+注意，由于我们在继承自相应lambda表达式的同一类中声明\texttt{visit()}函数的方式，\texttt{lambda\_visitor()}函数参数列表中lambda表达式的顺序必须与\texttt{PetVisitor}定义中类型列表中类的顺序匹配。如果需要，可以以实现的一些额外复杂性为代价来消除这个限制。
 
-Another common way of dealing with type lists in C++ is to store them in a \texttt{std::tuple}: for example, we can use \texttt{std::tuple\textless{}Cat,\ Dog\textgreater{}} to represent a list consisting of the two types. Similarly, an entire parameter pack can be stored in a tuple:
+在C++中处理类型列表的另一种常见方法是将它们存储在\texttt{std::tuple}中：例如，我们可以使用\texttt{std::tuple\textless{}Cat,\ Dog\textgreater{}}来表示由两种类型组成的列表。类似地，整个参数包可以存储在元组中：
 
 \begin{code}
 // Example 14
@@ -987,13 +995,13 @@ class LambdaVisitor<Base, std::tuple<F1, F...>> :
   public F1, public LambdaVisitor<Base, std::tuple<F...>>;
 \end{code}
 
-You can compare examples 13 and 14 to see how to use \texttt{std::tuple} to store a type list.
+您可以比较示例13和14，看看如何使用\texttt{std::tuple}来存储类型列表。
 
-We have now seen how the common fragments of the visitor code can be turned into reusable templates, and how this, in turn, lets us create a lambda visitor. But we have not forgotten the other visitor implementation we learned in this chapter, the Acyclic Visitor pattern. Let's see how it, too, can benefit from the modern C++ language features.
+我们现在已经看到访问者代码的常见片段如何转换为可重用的模板，以及这如何让我们创建lambda访问者。但我们没有忘记在本章中学到的另一个访问者实现，无环访问者模式。让我们看看它如何也能从现代C++语言特性中受益。
 
-\subsection{Generic Acyclic Visitor}
+\subsection{泛型无环访问者}
 
-The Acyclic Visitor pattern does not need a base class with a list of all visitable types. However, it has its own share of boilerplate code. First of all, each visitable type needs the \texttt{accept()} member function, and it has more code than the similar function in the original Visitor pattern:
+无环访问者模式不需要带有所有可访问类型列表的基类。但是，它有自己的样板代码。首先，每个可访问类型都需要\texttt{accept()}成员函数，它比原始访问者模式中的类似函数有更多代码：
 
 \begin{code}
 // Example 10
@@ -1009,7 +1017,7 @@ class Cat : public Pet {
 };
 \end{code}
 
-Assuming that the error handling is uniform, this function is repeated over and over for different types of visitors, each corresponding to its visitable type (such as \texttt{CatVisitor} here). Then there is the per-type Visitor class itself, for example:
+假设错误处理是统一的，这个函数为不同类型的访问者重复出现，每个对应于其可访问类型（如这里的\texttt{CatVisitor}）。然后是按类型访问者类本身，例如：
 
 \begin{code}
 class CatVisitor {
@@ -1018,9 +1026,9 @@ class CatVisitor {
 };
 \end{code}
 
-Again, this code is pasted all over the program, with slight modifications. Let's convert this error-prone code duplication into easy-to-maintain reusable code.
+再次，这个代码在程序中到处粘贴，稍作修改。让我们将这种容易出错的代码重复转换为易于维护的可重用代码。
 
-We will need to create some infrastructure first. The Acyclic Visitor pattern bases its hierarchy on a common base class for all visitors, such as the following:
+我们首先需要创建一些基础设施。无环访问者模式将其层次结构基于所有访问者的通用基类，如下所示：
 
 \begin{code}
 class PetVisitor {
@@ -1029,7 +1037,7 @@ class PetVisitor {
 };
 \end{code}
 
-Note that there is nothing specific to the \texttt{Pet} hierarchy here. With a better name, this class can serve as a base class for any visitor hierarchy:
+注意这里没有\texttt{Pet}层次结构特定的东西。使用更好的名称，这个类可以作为任何访问者层次结构的基类：
 
 \begin{code}
 // Example 15
@@ -1039,7 +1047,7 @@ class VisitorBase {
 };
 \end{code}
 
-We also need a template to generate all these Visitor base classes specific to visitable types, to replace the near-identical \texttt{CatVisitor}, \texttt{DogVisitor}, and so on. Since all that is needed from these classes is the declaration of the pure virtual \texttt{visit()} method, we can parameterize the template by the visitable type:
+我们还需要一个模板来生成所有这些特定于可访问类型的访问者基类，以替换几乎相同的\texttt{CatVisitor}、\texttt{DogVisitor}等。由于这些类需要的只是纯虚\texttt{visit()}方法的声明，我们可以通过可访问类型参数化模板：
 
 \begin{code}
 // Example 15
@@ -1049,7 +1057,7 @@ template <typename Visitable> class Visitor {
 };
 \end{code}
 
-The base visitable class for any class hierarchy now accepts visitors using the common \texttt{VisitorBase} base class:
+任何类层次结构的基本可访问类现在使用通用的\texttt{VisitorBase}基类接受访问者：
 
 \begin{code}
 // Example 15
@@ -1059,7 +1067,7 @@ class Pet {
 };
 \end{code}
 
-Instead of deriving each visitable class directly from \texttt{Pet} and pasting a copy of the \texttt{accept()} method, we introduce an intermediate template base class that can generate this method with the correct types:
+我们不是直接从\texttt{Pet}派生每个可访问类并粘贴\texttt{accept()}方法的副本，而是引入一个中间模板基类，可以生成具有正确类型的此方法：
 
 \begin{code}
 // Example 15
@@ -1078,9 +1086,9 @@ class PetVisitable : public Pet {
 };
 \end{code}
 
-This is the only copy of the \texttt{accept()} function we need to write, and it contains the preferred error handling implementation for our application to deal with cases when the visitor is not accepted by the base class (recall that Acyclic Visitor allows partial visitation, where some combinations of the visitor and visitable are not supported). Just like for the regular Visitor, the intermediate CRTP base class makes it hard to use deep hierarchies with this approach.
+这是我们需要编写的\texttt{accept()}函数的唯一副本，它包含我们应用程序首选的错误处理实现，用于处理访问者不被基类接受的情况（回想一下，无环访问者允许部分访问，其中访问者和可访问的某些组合不受支持）。就像常规访问者一样，中间CRTP基类使得使用这种方法处理深层次结构变得困难。
 
-The concrete visitable classes inherit from the common \texttt{Pet} base class indirectly, through the intermediate \texttt{PetVisitable} base class, which also provides them with the visitable interface. The argument to the \texttt{PetVisitable} template is the derived class itself (again, we see the CRTP in action):
+具体的可访问类通过中间的\texttt{PetVisitable}基类间接从通用的\texttt{Pet}基类继承，这也为它们提供了可访问接口。\texttt{PetVisitable}模板的参数是派生类本身（再次，我们看到CRTP在起作用）：
 
 \begin{code}
 // Example 15
@@ -1092,9 +1100,9 @@ class Dog : public PetVisitable<Dog> {
 };
 \end{code}
 
-It is, of course, not mandatory to use the same base class constructors for all derived classes, as custom constructors can be defined in every class as needed.
+当然，不是强制性的为所有派生类使用相同的基类构造函数，因为可以根据需要在每个类中定义自定义构造函数。
 
-The only thing left is to implement the Visitor class. Recall that the specific visitor in the Acyclic Visitor pattern inherits from the common visitor base and each of the visitor classes that represent the supported visitable types. That is not going to change, but we now have a way to generate these visitor classes on demand:
+剩下的就是实现访问者类。回想一下，无环访问者模式中的特定访问者从通用访问者基类和表示支持的可访问类型的每个访问者类继承。这不会改变，但我们现在有了按需生成这些访问者类的方法：
 
 \begin{code}
 // Example 15
@@ -1114,7 +1122,7 @@ class FeedingVisitor : public VisitorBase,
 };
 \end{code}
 
-Let's look back at the work we have done - the parallel hierarchy of visitor classes no longer needs to be typed explicitly; instead, they are generated as needed. The repetitive \texttt{accept()} functions are reduced to the single \texttt{PetVisitable} class template. Still, we have to write this template for every new visitable class hierarchy. We can generalize this too, and create a single reusable template for all hierarchies, parameterized by the base visitable class:
+让我们回顾一下我们所做的工作——访问者类的并行层次结构不再需要显式输入；相反，它们按需生成。重复的\texttt{accept()}函数被简化为单个\texttt{PetVisitable}类模板。不过，我们必须为每个新的可访问类层次结构编写这个模板。我们也可以泛化这一点，为所有层次结构创建一个可重用的模板，由基本可访问类参数化：
 
 \begin{code}
 // Example 16
@@ -1133,7 +1141,7 @@ class VisitableBase : public Base {
 };
 \end{code}
 
-Now, for every visitable class hierarchy, we just need to create a template alias:
+现在，对于每个可访问类层次结构，我们只需要创建一个模板别名：
 
 \begin{code}
 // Example 16
@@ -1141,7 +1149,7 @@ template <typename Visitable>
 using PetVisitable = VisitableBase<Pet, Visitable>;
 \end{code}
 
-We can make one more simplification and allow the programmer to specify the list of visitable classes as a list of types, instead of inheriting from \texttt{Visitor\textless{}Cat\textgreater{}}, \texttt{Visitor\textless{}Dog\textgreater{}}, and so on, as we have done previously. This requires a variadic template to store the list of types. The implementation is similar to the \texttt{LambdaVisitor} instance we saw earlier:
+我们可以再做一个简化，允许程序员将可访问类的列表指定为类型列表，而不是像我们之前所做的那样从\texttt{Visitor\textless{}Cat\textgreater{}}、\texttt{Visitor\textless{}Dog\textgreater{}}等继承。这需要一个可变参数模板来存储类型列表。实现类似于我们之前看到的\texttt{LambdaVisitor}实例：
 
 \begin{code}
 // Example 17
@@ -1153,7 +1161,7 @@ struct Visitors<V1, V ...> : public Visitor<V1>,
                              public Visitors<V ...> {};
 \end{code}
 
-We can use this wrapper template to shorten the declarations of the specific visitors:
+我们可以使用这个包装器模板来缩短特定访问者的声明：
 
 \begin{code}
 // Example 17
@@ -1164,21 +1172,21 @@ class FeedingVisitor :
 };
 \end{code}
 
-If desired, we can even hide \texttt{VisitorBase} in the definition of the \texttt{Visitors} template for the single type argument.
+如果需要，我们甚至可以在单类型参数的\texttt{Visitors}模板定义中隐藏\texttt{VisitorBase}。
 
-We have now seen both the classic object-oriented Visitor pattern and its reusable implementations, made possible by the generic programming tools of C++. In the earlier chapters, we have seen how some patterns can be applied entirely at compile time. Let's now consider whether the same can be done with the Visitor pattern.
+我们现在已经看到了经典的面向对象访问者模式及其可重用实现，这得益于C++的泛型编程工具。在前面的章节中，我们已经看到一些模式如何完全在编译时应用。现在让我们考虑访问者模式是否也可以这样做。
 
-\section{Compile-time Visitor}
+\section{编译时访问者}
 
-In this section, we will analyze the possibility of using the Visitor pattern at compile time, in a similar fashion to, say, the application of the Strategy pattern that leads to policy-based design.
+在本节中，我们将分析在编译时使用访问者模式的可能性，以类似于策略模式应用导致基于策略的设计的方式。
 
-First of all, the multiple dispatch aspect of the Visitor pattern becomes trivial when used in the template context:
+首先，当在模板上下文中使用时，访问者模式的多重分派方面变得微不足道：
 
 \begin{code}
 template <typename T1, typename T2> auto f(T1 t1, T2 t2);
 \end{code}
 
-A template function can easily run a different algorithm for any combination of the \texttt{T1} and \texttt{T2} types. Unlike the run-time polymorphism implemented with virtual functions, dispatching the call differently based on two or more types comes at no extra cost (other than writing code for all the combinations we need to handle, of course). Based on this observation, we can easily mimic the classic Visitor pattern at compile time:
+模板函数可以轻松地为\texttt{T1}和\texttt{T2}类型的任何组合运行不同的算法。与使用虚函数实现的运行时多态性不同，基于两个或更多类型不同地分派调用不需要额外成本（当然，除了为我们需要处理的所有组合编写代码）。基于这一观察，我们可以轻松地在编译时模仿经典访问者模式：
 
 \begin{code}
 // Example 18
@@ -1194,7 +1202,7 @@ class Pet {
 };
 \end{code}
 
-The \texttt{accept()} function is now a template and a static member function - the actual type of the first argument, the visitable object derived from the \texttt{Pet} class, will be deduced at compile time. The concrete visitable classes are derived from the base class in the usual way:
+\texttt{accept()}函数现在是一个模板和静态成员函数——第一个参数的实际类型，即从\texttt{Pet}类派生的可访问对象，将在编译时推导出来。具体的可访问类以通常的方式从基类派生：
 
 \begin{code}
 // Example 18
@@ -1208,7 +1216,7 @@ class Dog : public Pet {
 };
 \end{code}
 
-The visitors do not need to be derived from a common base since we now resolve the types at compile time:
+访问者不需要从通用基类派生，因为我们现在在编译时解析类型：
 
 \begin{code}
 // Example 18
@@ -1225,7 +1233,7 @@ class FeedingVisitor {
 };
 \end{code}
 
-The visitable classes can accept any visitor that has the correct interface, that is, \texttt{visit()} overloads for all classes in the hierarchy:
+可访问类可以接受任何具有正确接口的访问者，即层次结构中所有类的\texttt{visit()}重载：
 
 \begin{code}
 // Example 18
@@ -1236,13 +1244,13 @@ Pet::accept(c, fv);
 Pet::accept(d, fv);
 \end{code}
 
-Of course, any function that accepts the visitor arguments and needs to support multiple visitors would have to be made a template as well (it is no longer sufficient to have a common base class, which only helps to determine the actual object type at run time).
+当然，任何接受访问者参数并需要支持多个访问者的函数也必须成为模板（仅有通用基类不再足够，它只有助于在运行时确定实际对象类型）。
 
-The compile-time visitor solves the same problem as the classic visitor, it allows us to effectively add new member functions to a class without editing the class definition. It does, however, look much less exciting than the run-time version.
+编译时访问者解决了与经典访问者相同的问题，它允许我们有效地向类添加新的成员函数而无需编辑类定义。然而，它看起来比运行时版本更不令人兴奋。
 
-More interesting possibilities arise when we combine the Visitor pattern with the Composition pattern. We have done this once already when we discussed the visitation of complex objects, especially in the context of the serialization problem. The reason this is particularly interesting is that it relates to the connection with one of the few \emph{big-ticket} features missing in C++; namely, the reflection. Reflection in programming is the ability of a program to examine and introspect its own source and then generate new behavior based on this introspection. Some programming languages, such as Delphi or Python, have native reflection capability, but C++ does not. Reflection is useful for solving many problems: for example, the serialization problem could be easily solved if we could make the compiler iterate over all data members of the object and serialize each one, recursively, until we reach the built-in types. We can implement something similar using a compile-time Visitor pattern.
+当我们将访问者模式与组合模式结合时，会出现更有趣的可能性。当我们讨论复杂对象的访问时，我们已经这样做过一次，特别是在序列化问题的上下文中。这特别有趣的原因是它与C++中缺少的少数几个\emph{重要}特性之一的连接有关；即反射。编程中的反射是程序检查和内省其自身源代码，然后基于这种内省生成新行为的能力。一些编程语言，如Delphi或Python，具有原生反射能力，但C++没有。反射对于解决许多问题很有用：例如，如果我们能让编译器迭代对象的所有数据成员并递归序列化每一个，直到我们到达内置类型，序列化问题就能轻松解决。我们可以使用编译时访问者模式实现类似的东西。
 
-Again, we will consider the hierarchy of geometric objects. Since everything is now happening at compile time, we are not interested in the polymorphic nature of the classes (they could still use virtual functions if needed for runtime operations; we just won't be writing them or looking at them in this section). For example, here is the \texttt{Point} class:
+再次，我们将考虑几何对象的层次结构。由于现在一切都在编译时发生，我们对类的多态性质不感兴趣（如果运行时操作需要，它们仍然可以使用虚函数；我们只是不会在本节中编写或查看它们）。例如，这是\texttt{Point}类：
 
 \begin{code}
 // Example 19
@@ -1261,7 +1269,7 @@ class Point {
 };
 \end{code}
 
-The visitation is provided via the \texttt{accept()} function, as before, but it is class-specific now. The only reason we have the first template parameter, \texttt{This}, is to support both const and non-const operations easily: \texttt{This} can be \texttt{Point} or \texttt{const\ Point}. Any visitor to this class is sent to visit the two values that define the point, \texttt{x\_} and \texttt{y\_}. The visitor must have the appropriate interface, specifically, the \texttt{visit()} member function that accepts \texttt{double} arguments. Like most C++ template libraries, including the \textbf{Standard Template Library} (\textbf{STL}), this code is held together by conventions - there are no virtual functions to override or base classes to derive from, only the requirements on the interface of each class involved in the system. The more complex classes are composed of the simpler ones; for example, here is the \texttt{Line} class:
+如前所述，访问通过\texttt{accept()}函数提供，但现在它是特定于类的。我们有第一个模板参数\texttt{This}的唯一原因是为了轻松支持const和非const操作：\texttt{This}可以是\texttt{Point}或\texttt{const\ Point}。该类的任何访问者都被发送去访问定义点的两个值，\texttt{x\_}和\texttt{y\_}。访问者必须有适当的接口，特别是接受\texttt{double}参数的\texttt{visit()}成员函数。像大多数C++模板库一样，包括\textbf{标准模板库}（\textbf{STL}），这个代码由约定保持在一起——没有要重写的虚函数或要派生的基类，只有对系统中涉及的每个类的接口的要求。更复杂的类由更简单的类组成；例如，这是\texttt{Line}类：
 
 \begin{code}
 // Example 19
@@ -1280,7 +1288,7 @@ class Line {
 };
 \end{code}
 
-The \texttt{Line} class is composed of two points. At compile time, the visitor is directed to visit each point. That is the end of the involvement of the \texttt{Line} class; the \texttt{Point} class gets to determine how it is visited (as we have just seen, it also delegates the work to another visitor). Since we are not using runtime polymorphism anymore, the container classes that can hold geometries of different types now have to be templates:
+\texttt{Line}类由两个点组成。在编译时，访问者被指示访问每个点。这就是\texttt{Line}类参与的结束；\texttt{Point}类得以确定如何被访问（正如我们刚刚看到的，它也将工作委托给另一个访问者）。由于我们不再使用运行时多态性，现在可以容纳不同类型几何图形的容器类必须是模板：
 
 \begin{code}
 // Example 19
@@ -1300,7 +1308,7 @@ class Intersection {
 };
 \end{code}
 
-We now have visitable types. We can use different kinds of visitors with this interface, not just serialization visitors. However, we are focused on serialization now. Previously, we have seen a visitor that converts objects into ASCII strings. Now let's serialize our objects as binary data, continuous streams of bits. The serialization visitor has access to a buffer of a certain size and writes the objects into that buffer, one \texttt{double} at a time:
+我们现在有了可访问类型。我们可以在这个接口上使用不同种类的访问者，不仅仅是序列化访问者。但是，我们现在专注于序列化。以前，我们已经看到了将对象转换为ASCII字符串的访问者。现在让我们将对象序列化为二进制数据，连续的位流。序列化访问者可以访问一定大小的缓冲区，并将对象写入该缓冲区，每次一个\texttt{double}：
 
 \begin{code}
 // Example 19
@@ -1324,7 +1332,7 @@ class BinarySerializeVisitor {
 };
 \end{code}
 
-The deserialization visitor reads memory from the buffer and copies it into the data members of the objects it restores:
+反序列化访问者从缓冲区读取内存，并将其复制到它恢复的对象的数据成员中：
 
 \begin{code}
 // Example 19
@@ -1348,7 +1356,7 @@ class BinaryDeserializeVisitor {
 };
 \end{code}
 
-Both visitors process built-in types directly by copying them to and from the buffer while letting the more complex types decide how the objects should be processed. In both cases, the visitors throw an exception if the size of the buffer is exceeded. Now we can use our visitors to, for example, send objects through a socket to another machine:
+两个访问者都通过将内置类型复制到缓冲区和从缓冲区复制来直接处理内置类型，同时让更复杂的类型决定如何处理对象。在这两种情况下，如果超出缓冲区大小，访问者都会抛出异常。现在我们可以使用我们的访问者，例如，通过套接字将对象发送到另一台机器：
 
 \begin{code}
 // Example 19
@@ -1373,9 +1381,9 @@ deserializer.visit(c);
 deserializer.visit(x);
 \end{code}
 
-While we cannot implement universal reflection without language support, we can have classes reflect on their content in limited ways, such as this composite visitation pattern. There are also a few variations on the theme that we can consider.
+虽然我们不能在没有语言支持的情况下实现通用反射，但我们可以让类以有限的方式反映其内容，如这种复合访问模式。我们还可以考虑主题的一些变化。
 
-First of all, it is conventional to make the objects that have only one \emph{important} member function callable; in other words, instead of calling the member function, we invoke the object itself using the function call syntax. This convention dictates that the \texttt{visit()} member function should be called \texttt{operator()} instead:
+首先，按照惯例，只有一个\emph{重要}成员函数的对象是可调用的；换句话说，我们不调用成员函数，而是使用函数调用语法调用对象本身。这个约定规定\texttt{visit()}成员函数应该称为\texttt{operator()}：
 
 \begin{code}
 // Example 20
@@ -1387,7 +1395,7 @@ class BinarySerializeVisitor {
 };
 \end{code}
 
-The visitable classes now call the visitors like functions:
+可访问类现在像函数一样调用访问者：
 
 \begin{code}
 // Example 20
@@ -1401,7 +1409,7 @@ class Point {
 };
 \end{code}
 
-It may also be convenient to implement wrapper functions to invoke visitors on more than one object:
+在多个对象上调用访问者也可能很方便地实现包装函数：
 
 \begin{code}
 // Example 20
@@ -1410,7 +1418,7 @@ Object1 x; Object2 y; ...
 visitation(v, x, y, z);
 \end{code}
 
-This is easy to implement using a variadic template:
+这很容易使用可变参数模板实现：
 
 \begin{code}
 // Example 20
@@ -1425,7 +1433,7 @@ void visitation(V& v, T& t, U&... u) {
 }
 \end{code}
 
-In C++17, we have fold expressions and do not need a recursive template:
+在C++17中，我们有折叠表达式，不需要递归模板：
 
 \begin{code}
 // Example 20
@@ -1435,7 +1443,7 @@ void visitation(V& v, U&... u) {
 }
 \end{code}
 
-In C++14 we can mimic fold expressions using a hack based on \texttt{std::initializer\_list}:
+在C++14中，我们可以使用基于\texttt{std::initializer\_list}的技巧来模仿折叠表达式：
 
 \begin{code}
 template <typename V, typename T, typename... U>
@@ -1445,13 +1453,13 @@ void visitation(V& v, U&... u) {
 }
 \end{code}
 
-This works, but it is not going to win any prizes for clarity or maintainability.
+这可以工作，但它不会在清晰度或可维护性方面获得任何奖项。
 
-The compile-time visitors are, in general, easier to implement because we don't have to do anything clever to get multiple dispatch, as the templates provide it out of the box. We just need to come up with interesting applications of the pattern, such as the serialization/deserialization problem we just explored.
+编译时访问者通常更容易实现，因为我们不必做任何巧妙的事情来获得多重分派，因为模板开箱即用地提供了它。我们只需要想出模式的有趣应用，比如我们刚刚探索的序列化/反序列化问题。
 
-\section{Visitor in C++17}
+\section{C++17中的访问者}
 
-C++17 introduced a major change in the way we use the Visitor pattern with the addition of \texttt{std::variant} to the standard library. The \texttt{std::variant} template is essentially a ``smart union:'' \texttt{std::variant\textless{}T1,\ T2,\ T3\textgreater{}} is similar to \texttt{union\ \{\ T1\ v1;\ T2\ v2;\ T3\ v3;\ \}} in that both can store a value of one of the specified types and only one value can be stored at a time. The key difference is that a variant object knows which type it contains, while with a union the programmer is wholly responsible for reading the same type as what was written earlier. It is undefined behavior to access a union as a type that differs from the one used to initialize it:
+C++17在我们使用访问者模式的方式上引入了重大变化，将\texttt{std::variant}添加到标准库中。\texttt{std::variant}模板本质上是一个"智能联合："\texttt{std::variant\textless{}T1,\ T2,\ T3\textgreater{}}类似于\texttt{union\ \{\ T1\ v1;\ T2\ v2;\ T3\ v3;\ \}}，因为两者都可以存储指定类型之一的值，并且一次只能存储一个值。关键区别在于variant对象知道它包含哪种类型，而对于联合，程序员完全负责读取与之前写入的相同类型。将联合作为与用于初始化它的类型不同的类型访问是未定义行为：
 
 \begin{code}
 union { int i; double d; std::string s; } u;
@@ -1460,7 +1468,7 @@ u.i = 0;
 std::cout << u.d;     // Undefined behavior
 \end{code}
 
-In contrast, \texttt{std::variant} offers a safe way to store values of different types in the same memory. It is easy to check at runtime which alternative type is currently stored in the variant, and accessing a variant as the wrong type throws an exception:
+相比之下，\texttt{std::variant}提供了一种在同一内存中存储不同类型值的安全方式。在运行时检查当前在variant中存储哪种替代类型很容易，将variant作为错误类型访问会抛出异常：
 
 \begin{code}
 std::variant<int, double, std::string> v;
@@ -1470,9 +1478,9 @@ std::cout << v.index();     // 0 is the index of int
 std::get<1>(v);          // throws std::bad_variant_access
 \end{code}
 
-In many ways, \texttt{std::variant} offers capabilities similar to inheritance-based run-time polymorphism: both let us write code where the same variable name can refer to objects of different types at run time. The two major differences are: first, a \texttt{std::variant} does not require that all its types come from the same hierarchy (they need not be classes at all), and second, a variant object can store only one of the types listed in its declaration, while a base class pointer can point to any derived class. In other words, adding a new type to the hierarchy generally does not require recompilation of the code that uses the base class, while adding a new type to the variant requires changing the type of the variant object, so all code that refers to this object must be recompiled.
+在许多方面，\texttt{std::variant}提供了类似于基于继承的运行时多态性的能力：两者都让我们编写代码，其中相同的变量名可以在运行时引用不同类型的对象。两个主要区别是：首先，\texttt{std::variant}不要求其所有类型都来自同一层次结构（它们根本不需要是类），其次，variant对象只能存储其声明中列出的类型之一，而基类指针可以指向任何派生类。换句话说，向层次结构添加新类型通常不需要重新编译使用基类的代码，而向variant添加新类型需要更改variant对象的类型，因此引用此对象的所有代码都必须重新编译。
 
-In this section, we will focus on the use of \texttt{std::variant} for visitation. This capability is provided by the aptly named function \texttt{std::visit} that takes a callable and a variant:
+在本节中，我们将专注于使用\texttt{std::variant}进行访问。这种能力由恰当命名的函数\texttt{std::visit}提供，它接受一个可调用和一个variant：
 
 \begin{code}
 std::variant<int, double, std::string> v;
@@ -1484,14 +1492,14 @@ struct Print {
 std::visit(print, v);
 \end{code}
 
-To use with \texttt{std::visit}, the callable must have an \texttt{operator()} declared for every type that can be stored in the variant (otherwise the call will not compile). Of course, if the implementation is similar, we can use a template \texttt{operator()}, either in a function object or in a lambda:
+要与\texttt{std::visit}一起使用，可调用必须为可以存储在variant中的每种类型声明\texttt{operator()}（否则调用将无法编译）。当然，如果实现相似，我们可以使用模板\texttt{operator()}，无论是在函数对象中还是在lambda中：
 
 \begin{code}
 std::variant<int, double, std::string> v;
 std::visit([](const auto& x) { std::cout << x;}, v);
 \end{code}
 
-We will now reimplement our pet visitors using \texttt{std::variant} and \texttt{std::visit}. First of all, the \texttt{Pet} type is no longer the base class of the hierarchy but the variant, containing all possible type alternatives:
+我们现在将使用\texttt{std::variant}和\texttt{std::visit}重新实现我们的宠物访问者。首先，\texttt{Pet}类型不再是层次结构的基类，而是包含所有可能类型替代的variant：
 
 \begin{code}
 // Example 21
@@ -1499,7 +1507,7 @@ using Pet =
   std::variant<class Cat, class Dog, class Lorikeet>;
 \end{code}
 
-The types themselves do not need any visitation machinery. We may still use inheritance to reuse common implementation code, but there is no need for the types to belong to a single hierarchy:
+这些类型本身不需要任何访问机制。我们仍然可以使用继承来重用通用实现代码，但类型不需要属于单一层次结构：
 
 \begin{code}
 // Example 21
@@ -1531,7 +1539,7 @@ class Lorikeet {
 };
 \end{code}
 
-Now we need to implement some visitors. The visitors are just callable objects that can be invoked with every alternative type that might be stored in the variant:
+现在我们需要实现一些访问者。访问者只是可以用可能存储在variant中的每种替代类型调用的可调用对象：
 
 \begin{code}
 // Example 21
@@ -1552,7 +1560,7 @@ class FeedingVisitor {
 };
 \end{code}
 
-To apply a visitor to a variant, we call \texttt{std::visit}:
+要将访问者应用于variant，我们调用\texttt{std::visit}：
 
 \begin{code}
 // Example 21
@@ -1561,9 +1569,9 @@ FeedingVisitor v;
 std::visit(v, p);
 \end{code}
 
-The variant \texttt{p} can contain any of the types we listed when we defined the type \texttt{Pet} (in this example, it's a \texttt{Cat}). We then invoke \texttt{std::visit} and the resulting action depends both on the visitor itself and on the type currently stored in the variant. The result looks a lot like a virtual function call, so we can say that \texttt{std::visit} allows us to add new polymorphic functions to a set of types (it would be misleading to call them ``virtual functions'' since the types do not have to even be classes).
+variant \texttt{p}可以包含我们定义类型\texttt{Pet}时列出的任何类型（在此示例中，它是\texttt{Cat}）。然后我们调用\texttt{std::visit}，结果操作取决于访问者本身和当前存储在variant中的类型。结果看起来很像虚函数调用，所以我们可以说\texttt{std::visit}允许我们向一组类型添加新的多态函数（称它们为"虚函数"是误导性的，因为类型甚至不必是类）。
 
-Whenever we see a callable object with the user-defined \texttt{operator()}, we must be thinking about lambdas. However, the use of lambdas with \texttt{std::visit} is not straightforward: we need the object to be callable with every type that can be stored in the variant, while a lambda has only one \texttt{operator()}. The first option is to make that operator a template (polymorphic lambdas) and handle all the possible types inside:
+每当我们看到带有用户定义\texttt{operator()}的可调用对象时，我们必须考虑lambda。但是，lambda与\texttt{std::visit}的使用并不简单：我们需要对象可以用可以存储在variant中的每种类型调用，而lambda只有一个\texttt{operator()}。第一个选项是使该操作符成为模板（多态lambda）并在内部处理所有可能的类型：
 
 \begin{code}
 // Example 22
@@ -1583,9 +1591,9 @@ auto fv = [](const auto& p) {
 };
 \end{code}
 
-Here the lambda can be invoked with an argument of any type, and inside the body of the lambda, we use \texttt{if\ constexpr} to handle all types that can be stored in the variant. The disadvantage of this approach is that we no longer have compile-time validation that all possible types are handled by the visitor. The flip side of this is, however, that the code will now compile even if not all types are handled, and, as long as the visitor is not called with a type for which we have no action defined, the program will work fine. In this way, this version is similar to the acyclic visitor, while the previous implementation was similar to the regular visitor.
+这里lambda可以用任何类型的参数调用，在lambda主体内部，我们使用\texttt{if\ constexpr}来处理可以存储在variant中的所有类型。这种方法的缺点是我们不再有编译时验证，确保访问者处理所有可能的类型。然而，这样做的另一面是，即使没有处理所有类型，代码现在也会编译，只要访问者不被我们没有定义操作的类型调用，程序就会正常工作。这样，这个版本类似于无环访问者，而之前的实现类似于常规访问者。
 
-It is also possible to implement the familiar set of overloaded \texttt{operator()} using lambdas and the technique for creating overload sets we have seen in \emph{Chapter 1, An Introduction to Inheritance and Polymorphism}:
+也可以使用lambda和我们在\emph{第1章，继承和多态性简介}中看到的创建重载集的技术来实现熟悉的重载\texttt{operator()}集：
 
 \begin{code}
 // Example 22
@@ -1607,7 +1615,7 @@ auto pv = overloaded {
 };
 \end{code}
 
-This visitor is a class that inherits from all the lambdas and exposes their \texttt{operator()}, thus creating a set of overloads. It is used just like the visitor where we explicitly wrote each \texttt{operator()}:
+这个访问者是一个从所有lambda继承并暴露其\texttt{operator()}的类，从而创建一组重载。它的使用就像我们显式编写每个\texttt{operator()}的访问者一样：
 
 \begin{code}
 // Example 22
@@ -1615,7 +1623,7 @@ Pet l = Lorikeet("yellow", "green");
 std::visit(pv, l);
 \end{code}
 
-So far, we have not used the full potential of \texttt{std::visit}: it can be called with any number of variant arguments. This allows us to perform an action that depends on more than two run-time conditions:
+到目前为止，我们还没有使用\texttt{std::visit}的全部潜力：它可以用任意数量的variant参数调用。这允许我们执行依赖于两个以上运行时条件的操作：
 
 \begin{code}
 // Example 23
@@ -1628,7 +1636,7 @@ std::visit(cv, c1, c2);      // Two cats
 std::visit(cv, c1, d);     // Cat and dog
 \end{code}
 
-The visitor has to be written in a way that handles all possible combinations of the types that can be stored in each variant:
+访问者必须以处理可以存储在每个variant中的类型的所有可能组合的方式编写：
 
 \begin{code}
 class CareVisitor {
@@ -1650,34 +1658,33 @@ class CareVisitor {
 };
 \end{code}
 
-In practice, the only way it is feasible to write a callable for all possible type combinations is by using a template \texttt{operator()}, which works only if the visitor actions can be written in a generic way. Still, the ability to do multiple dispatch is a potentially useful feature of \texttt{std::visit} that goes beyond the double dispatch capability of the regular Visitor pattern.
+在实践中，为所有可能的类型组合编写可调用的唯一可行方法是使用模板\texttt{operator()}，这只有在访问者操作可以以通用方式编写时才有效。尽管如此，执行多重分派的能力是\texttt{std::visit}的一个潜在有用特性，它超越了常规访问者模式的双重分派能力。
 
-\section{Summary}
+\section{总结}
 
-In this chapter, we learned about the Visitor pattern and the different ways it can be implemented in C++. The classic object-oriented Visitor pattern allows us to effectively add a new virtual function to the entire class hierarchy without changing the source code of the classes. The hierarchy must be made visitable, but after that, any number of operations can be added, and their implementation is kept separate from the objects themselves. In the classic Visitor pattern implementation, the source code containing the visited hierarchy does not need to be changed, but it does need to be recompiled when a new class is added to the hierarchy. The Acyclic Visitor pattern solves this problem but at the cost of the additional dynamic cast. On the other hand, the Acyclic Visitor pattern also supports partial visitation - ignoring some visitor/visitable combinations - while the classic Visitor pattern requires that all combinations must at least be declared.
+在本章中，我们学习了访问者模式以及在C++中实现它的不同方法。经典的面向对象访问者模式允许我们有效地向整个类层次结构添加新的虚函数，而无需更改类的源代码。层次结构必须是可访问的，但在那之后，可以添加任意数量的操作，它们的实现与对象本身分开保存。在经典访问者模式实现中，包含被访问层次结构的源代码不需要更改，但当向层次结构添加新类时确实需要重新编译。无环访问者模式解决了这个问题，但代价是额外的动态转换。另一方面，无环访问者模式还支持部分访问——忽略某些访问者/可访问组合——而经典访问者模式要求至少必须声明所有组合。
 
-For all visitor variants, the tradeoff for extensibility is the need to weaken the encapsulation and, frequently, grant external visitor classes access to what should be private data members.
+对于所有访问者变体，可扩展性的权衡是需要削弱封装，并且经常授予外部访问者类访问应该是私有数据成员的权限。
 
-The Visitor pattern is often combined with other design patterns, in particular, the Composition pattern, to create complex visitable objects. The composite object delegates the visitation to its contained objects. This combined pattern is particularly useful when an object must be decomposed into its smallest building blocks; for example, for serialization.
+访问者模式经常与其他设计模式结合使用，特别是组合模式，以创建复杂的可访问对象。复合对象将访问委托给其包含的对象。当对象必须分解为其最小构建块时，这种组合模式特别有用；例如，用于序列化。
 
-The classic Visitor pattern implements the double dispatch at run-time - during execution, the program selects which code to run based on two factors, the types of the visitor and the visitable objects. The pattern can be similarly used at compile time, where it provides a limited reflection capability.
+经典访问者模式在运行时实现双重分派——在执行期间，程序根据两个因素选择要运行的代码，访问者和可访问对象的类型。该模式可以在编译时类似地使用，它提供有限的反射能力。
 
-In C++17, \texttt{std::visit} can be used to extend the Visitor pattern to types not bound into a common hierarchy, and even to implement multiple dispatch.
+在C++17中，\texttt{std::visit}可以用来将访问者模式扩展到不绑定到通用层次结构的类型，甚至可以实现多重分派。
 
-This chapter on the Visitor pattern used to conclude this book dedicated to C++ idioms and design patterns. But, like new stars, the birth of new patterns never stops -- new frontiers and new ideas bring with them new challenges to be solved and new solutions to be invented, and they evolve and develop until the programming community collectively arrives at something we can point to and say, with confidence, \emph{this is usually a good way to handle that problem}. We will elaborate on the strengths of each new approach, consider its drawbacks, and give it a name so we can concisely refer to the entire set of knowledge about the problem, its solutions, and its caveats. With that, a new pattern enters our design toolset and our programming vocabulary. To illustrate this process, in the next and final chapter, we have collected some of the patterns that emerged to address problems specific to concurrent programs.
+这一章关于访问者模式曾经是这本专门讨论C++习语和设计模式的书的结论。但是，就像新星一样，新模式的诞生永不停歇——新的前沿和新的想法带来了新的挑战需要解决和新的解决方案需要发明，它们不断发展和完善，直到编程社区集体达到我们可以指出并自信地说的东西，\emph{这通常是处理该问题的好方法}。我们将详细阐述每种新方法的优势，考虑其缺点，并给它命名，以便我们可以简洁地引用关于问题、其解决方案和其注意事项的整套知识。有了这个，一个新模式进入我们的设计工具集和我们的编程词汇。为了说明这个过程，在下一章也是最后一章中，我们收集了一些出现的模式来解决并发程序特有的问题。
 
-\section{Questions}
+\section{问题}
 
 \begin{enumerate}
 \item
-  What is the Visitor pattern?
+  什么是访问者模式？
 \item
-  What problem does the Visitor pattern solve?
+  访问者模式解决什么问题？
 \item
-  What is double dispatch?
+  什么是双重分派？
 \item
-  What are the advantages of the Acyclic Visitor pattern?
+  无环访问者模式的优势是什么？
 \item
-  How does the Visitor pattern help implement serialization?
+  访问者模式如何帮助实现序列化？
 \end{enumerate}
-

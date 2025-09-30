@@ -30,7 +30,7 @@
 \section{C++ 中的模板}
 
 % One of the greatest strengths of C++ is its support for generic programming. In generic programming, the algorithms and data structures are written in terms of generic types that will be specified later. This allows the programmer to implement a function or a class once, and later, instantiate it for many different types. Templates are a C++ feature that allows classes and functions to be defined on generic types. C++ supports three kinds of templates---function, class, and variable templates.
-C++ 的一大核心优势在于其对“泛型编程”（generic programming）的强力支持。泛型编程的思想是：算法与数据结构以“之后才被具体化”的抽象类型来编写；这样我们只需实现一次函数或类，就能在稍后针对多种实际类型进行实例化生成代码。模板（template）正是 C++ 提供的机制，用来在“类型参数化”基础上定义类与函数。C++ 共支持三种模板：函数模板、类模板与变量模板。
+\cppsign{} 的一大核心优势在于其对“泛型编程”（\emph{generic programming}）的强力支持。泛型编程的思想是：\emph{算法}与\emph{数据结构}以“之后才被具体化”的抽象类型来编写；这样我们只需实现一次函数或类，就能在稍后针对多种实际类型进行实例化生成代码。模板（\cii{template}）正是 C++ 提供的机制，用来在“类型参数化”基础上定义类与函数。C++ 共支持三种模板：函数模板、类模板与变量模板。
 
 % \subsection{Function templates}
 \subsection{函数模板}
@@ -49,7 +49,8 @@ T increment(T x) { return x + 1; }
 
 \begin{code}
 increment(5);    // T is int, returns 6
-increment(4.2);    // T is double, return 5.2 char c[10];
+increment(4.2);  // T is double, return 5.2 
+char c[10];
 increment(c);    // T is char*, returns &c[1]
 \end{code}
 
@@ -60,7 +61,8 @@ increment(c);    // T is char*, returns &c[1]
 自由函数与类成员函数都可以写成函数模板；但虚函数（virtual）不能是模板。模板类型参数不仅可用于形参，也可在函数体内部声明局部变量时使用：
 
 \begin{code}
-template <typename T> T sum(T from, T to, T step) {
+template <typename T> 
+T sum(T from, T to, T step) {
   T res = from;
   while ((from += step) < to) { res += from; }
   return res;
@@ -138,20 +140,26 @@ template <typename T> class ArrayOf2 {
 该类只需实现一次，随后即可用于构造任意类型的“两个元素的数组”对象：
 
 \begin{code}
-ArrayOf2<int> i; i[0] = 1; i[1] = 5;
+ArrayOf2<int> i; 
+i[0] = 1; 
+i[1] = 5;
 std::cout << i.sum();                       // 6
-ArrayOf2<double> x; x[0] = -3.5; x[1] = 4;
+ArrayOf2<double> x; 
+x[0] = -3.5; 
+x[1] = 4;
 std::cout << x.sum();                       // 0.5
-ArrayOf2<char*> c; char s[] = "Hello";
-c[0] = s; c[1] = s + 2;
+ArrayOf2<char*> c; 
+char s[] = "Hello";
+c[0] = s; 
+c[1] = s + 2;
 \end{code}
 
 % Pay particular attention to the last example---you might expect the \cii{ArrayOf2} template not to be valid with a type such as \cii{char*}---after all, it has a method, \cii{sum()}, that does not compile if the type of \cii{a\_{[}0{]}} and \cii{a\_{[}1{]}} is a pointer. However, our example compiles as written---a method of a class template does not have to be valid until we try to use it. If we never call \cii{c.sum()}, then the fact that it would not compile never comes up, and the program remains valid. If we do call a member function that does not compile for the chosen template arguments, we get a syntax error in the body of the template (in our example, something about not being able to add two pointers). These error messages are rarely straightforward. Even if they were, it is unclear if the problem is in the body of the function, or if the function was not supposed to be called in the first place. Later in this chapter, we will see how to improve this situation.
 请特别留意最后一个例子——你可能原本会认为 \cii{ArrayOf2} 不能用于 \cii{char*} 这样的类型：因为成员函数 \cii{sum()} 在元素是指针时无法编译（指针不能直接相加以得到语义化结果）。然而示例整体依然可以编译：原因在于“类模板的方法直到被实际用到才需要通过编译”。如果我们从不调用 \cii{c.sum()}，就不会触发那段无效代码的实例化，程序整体仍合法。若调用了不适配实参类型的成员函数，则会在模板实例化阶段于函数体内部得到编译错误（例如“不能对两个指针做加法”）。此类错误信息往往不够直观，甚至让人不确定是实现写错，还是函数根本不该被调用。后文会介绍改进这一问题的手段。
 
-\subsection{Variable templates}
+\subsection{变量模板}
 % The last kind of template in C++ is a variable template, which was introduced in C++14. This template allows us to define a variable with a generic type:
-最后一种模板形式是“变量模板”（variable template），它在 C++14 中被引入。变量模板允许我们为“泛型类型”定义一个变量：
+最后一种模板形式是“变量模板”（variable template），它在 \cpp[14] 中被引入。变量模板允许我们为“泛型类型”定义一个变量：
 
 \begin{code}
 // Example 03
@@ -164,13 +172,14 @@ pi<double>;     // 3.141592653589793
 % Variable templates are, for the most part, very straightforward to use, mostly for defining your own constants, but there are some interesting patterns that take advantage of them; we will see one in the next section.
 变量模板总体使用非常直接，最常见用途是定义你自己的常量。不过也存在一些更有趣的用法模式；下一小节会看到一个例子。
 
-\subsection{Non-type template parameters}
+\subsection{非类型模板参数}
 % Usually, template parameters are types, but C++ also allows for several kinds of non-type parameters. First of all, template parameters can be values of integer or enumeration types:
-通常模板参数是“类型”，但 C++ 也允许若干“非类型模板参数”（non-type template parameter）。首先，模板参数可以是整数类型或枚举类型的值：
+通常模板参数是“类型”，但 \cppsign{} 也允许若干“非类型模板参数”（\emph{non-type template parameter}）。首先，模板参数可以是\textbf{整数类型}或\textbf{枚举类型}的值：
 
 \begin{code}
 // Example 04
-template <typename T, size_t N> class Array {
+template <typename T, size_t N> 
+class Array {
   public:
   T& operator[](size_t i) {
     if (i >= N) throw std::out_of_range("Bad index");
@@ -188,7 +197,7 @@ Array<int, a[0]> b;   // Error
 上面的模板有两个参数——第一个是类型，第二个则是“非类型”参数。第二个参数是一个 \cii{size_t} 常量，用来决定数组长度。与内置 C 风格数组相比，这种写法的优势是可以做越界检查。标准库已经提供了 \cii{std::array}（真实工程应优先使用），这里只是为了举例说明。
 
 % The values of non-type parameters that are used to instantiate a template must be compile-time constants or \cii{constexpr} values---the last line in the preceding example is invalid because the value of \cii{a{[}0{]}} is not known until the program reads it in at runtime. C++20 allows floating-point and user-defined types for non-type template parameters; until then, the parameters were limited to integral types, pointers (including function and member pointers), references, and enumerations. Of course, the value of a non-type parameter has to be a compile-time constant so, for example, pointers to local variables are not allowed.
-非类型模板参数用于实例化时所提供的值必须是“编译期常量”或 \cii{constexpr} 值——示例里最后一行非法，就是因为 \cii{a[0]} 只有在运行期读取输入后才知道。C++20 起允许浮点数与用户自定义字面量类型作为非类型模板参数；在此之前仅限：整型、指针（含函数指针与成员指针）、引用、枚举。注意其值必须是编译期常量，因此指向局部变量的指针不能用作非类型模板实参。
+非类型模板参数用于实例化时所提供的值必须是“\emph{编译期常量}”或 \cii{constexpr} 值——示例里最后一行非法，就是因为 \cii{a[0]} 只有在运行期读取输入后才知道。\cpp[20] 起允许浮点数与用户自定义字面量类型作为非类型模板参数；在此之前仅限：\textbf{整型}、\textbf{指针}（\emph{含函数指针与成员指针}）、\textbf{引用}、\textbf{枚举}。注意其值必须是编译期常量，因此指向局部变量的指针不能用作非类型模板实参。
 
 % The numeric template parameters used to be very popular in C++ because they allow complex compile-time calculations to be implemented, but in the recent versions of the standard, \cii{constexpr} functions can be used to the same effect and are much easier to read. Of course, the standard takes with one hand and gives with the other, and so an interesting new use case emerged for non-template parameters combined with \cii{constexpr} functions: these functions, first introduced in C++11, are used to define ``immediate functions,'' or functions that are evaluated at compile time. The problem with \cii{constexpr} functions is that they \emph{may} evaluate at compile time but it's not required; they could also be evaluated at run time:
 过去“数值型”非类型模板参数非常常见，因为它们能实现复杂的编译期计算。但后来标准引入并增强了 \cii{constexpr} 函数，可以达到类似目的且更易读。当然标准一手给一手也会再提供新能力——非类型模板参数与 \cii{constexpr} 结合出现了新的用例：在 C++11 中引入的 \cii{constexpr} 函数可用于定义“立即函数”（immediate function），即必须在编译期求值的函数。不过普通 \cii{constexpr} 函数只是“可以”在编译期执行，并非“必须”，也可能在运行期执行：
@@ -217,7 +226,7 @@ static_assert(length(s) == 7, ""); // Fails
 第一个断言能通过；第二个虽然值也确实是 7，但却无法编译：原因是参数不是编译期常量，因此只能在运行期求值。
 
 % In C++20, the function may be declared \cii{consteval} instead of \cii{constexpr}: this guarantees that the evaluation happens at compile time or not at all (thus, the second \cii{cout} statement in the preceding example will not compile). Prior to C++20, we have to get creative. Here is one way to enforce compile-time execution:
-C++20 中可以把函数声明为 \cii{consteval}（替代 \cii{constexpr}）以强制其“必须”在编译期求值，若无法则整体不成立（所以前面例子里第二个 \cii{cout} 将无法编译）。在 C++20 之前我们需要一些技巧。下面是强制编译期执行的一种方式：
+\cpp[20] 中可以把函数声明为 \cii{consteval}（替代 \cii{constexpr}）以强制其“必须”在编译期求值，若无法则整体不成立（所以前面例子里第二个 \cii{cout} 将无法编译）。在 \cpp[20] 之前我们需要一些技巧。下面是强制编译期执行的一种方式：
 
 \begin{code}
 // Example 05c
@@ -226,7 +235,7 @@ static constexpr auto force_consteval = V;
 \end{code}
 
 % The \cii{force\_consteval} variable template can be used to enforce compile-time evaluation as follows:
-这个 \cii{force\_consteval} 变量模板可以这样使用，从而迫使表达式在编译期被实例化与求值：
+这个 \cii{force_consteval} 变量模板可以这样使用，从而迫使表达式在编译期被实例化与求值：
 
 \begin{code}
 std::cout << force_consteval<length("abc")> << std::endl;
@@ -235,7 +244,7 @@ std::cout << force_consteval<length(s)> << std::endl;
 \end{code}
 
 % The second \cii{cout} statement does not compile because the function \cii{length()} cannot be evaluated as an immediate function. The variable template \cii{force\_consteval} uses a non-type template parameter whose type is not specified but deduced from the template argument (an \cii{auto} template parameter). This is a C++17 feature; in C++14 we have to use a rather unelegant macro to achieve the same result:
-第二个 \cii{cout} 无法编译，因为 \cii{length()} 不能在该调用上下文被视为立即函数。这里的变量模板 \cii{force\_consteval} 使用了一个“类型由模板实参自动推导”的非类型模板参数（即 \cii{auto} 模板参数），这是 C++17 特性；在 C++14 里需要借助不太优雅的宏才能模拟：
+第二个 \cii{cout} 无法编译，因为 \cii{length()} 不能在该调用上下文被视为立即函数。这里的变量模板 \cii{force_consteval} 使用了一个“类型由模板实参自动推导”的非类型模板参数（即 \cii{auto} 模板参数），这是 \cpp[17] 特性；在 \cpp[14] 里需要借助不太优雅的宏才能模拟：
 
 \begin{code}
 // Example 05d
@@ -251,7 +260,7 @@ std::cout << force_consteval(length("abc")) << std::endl;
 
 \subsection{Template template parameters}
 % The second kind of non-type template parameter worth mentioning is a \emph{template template} parameter---a template parameter that is itself a template. We will need them in the later chapters of this book. This template parameter is substituted---not with a name of a class, but a name of an entire template.
-另一类值得关注的“高级”参数是 *模板模板参数*（template template parameter）——也就是“其自身是模板”的模板参数。后续多章会频繁用到。该参数被替换时，提供的不是一个具体类名，而是“一个模板”的名字。
+另一类值得关注的“高级”参数是 \textbf{模板模板参数}（template template parameter）——也就是“其自身是模板”的模板参数。后续多章会频繁用到。该参数被替换时，提供的不是一个具体类名，而是“一个模板”的名字。
 
 % Here is a class template with a template template parameter:
 下面是一个带模板模板参数的类模板示例：
@@ -272,13 +281,13 @@ class Builder {
 \end{code}
 
 % The \cii{Builder} template declares a class that is used to construct (build) a container of an arbitrary type \cii{T}. The container itself does not have a specific type, it's a template itself.
-	exttt{Builder} 模板声明了一个类，用来“构建”由任意类型 \cii{T} 组成的容器。注意容器本身没有具体类型——它本身也是一个模板。
+\cii{Builder} 模板声明了一个类，用来“构建”由任意类型 \cii{T} 组成的容器。注意容器本身没有具体类型——它本身也是一个模板。
 
 % It can be instantiated with any container template that takes one type argument:
 它可以用“接收一个类型参数”的任意容器模板来实例化：
 
 \begin{code}
-template <typename T> class my_vector { 鈥?};
+template <typename T> class my_vector { ... };
 Builder<int, my_vector> b;
 b.add(1);
 b.add(2);
@@ -286,7 +295,7 @@ b.print();
 \end{code}
 
 % Of course, there are additional requirements on the \cii{Container} template: it must have a single type parameter \cii{T} (the rest may be defaulted), it should be default-constructible, it must have a \cii{push\_back()} method, and so on. C++20 gives us a concise way to state these requirements and make them a part of the template interface; we will learn about it later in this chapter, in the \emph{Concepts} section.
-当然，对 \cii{Container} 这个模板还隐含一些约束：它需要至少有一个类型参数（其余可有缺省），应支持默认构造，且需要有 \cii{push_back()} 等方法。C++20 提供了将这些“需求”直接写进接口的简洁方式——稍后在 *Concepts* 小节会学习。
+当然，对 \cii{Container} 这个模板还隐含一些约束：它需要至少有一个类型参数（其余可有缺省），应支持默认构造，且需要有 \cii{push_back()} 等方法。\cpp[20] 提供了将这些“需求”直接写进接口的简洁方式——稍后在 \textbf{Concepts} 小节会学习。
 
 % Here is a function template that has two template template parameters:
 下面是一个拥有两个“模板模板参数”的函数模板：
@@ -336,7 +345,7 @@ print(v);
 % Templates are a kind of recipe for generating code. Next, we will see how we can convert these recipes into actual code we can run.
 模板可以看作“生成代码的配方”。接下来我们来看：如何把这些“配方”在需要的时候转化为真正可执行的代码。
 
-\section{Template instantiations}
+\section{模板实例化}
 % The template name is not a type and cannot be used to declare a variable or call a function. To create a type or a function, the template must be instantiated. Most of the time, templates are instantiated implicitly when they are used. We will again start with function templates.
 模板名字本身不是一个“类型”，因此不能直接用来声明变量或调用函数。要得到真正的类型或函数，必须对模板进行“实例化”（instantiation）。大多数情况下，模板在被“使用”时会被隐式实例化。我们再次从函数模板开始讨论。
 
@@ -459,10 +468,10 @@ swap12(std::make_pair(7, 4.2)); // pair of 4.2, 7
 \end{code}
 
 % Here, we deduce two types, \cii{U} and \cii{V}, from one argument, then use these two types to form a new type, \cii{std::pair\textless{}V,\ U\textgreater{}}. This example is unnecessarily verbose, and we can take advantage of a few more C++ features to make it both more compact and easier to maintain. First of all, the standard already has a function that deduces the argument types and uses them to declare a pair, and we have even used this function---\cii{std::make\_pair()}.
-这里我们从单个实参同时推导出 \cii{U} 与 \cii{V}，再组合成新的类型 \cii{std::pair<V, U>}。该写法有些啰嗦，可以借助更多 C++ 语言特性让其简化。首先，标准库已经提供了一个可推导实参类型并构造 pair 的辅助函数 —— \cii{std::make_pair()}。
+这里我们从单个实参同时推导出 \cii{U} 与 \cii{V}，再组合成新的类型 \cii{std::pair<V, U>}。该写法有些啰嗦，可以借助更多 C++ 语言特性让其简化。首先，标准库已经提供了一个可推导实参类型并构造\ci{pair}的辅助函数 —— \cii{std::make_pair()}。
 
 % Secondly, the return type of the function can be deduced from the expression in the \cii{return} statement (a C++14 feature). The rules of this deduction are similar to the rules of the template argument type deduction. With these simplifications, our example becomes the following:
-其次，函数返回类型也可由 \cii{return} 语句中的表达式自动推导（C++14 特性），其规则类似模板实参推导。于是例子可改写为：
+其次，函数返回类型也可由 \cii{return} 语句中的表达式\emph{自动推导}（\cpp[14] 特性），其规则类似模板实参推导。于是例子可改写为：
 
 \begin{code}
 template <typename U, typename V>

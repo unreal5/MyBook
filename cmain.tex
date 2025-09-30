@@ -6,6 +6,17 @@
 \renewcommand{\eqnannotationfont}{\sffamily\large}
 \usepackage{amsmath, amssymb}
 \usepackage{longtable,booktabs,calc}
+
+
+\makeatletter
+%\section 
+\renewcommand{\@seccntformat}[1]{\font@pplr\selectfont\textcolor{wineRed}{\csname the#1\endcsname}\hspace{0.5em}}
+\renewcommand{\section}{\@startsection{section}{1}{\z@}%\z@，移动距离为0，正为编号向内移动，负为向外移动。
+{4ex \@plus 1ex \@minus -.4ex}%标题前
+{2ex \@plus.2ex \@minus -.2ex}%标题后
+{\color{black}\rmfamily\large\sffamily\bfseries}}
+%\subsection
+\makeatother
 \begin{document}
 
 \mainmatter

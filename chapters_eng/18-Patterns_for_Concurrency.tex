@@ -1,41 +1,41 @@
-﻿\chapter{Patterns for Concurrency}
+﻿\chapter{并发模式}
 
-The last chapter is dedicated to a set of patterns for use in concurrent programs. Concurrency and C++ have a somewhat complex relationship. On the one hand, C++ is a performance-oriented language, and concurrency is almost always employed to improve performance, so the two are a natural fit. Certainly, C++ was used to develop concurrent programs since the earliest days of the language. On the other hand, for a language so often used for writing concurrent programs, C++ has a surprising dearth of constructs and features that directly address the needs of concurrent programming. These needs are mostly addressed by a wide range of community-developed libraries and, often, application-specific solutions. In this chapter, we will review common problems encountered in the development of concurrent programs and solutions that emerged from years of experience; together, these are the two sides of a design pattern.
+最后一章专门介绍一套用于并发程序的模式。并发和C++有着某种复杂的关系。一方面，C++是一种性能导向的语言，而并发几乎总是用来提升性能，所以两者自然契合。当然，从语言的早期开始，C++就被用来开发并发程序。另一方面，对于一种如此经常用于编写并发程序的语言，C++令人惊讶地缺乏直接解决并发编程需求的构造和特性。这些需求主要通过大量社区开发的库来解决，通常还有特定应用的解决方案。在本章中，我们将回顾并发程序开发中遇到的常见问题以及多年经验中涌现的解决方案；它们共同构成了设计模式的两个方面。
 
-The following topics are covered in this chapter:
+本章涵盖的主题如下：
 
 \begin{itemize}
 \item
-  What is the state of concurrency support in C++?
+  C++中并发支持的现状如何？
 \item
-  What are the main challenges of concurrency?
+  并发的主要挑战是什么？
 \item
-  The challenges of data synchronization and the C++ tools to meet them
+  数据同步的挑战以及满足这些挑战的C++工具
 \item
-  What is the design for concurrency?
+  什么是并发设计？
 \item
-  What are common patterns for managing concurrent workloads in C++?
+  在C++中管理并发工作负载的常见模式是什么？
 \end{itemize}
 
-\section{Technical requirements}
+\section{技术要求}
 
-The example code for this chapter can be found on GitHub at the following link: https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter18. Also, basic knowledge of concurrency in general as well as concurrency support in C++ are a pre-requisite.
+本章的示例代码可以在GitHub的以下链接中找到：https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter18。此外，并发的基础知识以及C++中并发支持的知识是先决条件。
 
-\section{C++ and concurrency}
+\section{C++和并发}
 
-The concept of concurrency was introduced into the language in C++11, but concurrent programs were written in C++ long before that. This chapter is not meant to be an introduction to concurrency or even an introduction to concurrency in C++. This subject is well-covered in the literature (at the time of publication of this book, one of the works that are both general and up-to-date is the book \emph{C++ Concurrency in Action} by Anthony Williams). Also, while concurrency is almost always used to improve performance, we will not directly address performance and optimization issues here; for that, you can refer to my book \emph{The Art of Writing Efficient Programs}. We are going to focus on the problems that arise in the design of concurrent software.
+并发的概念在C++11中被引入到语言中，但在此之前很久就用C++编写并发程序了。本章不是要介绍并发或者甚至是C++中的并发。这个主题在文献中有很好的覆盖（在本书出版时，Anthony Williams的\emph{C++ Concurrency in Action}是既通用又最新的作品之一）。此外，虽然并发几乎总是用来提升性能，但我们不会在这里直接讨论性能和优化问题；对于这些，你可以参考我的书\emph{The Art of Writing Efficient Programs}。我们将专注于并发软件设计中出现的问题。
 
-There are, broadly speaking, three types of challenges we encounter when developing concurrent programs. First, how to make sure the program is correct even when multiple threads operate on the same data concurrency? Second, how to execute the work of a program on multiple threads to improve the overall performance? Finally, how to design software in a way that allows us to reason about it, understand its functions, and maintain it, all with the added complexity of concurrency.
+广泛地说，在开发并发程序时我们遇到三种类型的挑战。首先，当多个线程并发操作相同数据时，如何确保程序是正确的？其次，如何在多个线程上执行程序的工作以提升整体性能？最后，如何设计软件使我们能够推理它、理解其功能并维护它，这一切都要在并发的额外复杂性下进行。
 
-The first set of challenges broadly relates to data sharing and synchronization. We will examine the related patterns first: the program must be first and foremost correct, and great performance in a program that crashes or produces results that cannot be trusted is useless.
+第一组挑战广泛涉及数据共享和同步。我们将首先检查相关的模式：程序必须首先是正确的，崩溃或产生不可信结果的程序再好的性能也是无用的。
 
-\section{Synchronization patterns}
+\section{同步模式}
 
-Synchronization patterns have one overarching purpose: to ensure correct operations on data shared by multiple threads. These patterns are critically important for the absolute majority of concurrent programs. The only programs that do not have any need for synchronization are the ones that execute several entirely independent tasks that do not involve any common data (except for, possibly, reading shared and immutable inputs) and produce separate results. For every other program, there is a need to manage some shared state, which exposes us to the danger of the dreaded data races. Formally, the C++ standard says that concurrent access to the same object (same memory location) without the appropriate synchronization that guarantees exclusive access for each thread results in undefined behavior. To be precise, the behavior is undefined if at least one thread can modify the shared data: if the data is never changed by any thread, then there is no possibility of a data race. There are design patterns that take advantage of that loophole, but let us start with the most widely known synchronization pattern. What comes to mind first when you hear about avoiding data races?
+同步模式有一个总体目的：确保对多个线程共享的数据进行正确操作。这些模式对绝大多数并发程序都至关重要。唯一不需要任何同步的程序是那些执行几个完全独立任务的程序，这些任务不涉及任何公共数据（除了可能读取共享且不可变的输入）并产生单独结果。对于其他所有程序，都需要管理一些共享状态，这使我们面临可怕的数据竞争危险。正式地说，C++标准表示，对同一对象（同一内存位置）的并发访问，如果没有适当的同步来保证每个线程的独占访问，就会导致未定义行为。准确地说，如果至少有一个线程可以修改共享数据，行为就是未定义的：如果数据从不被任何线程修改，那么就不可能发生数据竞争。有些设计模式利用了这个漏洞，但让我们从最广为人知的同步模式开始。当你听到避免数据竞争时，首先想到的是什么？
 
-\subsection{Mutex and locking patterns}
+\subsection{互斥锁和锁定模式}
 
-If there is one tool for writing concurrent programs, it is a mutex. A mutex is used to guarantee exclusive access to the shared data accessed by multiple threads:
+如果说编写并发程序有一个工具的话，那就是互斥锁。互斥锁用于保证对多个线程访问的共享数据的独占访问：
 
 \begin{code}
 std::mutex m;
@@ -47,11 +47,11 @@ transmogrify(data);
 m.unlock();
 \end{code}
 
-The data-modifying operation \texttt{transmogrify()} must be guaranteed exclusive access to the shared data: only one thread may do this operation at any given time. The programmer uses a \textbf{mutex} (short for \textbf{mutual exclusion}) to ensure this: only one thread at a time can lock the mutex and enter the critical section (the code between \texttt{lock()} and \texttt{unlock()}).
+数据修改操作\texttt{transmogrify()}必须保证对共享数据的独占访问：在任何给定时间只有一个线程可以执行此操作。程序员使用\textbf{互斥锁}（\textbf{mutual exclusion}的缩写）来确保这一点：一次只有一个线程可以锁定互斥锁并进入临界区（\texttt{lock()}和\texttt{unlock()}之间的代码）。
 
-The use of a mutex is sufficient to ensure correct access to the shared data, but this is hardly a good design. The first issue is that it is error-prone: if \texttt{transmogrify()} throws an exception, or if the programmer adds a check for the return value and exits the critical section early, the final \texttt{unlock()} is never executed and the mutex remains locked forever, thus blocking every other thread from ever accessing the data.
+使用互斥锁足以确保对共享数据的正确访问，但这很难说是一个好的设计。第一个问题是它容易出错：如果\texttt{transmogrify()}抛出异常，或者程序员添加了对返回值的检查并提前退出临界区，最终的\texttt{unlock()}永远不会被执行，互斥锁会永远保持锁定状态，从而阻止其他每个线程访问数据。
 
-This challenge is easily addressed by a particular application of the very general C++ pattern we have already seen in \emph{Chapter 5, A Comprehensive Look at RAII}. All we need is an object to lock and unlock the mutex, and the C++ standard library already provides one, \texttt{std::lock\_guard}:
+这个挑战可以通过我们在\emph{第5章，全面了解RAII}中已经看到的非常通用的C++模式的特定应用来轻松解决。我们所需要的只是一个锁定和解锁互斥锁的对象，C++标准库已经提供了一个，\texttt{std::lock\_guard}：
 
 \begin{code}
 // Example 01
@@ -69,7 +69,7 @@ t2.join();
 std::cout << i << std::endl;
 \end{code}
 
-The function \texttt{add()} modifies the shared variable \texttt{i} and, therefore, needs exclusive access; this is provided by the use of the mutex \texttt{m}. Note that if you run this example without the mutex, chances are you will get the correct result nonetheless because one of the threads will execute before the other. Sometimes the program will fail, and more often it won't. This doesn't make it correct, it just makes it hard to debug. You can see the race condition with the help of the \textbf{thread sanitizer} (\textbf{TSAN}). If you are using GCC or Clang, add \texttt{-\/-sanitize=address} to enable it. Remove the mutex from \texttt{add()} (\emph{Example 02}), compile with TSAN, run the program, and you will see this:
+函数\texttt{add()}修改共享变量\texttt{i}，因此需要独占访问；这通过使用互斥锁\texttt{m}来提供。注意，如果你不使用互斥锁运行这个例子，你可能仍然会得到正确的结果，因为其中一个线程会在另一个线程之前执行。有时程序会失败，更多时候不会。这并不使它正确，只是使它难以调试。你可以借助\textbf{线程清理器}（\textbf{TSAN}）看到竞争条件。如果你使用GCC或Clang，添加\texttt{-\/-sanitize=address}来启用它。从\texttt{add()}中删除互斥锁（\emph{示例02}），用TSAN编译，运行程序，你会看到：
 
 \begin{code}
 WARNING: ThreadSanitizer: data race
@@ -77,16 +77,16 @@ WARNING: ThreadSanitizer: data race
 Location is global 'i' of size 4 at <address>
 \end{code}
 
-There is a lot more information shown to help you figure out which threads have a data race and for which variable. This is a far more reliable way to test for data races than waiting for your program to fail.
+还会显示更多信息来帮助你找出哪些线程有数据竞争以及针对哪个变量。这是测试数据竞争比等待程序失败更可靠的方法。
 
-In C++17, the use of \texttt{std::lock\_guard} is slightly simpler since the compiler figures out the template argument from the constructor:
+在C++17中，\texttt{std::lock\_guard}的使用稍微简单一些，因为编译器可以从构造函数推断模板参数：
 
 \begin{code}
 // Example 03
 std::lock_guard l(m);
 \end{code}
 
-In C++20, we can use \texttt{std::jthread} instead of calling \texttt{join()} explicitly:
+在C++20中，我们可以使用\texttt{std::jthread}而不是显式调用\texttt{join()}：
 
 \begin{code}
 // Example 03
@@ -97,11 +97,11 @@ In C++20, we can use \texttt{std::jthread} instead of calling \texttt{join()} ex
 std::cout << i << std::endl;
 \end{code}
 
-Note that care must be taken to destroy the threads before using the result of the computation since the destructor now joins the thread and waits for the calculation to complete. Otherwise, there is another data race: the main thread is reading the value of \texttt{i} while it is being incremented (TSAN finds this race as well).
+注意必须小心在使用计算结果之前销毁线程，因为析构函数现在会join线程并等待计算完成。否则，会有另一个数据竞争：主线程在递增\texttt{i}时读取\texttt{i}的值（TSAN也会发现这个竞争）。
 
-The use of RAII ensures that every time a mutex is locked it is also unlocked, but this does not avoid other errors that can happen when using mutexes. The most common one is forgetting to use the mutex in the first place. The synchronization guarantees apply only if every thread uses the same mechanism to ensure exclusive access to the data. If even one thread does not use the mutex, even if it's only to read the data, then the entire program is incorrect.
+RAII的使用确保每次互斥锁被锁定时也会被解锁，但这并不能避免使用互斥锁时可能发生的其他错误。最常见的是首先忘记使用互斥锁。同步保证只有在每个线程都使用相同的机制来确保对数据的独占访问时才适用。如果即使只有一个线程不使用互斥锁，即使它只是为了读取数据，那么整个程序就是不正确的。
 
-A pattern was developed to prevent unsynchronized access to the shared. This pattern usually goes by the name ``mutex-guarded'' or ``mutex-protected'' and it has two key elements: first, the data that needs to be protected and the mutex that is used to do so are combined in the same object. Second, the design ensures that every access to the data is protected by the mutex. Here is the basic mutex-guarded class template:
+为了防止对共享数据的非同步访问，开发了一种模式。这种模式通常被称为"互斥锁保护"或"互斥锁保护"，它有两个关键要素：首先，需要保护的数据和用于保护的互斥锁被组合在同一个对象中。其次，设计确保对数据的每次访问都受到互斥锁的保护。这里是基本的互斥锁保护类模板：
 
 \begin{code}
 // Example 04
@@ -120,7 +120,7 @@ template <typename T> class MutexGuarded {
 };
 \end{code}
 
-As you can see, this template combines the mutex and the data guarded by it, and offers only one way to access the data: by invoking the \texttt{MutexGuarded} object with an arbitrary callable. This ensures that all data accesses are synchronized:
+正如你所看到的，这个模板结合了互斥锁和被它保护的数据，并只提供一种访问数据的方式：通过调用带有任意可调用对象的\texttt{MutexGuarded}对象。这确保所有数据访问都是同步的：
 
 \begin{code}
 // Example 04
@@ -137,15 +137,15 @@ t2.join();
 i_guarded([](int i) { std::cout << i << std::endl; });
 \end{code}
 
-These are the most basic versions of the patterns for the correct and reliable use of mutexes. In practice, the needs are often more complex, and so are the solutions: there are much more efficient locks than \texttt{std::mutex} (for example, spinlocks for guarding short computations, which you can find in my book \emph{The Art of Writing Efficient Programs}), and there are also more complex locks such as shared and exclusive locks for efficient read-write access. Also, often we have to operate on several shared objects at the same time, which leads to the problem of safely locking multiple mutexes. Many of these problems are solved by more complex variations of the patterns we have just seen. Some call for an entirely different approach to the synchronization of data accesses, and we will see several of those later in this section. Finally, some data access challenges are better solved at a much higher level of the overall system design; this will also be illustrated in this chapter.
+这些是正确可靠使用互斥锁的模式的最基本版本。在实践中，需求往往更复杂，解决方案也是如此：有比\texttt{std::mutex}更高效的锁（例如，用于保护短计算的自旋锁，你可以在我的书\emph{The Art of Writing Efficient Programs}中找到），还有更复杂的锁，如用于高效读写访问的共享和独占锁。此外，我们经常必须同时操作几个共享对象，这导致安全锁定多个互斥锁的问题。许多这些问题通过我们刚才看到的模式的更复杂变体来解决。有些需要完全不同的数据访问同步方法，我们将在本节后面看到其中几种。最后，一些数据访问挑战在整体系统设计的更高层次上得到更好的解决；这也将在本章中说明。
 
-Let us next review different approaches to data sharing that go beyond the commonly used mutex.
+让我们接下来回顾除了常用的互斥锁之外的不同数据共享方法。
 
-\subsection{No sharing is the best sharing}
+\subsection{不共享是最好的共享}
 
-While protecting shared data with a mutex does not seem that complicated, in reality, data races are the most common bugs in any concurrent program. While it may seem a useless truism to state that you cannot have data races accessing data you do not share, not sharing is a frequently overlooked alternative to sharing. To put it another way, it is often possible to redesign a program to avoid sharing some of the variables or to restrict access to shared data to a smaller part of the code.
+虽然用互斥锁保护共享数据看起来并不复杂，但实际上，数据竞争是任何并发程序中最常见的错误。虽然说你不能在不共享的数据上发生数据竞争可能看起来是无用的真理，但不共享是一个经常被忽视的共享替代方案。换句话说，通常可以重新设计程序以避免共享某些变量或将对共享数据的访问限制在代码的较小部分。
 
-This idea is the basis of a design pattern that is simple to explain but often hard to apply because it requires thinking outside of the box -- the thread-specific data pattern. It is also known as ``thread-local data,'' but the name invites confusion with the C++ \texttt{thread\_local} keyword. To illustrate the idea, we consider this example: we need to count certain events that may be happening in multiple threads simultaneously (for this demonstration, it does not matter what is counted). We need the total count of these events in the entire program, so the straightforward approach is to have a shared count and increment it when a thread detects an event (in the demonstration, we count random numbers divisible by 10):
+这个想法是一个设计模式的基础，它很容易解释但往往难以应用，因为它需要跳出框框思考——线程特定数据模式。它也被称为"线程本地数据"，但这个名称会与C++的\texttt{thread\_local}关键字产生混淆。为了说明这个想法，我们考虑这个例子：我们需要计算可能在多个线程中同时发生的某些事件（对于这个演示，计算什么并不重要）。我们需要整个程序中这些事件的总计数，所以直接的方法是有一个共享计数并在线程检测到事件时递增它（在演示中，我们计算能被10整除的随机数）：
 
 \begin{code}
 // Example 05
@@ -159,7 +159,7 @@ void events(unsigned int s) {
 }
 \end{code}
 
-This is a straightforward design; it is not the best one. Notice that while each thread is counting events, it does not need to know how many events were counted by other threads. This is not to be confused with the fact that, in our implementation, each thread needs to know what the current value of the count is so it can correctly increment it. The distinction is subtle but important and suggests an alternative: each thread can count its own events using a thread-specific count, one for each thread. None of these counts are correct, but it doesn't matter as long as we can add all counts together when we need the correct total event count. There are several possible designs here. We can use a local count for the events and update the shared count once before the thread exits:
+这是一个直接的设计；它不是最好的。注意，虽然每个线程都在计算事件，但它不需要知道其他线程计算了多少事件。这不要与事实混淆，即在我们的实现中，每个线程需要知道计数的当前值以便正确地递增它。这种区别是微妙但重要的，并建议一个替代方案：每个线程可以使用线程特定的计数来计算自己的事件，每个线程一个。这些计数都不是正确的，但这没关系，只要我们在需要正确的总事件计数时可以将所有计数加在一起。这里有几种可能的设计。我们可以使用本地计数来计算事件，并在线程退出之前更新一次共享计数：
 
 \begin{code}
 // Example 06
@@ -175,9 +175,9 @@ void events(unsigned int s) {
 }
 \end{code}
 
-Any local (stack-allocated) variable declared in a function that is being executed by one or more threads is specific to each thread: there is a unique copy of this variable on the stack of each thread, and each thread accesses its own variable when they all refer to the same name \texttt{n}.
+在被一个或多个线程执行的函数中声明的任何本地（栈分配）变量对每个线程都是特定的：每个线程的栈上都有这个变量的唯一副本，当它们都引用相同的名称\texttt{n}时，每个线程访问自己的变量。
 
-We could also give each thread a unique count variable to increment and add them together in the main thread after all the counting threads are finished:
+我们也可以给每个线程一个唯一的计数变量来递增，并在所有计数线程完成后在主线程中将它们加在一起：
 
 \begin{code}
 // Example 07
@@ -188,7 +188,7 @@ void events(unsigned int s, size_t& n) {
 }
 \end{code}
 
-When calling this counting function on multiple threads, we have to take some precautions. Obviously, we should give each thread its own variable for the count \texttt{n}. This is not enough: due to the hardware-related effect known as ``false sharing,'' we must also ensure that the thread-specific counts are not adjacent in memory (a detailed description of false sharing can be found in my book \emph{The Art of Writing} \emph{Efficient Programs}):
+在多个线程上调用这个计数函数时，我们必须采取一些预防措施。显然，我们应该给每个线程自己的计数变量\texttt{n}。这还不够：由于被称为"伪共享"的硬件相关效应，我们还必须确保线程特定的计数在内存中不相邻（伪共享的详细描述可以在我的书\emph{The Art of Writing} \emph{Efficient Programs}中找到）：
 
 \begin{code}
 // Example 07
@@ -201,11 +201,11 @@ t2.join();
 size_t count = n1 + n2;
 \end{code}
 
-The \texttt{alignas} attribute ensures 64-byte alignment for each count variable, thus ensuring that there is at least 64 bytes difference between the addresses of \texttt{n1} and \texttt{n2} (64 is the size of the cache line on most modern CPUs, including X86 and ARM). Note the \texttt{std::ref} wrapper that is needed for \texttt{std::thread} to invoke functions that use reference arguments.
+\texttt{alignas}属性确保每个计数变量的64字节对齐，从而确保\texttt{n1}和\texttt{n2}的地址之间至少有64字节的差异（64是大多数现代CPU（包括X86和ARM）上的缓存行大小）。注意\texttt{std::ref}包装器，这是\texttt{std::thread}调用使用引用参数的函数所需要的。
 
-The previous example reduces the need for shared data access to once per thread, while the last one does not have any shared data at all; the preferred solution depends on exactly when is the value of the total count needed.
+前面的例子将对共享数据访问的需求减少到每个线程一次，而最后一个例子根本没有任何共享数据；首选的解决方案取决于何时需要总计数的值。
 
-The last example can be examined from a slightly different point of view; it would help to slightly rewrite it:
+最后一个例子可以从稍微不同的角度来检查；稍微重写它会有帮助：
 
 \begin{code}
 // Example 08
@@ -220,9 +220,9 @@ t2.join();
 size_t count = counts.n1 + counts.n2;
 \end{code}
 
-This does not change anything of substance, but we can view the thread-specific counts as parts of the same data structure rather than independent variables created for each thread. This way of thinking leads us to another variant of the thread-specific data pattern: sometimes, multiple threads must operate on the same data, but it may be possible to partition the data and give each thread its own subset to work on.
+这不会改变任何实质性的东西，但我们可以将线程特定的计数视为同一数据结构的一部分，而不是为每个线程创建的独立变量。这种思维方式引导我们到线程特定数据模式的另一个变体：有时，多个线程必须操作相同的数据，但可能可以分割数据并给每个线程自己的子集来处理。
 
-In the next example, we need to clamp each element in the vector (if an element exceeds the maximum value, it is replaced by this value, so the result is always in the range between zero and the maximum). The computation is implemented by this templated algorithm:
+在下一个例子中，我们需要钳制向量中的每个元素（如果元素超过最大值，它被这个值替换，所以结果总是在零和最大值之间的范围内）。计算由这个模板化算法实现：
 
 \begin{code}
 // Example 09
@@ -234,9 +234,9 @@ void clamp(IT from, IT to, T value) {
 }
 \end{code}
 
-A production-quality implementation would ensure that the iterator arguments satisfy the iterator requirements and the maximum value is comparable with the iterator value type, but we omit all that for brevity (we had an entire chapter on concepts and other ways to restrict templates).
+生产质量的实现会确保迭代器参数满足迭代器要求，最大值与迭代器值类型可比较，但为了简洁我们省略了所有这些（我们有整整一章关于概念和其他限制模板的方法）。
 
-The \texttt{clamp()} function can be called on any sequence, and sometimes we will be lucky to have separate unrelated data structures we can process independently on multiple threads. But to continue this example, let us say that we have only one vector we need to clamp. All is not lost, however, as we can process non-overlapping parts of it on multiple threads with no risk of data races:
+\texttt{clamp()}函数可以在任何序列上调用，有时我们会幸运地拥有可以在多个线程上独立处理的单独的不相关数据结构。但为了继续这个例子，让我们说我们只有一个需要钳制的向量。然而，一切都没有丢失，因为我们可以在多个线程上处理它的非重叠部分，没有数据竞争的风险：
 
 \begin{code}
 // Example 09
@@ -252,15 +252,15 @@ t1.join();
 t2.join();
 \end{code}
 
-Even though the data structure in our program is shared between two threads and both threads modify it, this program is correct: for each vector element, there is only one thread that can modify it. But what about the vector object itself? Isn't it shared between all threads?
+即使我们程序中的数据结构在两个线程之间共享并且两个线程都修改它，这个程序是正确的：对于每个向量元素，只有一个线程可以修改它。但是向量对象本身呢？它不是在所有线程之间共享的吗？
 
-We have already highlighted that there is one case when data sharing is allowed without any synchronization: any number of threads can read the same variable as long as no other thread is modifying it. Our example takes advantage of this: all threads read the size of the vector and other data members of the vector object, but no threads change them.
+我们已经强调过，有一种情况允许数据共享而不需要任何同步：任意数量的线程可以读取相同的变量，只要没有其他线程修改它。我们的例子利用了这一点：所有线程都读取向量的大小和向量对象的其他数据成员，但没有线程改变它们。
 
-The application of the thread-specific data pattern must be carefully thought through and often requires a good understanding of the data structures. We must be absolutely certain that none of the threads attempt to modify the variables they do share, such as the size and the pointer to the data that are members of the vector object itself. For example, if one of the threads could resize the vector, that would be a data race even if no two threads access the same element: the size of the vector is a variable that is modified by one or more threads without a lock.
+线程特定数据模式的应用必须仔细考虑，通常需要对数据结构有很好的理解。我们必须绝对确定没有线程试图修改它们共享的变量，例如向量对象本身的成员的大小和数据指针。例如，如果其中一个线程可以调整向量的大小，那即使没有两个线程访问相同的元素，那也是数据竞争：向量的大小是一个被一个或多个线程修改而没有锁的变量。
 
-The last pattern we want to describe in this subsection applies when several threads need to modify the entire data set (so it cannot be partitioned) but the threads do not need to see the modifications done by other threads. Usually, this happens when the modifications are done as a part of the computation of some result, but the modified data itself is not the final result. In this case, sometimes the best approach is to create a thread-specific copy of the data for each thread. This pattern works best when such copy is a ``throw-away'' object: each thread needs to modify its copy but the result of the modifications does not need to be committed back to the original data structure.
+我们想在这个小节中描述的最后一个模式适用于几个线程需要修改整个数据集（所以它不能被分割）但线程不需要看到其他线程所做的修改的情况。通常，这发生在修改是作为某些结果计算的一部分完成的，但修改的数据本身不是最终结果。在这种情况下，有时最好的方法是为每个线程创建数据的线程特定副本。当这样的副本是一个"一次性"对象时，这种模式工作得最好：每个线程需要修改其副本，但修改的结果不需要提交回原始数据结构。
 
-In the following example, we use an algorithm to count unique elements in a vector that sorts the vector in place:
+在下面的例子中，我们使用一个算法来计算向量中的唯一元素，该算法就地排序向量：
 
 \begin{code}
 // Example 10
@@ -271,7 +271,7 @@ void count_unique(std::vector<int> data, size_t& count) {
 }
 \end{code}
 
-Also, when we need to count only elements that satisfy a predicate, we erase all other elements first (\texttt{std::erase\_if} is a C++20 addition, but is easy to implement in a prior version of C++):
+此外，当我们需要只计算满足谓词的元素时，我们首先擦除所有其他元素（\texttt{std::erase\_if}是C++20的添加，但在先前版本的C++中很容易实现）：
 
 \begin{code}
 // Example 10
@@ -283,7 +283,7 @@ void count_unique_even(std::vector<int> data, size_t& count) {
 }
 \end{code}
 
-Both are destructive operations on a vector, but they are only means to an end: the altered vector can be discarded once we have our count. The simplest, and often the most efficient, way to compute our counts on several threads simultaneously is to make thread-specific copies of the vector. Actually, we did this already: both counting functions take the vector argument by value and, therefore, make a copy. Usually, this would be a mistake, but in our case, it is intentional and allows both functions to operate on the same vector concurrently:
+两者都是对向量的破坏性操作，但它们只是达到目的的手段：一旦我们有了计数，改变的向量就可以被丢弃。同时在几个线程上计算我们的计数的最简单、通常也是最高效的方法是制作向量的线程特定副本。实际上，我们已经这样做了：两个计数函数都通过值接受向量参数，因此制作副本。通常，这会是一个错误，但在我们的情况下，这是有意的，允许两个函数同时在同一个向量上操作：
 
 \begin{code}
 // Example 10
@@ -298,19 +298,19 @@ size_t unique_even_count = 0;
 }
 \end{code}
 
-Of course, there is still concurrent access to the original data, and it is done without a lock: both threads need to make their thread-specific copies. However, this falls under the exception of read-only concurrent access and is safe.
+当然，对原始数据仍然有并发访问，并且这是在没有锁的情况下完成的：两个线程都需要制作它们的线程特定副本。然而，这属于只读并发访问的例外，是安全的。
 
-In principle, avoiding data sharing when possible and using mutexes otherwise is sufficient to arrange race-free access to data in any program. However, this may not be an efficient way to accomplish this goal, and good performance is almost always the goal of concurrency. We will now consider several other patterns for concurrent access to shared data that, when applicable, can offer superior performance. We are going to start with synchronization primitives that go beyond a mutex and are specifically designed to allow threads to efficiently wait for some event.
+原则上，在可能的情况下避免数据共享，否则使用互斥锁，足以在任何程序中安排无竞争的数据访问。然而，这可能不是实现这个目标的有效方式，而良好的性能几乎总是并发的目标。我们现在将考虑其他几种用于并发访问共享数据的模式，在适用时，可以提供优越的性能。我们将从超越互斥锁的同步原语开始，这些原语专门设计用于允许线程高效地等待某些事件。
 
-\subsection{Waiting patterns}
+\subsection{等待模式}
 
-Waiting is a problem that is frequently encountered in concurrent programs and takes many forms. We have already seen one: the mutex. Indeed, if two threads are trying to enter the critical section simultaneously, one of them will have to wait. But waiting is not the goal here, just an unfortunate side effect of exclusive access to the critical section. There are other situations where waiting is the primary objective. For example, we may have threads that are waiting for some event to happen. This could be a user interface thread waiting for input (little to no performance requirements) or a thread waiting on a network socket (moderate performance requirements) or even a high-performance thread such as a computing thread in a thread pool waiting for a task to execute (extremely high performance requirements). Not surprisingly, there are different implementations for these scenarios, but fundamentally there are two approaches: polling and notifications. We are going to look at notifications first.
+等待是并发程序中经常遇到的问题，有多种形式。我们已经看到了一种：互斥锁。确实，如果两个线程试图同时进入临界区，其中一个将不得不等待。但这里等待不是目标，只是临界区独占访问的不幸副作用。还有其他等待是主要目标的情况。例如，我们可能有等待某些事件发生的线程。这可能是等待输入的用户界面线程（很少或没有性能要求）或等待网络套接字的线程（中等性能要求）甚至高性能线程，如线程池中等待执行任务的计算线程（极高性能要求）。毫不奇怪，这些场景有不同的实现，但从根本上有两种方法：轮询和通知。我们将首先看通知。
 
-The basic pattern for waiting for a notification is the \textbf{condition pattern}. It usually consists of a condition variable and a mutex. One or more threads are blocked waiting on the condition variable. During this time, there is one more thread that locks the mutex (thus guaranteeing exclusive access) and does the work whose completion the other threads are waiting for. Once the work is done, the thread that completed it must release the mutex (so other threads can access the shared data containing the results of this work) and notify the waiting threads that they can proceed.
+等待通知的基本模式是\textbf{条件模式}。它通常由条件变量和互斥锁组成。一个或多个线程被阻塞等待条件变量。在此期间，还有一个线程锁定互斥锁（从而保证独占访问）并执行其他线程正在等待完成的工作。一旦工作完成，完成工作的线程必须释放互斥锁（以便其他线程可以访问包含此工作结果的共享数据）并通知等待线程它们可以继续。
 
-For example, in a thread pool, the waiting threads are the pool worker threads that are waiting for tasks to be added to the pool. Since the pool task queue is a shared resource, a thread needs exclusive access to push or pop tasks. A thread that adds one or more tasks to the queue must hold the mutex while doing it and then notify the worker threads that there are tasks for them to execute.
+例如，在线程池中，等待线程是等待任务被添加到池中的池工作线程。由于池任务队列是共享资源，线程需要独占访问来推送或弹出任务。向队列添加一个或多个任务的线程必须在这样做时持有互斥锁，然后通知工作线程有任务要执行。
 
-Let us now see a very basic example of the notification pattern with just two threads. First, we have the main thread that starts a worker thread and then waits for it to produce some results:
+让我们现在看一个只有两个线程的通知模式的非常基本的例子。首先，我们有启动工作线程然后等待它产生一些结果的主线程：
 
 \begin{code}
 // Example 11
@@ -326,11 +326,11 @@ void main_thread() {
 }
 \end{code}
 
-The locking in this case is provided by \texttt{std::unique\_lock}, an object that wraps around a mutex and has a mutex-like interface with \texttt{lock()} and \texttt{unlock()} member functions. The mutex is locked in the constructor and almost immediately unlocked by the \texttt{wait()} function when we start waiting on the condition. When the notification is received, \texttt{wait()} locks the mutex again before returning control to the caller.
+在这种情况下的锁定由\texttt{std::unique\_lock}提供，这是一个包装互斥锁并具有类似互斥锁的接口的对象，有\texttt{lock()}和\texttt{unlock()}成员函数。互斥锁在构造函数中被锁定，当我们开始等待条件时，几乎立即被\texttt{wait()}函数解锁。当收到通知时，\texttt{wait()}在返回控制给调用者之前再次锁定互斥锁。
 
-Many implementations of waiting and conditions suffer from what is known as spurious wake-up: wait can be interrupted even without notification. This is why we also check whether the results are ready, in our case, by checking the result count \texttt{n}: if it is still zero, there are no results, the main thread has been awakened in error and we can go back to waiting (note that the waiting thread must still acquire the mutex before \texttt{wait()} returns, so it must wait for the worker thread to release this mutex).
+许多等待和条件的实现都受到所谓的虚假唤醒的影响：即使没有通知，等待也可能被中断。这就是为什么我们还要检查结果是否准备好，在我们的情况下，通过检查结果计数\texttt{n}：如果它仍然是零，就没有结果，主线程被错误地唤醒，我们可以回到等待（注意等待线程在\texttt{wait()}返回之前仍然必须获取互斥锁，所以它必须等待工作线程释放这个互斥锁）。
 
-The worker thread must lock the same mutex before it can access the shared data, then unlock it before notifying the main thread that the work is done:
+工作线程必须在访问共享数据之前锁定相同的互斥锁，然后在通知主线程工作完成之前解锁它：
 
 \begin{code}
 // Example 11
@@ -345,11 +345,11 @@ void produce() {
 }
 \end{code}
 
-It is not necessary to hold the mutex the entire time the worker thread is active: its only purpose is to protect the shared data such as the result count \texttt{n} in our example.
+没有必要在工作线程活动的整个时间内持有互斥锁：它的唯一目的是保护共享数据，如我们例子中的结果计数\texttt{n}。
 
-The two synchronization primitives \texttt{std::conditional\_variable} and \texttt{std::unique\_lock} are standard C++ tools for implementing the waiting pattern with a condition. Just as with a mutex, there are many variations.
+两个同步原语\texttt{std::conditional\_variable}和\texttt{std::unique\_lock}是用于实现带条件的等待模式的标准C++工具。就像互斥锁一样，有许多变化。
 
-The alternative to notifications is polling. In this pattern, the waiting thread repeatedly checks whether some condition is met. In C++20, we can implement a simple example of polling wait using \texttt{std::atomic\_flag} which is essentially an atomic boolean variable (prior to C++20 we could do the same with \texttt{std::atomic\textless{}bool\textgreater{}}):
+通知的替代方案是轮询。在这种模式中，等待线程重复检查某些条件是否满足。在C++20中，我们可以使用\texttt{std::atomic\_flag}实现一个简单的轮询等待例子，它本质上是一个原子布尔变量（在C++20之前我们可以用\texttt{std::atomic\textless{}bool\textgreater{}}做同样的事情）：
 
 \begin{code}
 // Example 12
@@ -368,11 +368,11 @@ void main_thread() {
 }
 \end{code}
 
-Atomic operations such as \texttt{test\_and\_set()} make use of \textbf{memory barriers}: a kind of global synchronization flag that ensures that all changes made to the memory before the flag is set (release) are visible to any operation on any other thread that is executed after the flag is tested (acquire). There is a lot more to these barriers, but it is outside of the scope of this book and can be found in many books dedicated to concurrency and efficiency.
+像\texttt{test\_and\_set()}这样的原子操作使用\textbf{内存屏障}：一种全局同步标志，确保在标志被设置（释放）之前对内存的所有更改对在标志被测试（获取）之后在任何其他线程上执行的任何操作都是可见的。这些屏障还有很多内容，但它超出了本书的范围，可以在许多专门讨论并发和效率的书籍中找到。
 
-The most important difference between this and the previous example is the explicit polling loop for the waiting thread in \emph{Example 12}. If the wait is long, this is highly inefficient since the waiting thread is busy computing (reading from memory) the entire time it waits. Any practical implementation would introduce some sleep into the wait loop, but doing so also comes at a cost: the waiting thread will not wake up immediately after the worker thread sets the flag but must finish the sleep first. These efficiency concerns are outside of the scope of this book; here we want to show the overall structure and the components of these patterns.
+这个例子和前一个例子之间最重要的区别是\emph{示例12}中等待线程的显式轮询循环。如果等待时间很长，这是非常低效的，因为等待线程在等待的整个时间内都在忙于计算（从内存中读取）。任何实际实现都会在等待循环中引入一些睡眠，但这样做也是有代价的：等待线程不会在工作线程设置标志后立即唤醒，而必须首先完成睡眠。这些效率问题超出了本书的范围；这里我们想展示这些模式的整体结构和组件。
 
-The boundary between polling and waiting is not always clear. For example, for all we know, \texttt{wait()} could be implemented by polling some internal state of the condition variable periodically. In fact, the same atomic flag we just saw can be used to wait for a notification:
+轮询和等待之间的界限并不总是清楚的。例如，据我们所知，\texttt{wait()}可能通过定期轮询条件变量的某些内部状态来实现。事实上，我们刚才看到的相同原子标志可以用来等待通知：
 
 \begin{code}
 // Example 13
@@ -393,9 +393,9 @@ void main_thread() {
 }
 \end{code}
 
-The call to \texttt{wait()} requires a corresponding call to \texttt{notify\_one()} (or \texttt{notify\_all()} if we have more than one thread waiting on the flag). Its implementation is almost certainly more efficient than our simple polling loop. After the notification is received and the wait is over, we check the flag to make sure it was really set. The standard says that this is not necessary and \texttt{std::atomic\_flag::wait()} does not suffer from spurious wakeups, but TSAN in both GCC and Clang disagree (this could be a false positive in TSAN or a bug in the standard library implementation).
+对\texttt{wait()}的调用需要相应的\texttt{notify\_one()}调用（如果我们有多个线程等待标志，则需要\texttt{notify\_all()}）。它的实现几乎肯定比我们简单的轮询循环更高效。通知接收到且等待结束后，我们检查标志以确保它真的被设置了。标准说这不是必要的，\texttt{std::atomic\_flag::wait()}不会遭受虚假唤醒，但GCC和Clang中的TSAN都不同意（这可能是TSAN中的误报或标准库实现中的错误）。
 
-There are many other situations where waiting is needed, and the conditions we need to wait for vary widely. Another common need is to wait for a certain number of events to occur. For example, we may have several threads producing results and we may need all of them to complete their share of the work before the main thread can proceed. This is accomplished by waiting on a barrier or a latch. Prior to C++20, we would need to implement these synchronization primitives ourselves or use a third-party library, but in C++20 they became standard:
+还有许多其他需要等待的情况，我们需要等待的条件变化很大。另一个常见需求是等待一定数量的事件发生。例如，我们可能有几个产生结果的线程，我们可能需要它们全部完成各自的工作份额，然后主线程才能继续。这通过等待屏障或闩锁来完成。在C++20之前，我们需要自己实现这些同步原语或使用第三方库，但在C++20中它们成为了标准：
 
 \begin{code}
 // Example 14
@@ -416,19 +416,19 @@ void main_thread() {
 }
 \end{code}
 
-The latch is initialized with the count of events to wait for. It will unlock when that many \texttt{count\_down()} calls have been done.
+闩锁用要等待的事件计数初始化。当已经完成那么多\texttt{count\_down()}调用时，它将解锁。
 
-There are many other applications of waiting, but almost all waiting patterns fall broadly into one of the categories we have seen in this section (a specific implementation can have a dramatic effect on performance in a particular case, which is you are far more likely to see custom application-specific versions of these synchronization constructs than you are to find non-standard containers or other basic data structures).
+等待还有许多其他应用，但几乎所有等待模式都广泛地归入我们在本节中看到的类别之一（特定实现可能对特定情况下的性能产生戏剧性影响，这就是为什么你更可能看到这些同步构造的自定义应用特定版本，而不是找到非标准容器或其他基本数据结构）。
 
-We are now going to see several examples of very specialized and very efficient synchronization patterns. They are not for all situations, but when they fit the need, they often offer the best performance.
+我们现在将看到几个非常专门和非常高效的同步模式的例子。它们不适用于所有情况，但当它们符合需要时，它们通常提供最好的性能。
 
-\subsection{Lock-free synchronization patterns}
+\subsection{无锁同步模式}
 
-Most of the time, safely accessing shared data relies on mutexes. C++ also supports another type of synchronizing concurrent threads: atomic operations. Again, a detailed explanation is outside of the scope of this book, and this section requires some prior knowledge of the atomics.
+大多数时候，安全访问共享数据依赖于互斥锁。C++还支持另一种同步并发线程的类型：原子操作。同样，详细的解释超出了本书的范围，本节需要一些关于原子的先验知识。
 
-The basic idea is this: some data types (usually integers) have special hardware instructions that allow a few simple operations such as reading or writing or incrementing the values to be done atomically, in a single event. During this atomic operation, other threads cannot access the atomic variable at all, so if one thread performs an atomic operation, all other threads can see the same variable as it was before the operation or after the operation but not in the middle of the operation. For example, an increment is a read-modify-write operation, but an atomic increment is a special hardware transaction such that once the read began, no other thread can access the variable until the write completes. These atomic operations are often accompanied by memory barriers; we have used them already to ensure that not just atomic but all other operations on all variables in the program are synchronized and free from data races.
+基本思想是这样的：一些数据类型（通常是整数）有特殊的硬件指令，允许少数简单操作（如读取或写入或递增值）原子地、在单个事件中完成。在这个原子操作期间，其他线程根本无法访问原子变量，所以如果一个线程执行原子操作，所有其他线程可以看到相同的变量，因为它在操作之前或操作之后，但不是在操作中间。例如，递增是一个读-修改-写操作，但原子递增是一个特殊的硬件事务，使得一旦读取开始，其他线程就不能访问变量，直到写入完成。这些原子操作通常伴随着内存屏障；我们已经使用它们来确保不仅原子的而且程序中所有变量上的所有其他操作都是同步的，没有数据竞争。
 
-The simplest but useful application of atomic operations is for counting. We often need to count something in programs, and in concurrent programs, we may need to count some events that can occur on multiple threads. If we are only interested in the total count after all threads are done, this is best handled by the ``non-sharing'' or thread-specific counter we saw earlier. But what if all threads need to know the current count as well? We can always use a mutex, but using a mutex to protect a simple increment of an integer is highly inefficient. C++ gives us a better way, the atomic counter:
+原子操作的最简单但有用的应用是计数。我们经常需要在程序中计算某些东西，在并发程序中，我们可能需要计算可能在多个线程上发生的某些事件。如果我们只对所有线程完成后的总计数感兴趣，这最好通过我们早期看到的"非共享"或线程特定计数器来处理。但是如果所有线程也需要知道当前计数呢？我们总是可以使用互斥锁，但使用互斥锁来保护整数的简单递增是非常低效的。C++给了我们一个更好的方法，原子计数器：
 
 \begin{code}
 // Example 15
@@ -442,9 +442,9 @@ void thread_work() {
 }
 \end{code}
 
-There is only one shared variable in this example, \texttt{count} itself. Since we do not have any other shared data, we have no need for memory barriers (``relaxed'' memory order means there are no requirements on the order of accesses to other data). The \texttt{fetch\_add()} operation is an atomic increment, it increments \texttt{count} by one and returns the old value of \texttt{count}.
+在这个例子中只有一个共享变量，\texttt{count}本身。由于我们没有任何其他共享数据，我们不需要内存屏障（"宽松"内存顺序意味着对其他数据的访问顺序没有要求）。\texttt{fetch\_add()}操作是原子递增，它将\texttt{count}递增1并返回\texttt{count}的旧值。
 
-The atomic count can also be used to let multiple threads work on the same data structure without any need for locking: to do this, we need to make sure there is only one thread working on each element of the data structure. When used in this manner, the pattern is often referred to as the atomic index. In the next example, we have an array of data that is shared between all threads:
+原子计数也可以用来让多个线程在相同的数据结构上工作而不需要任何锁定：为了做到这一点，我们需要确保只有一个线程在数据结构的每个元素上工作。当以这种方式使用时，该模式通常被称为原子索引。在下一个例子中，我们有一个在所有线程之间共享的数据数组：
 
 \begin{code}
 // Example 16
@@ -453,7 +453,7 @@ struct Data { ... };
 Data data[N] {};
 \end{code}
 
-We also have an atomic index that is used by all threads that need to store the results of their work in the array. To do so safely, each thread increments an atomic index and used the pre-increment value as the index into the array. No two atomic increment operations can produce the same value, therefore, each thread gets its own array elements to work on:
+我们还有一个原子索引，它被所有需要在数组中存储其工作结果的线程使用。为了安全地做到这一点，每个线程递增原子索引并使用前递增值作为数组的索引。没有两个原子递增操作可以产生相同的值，因此，每个线程获得自己的数组元素来处理：
 
 \begin{code}
 // Example 16
@@ -469,7 +469,7 @@ void produce(size_t& n) {
 }
 \end{code}
 
-Each thread gets to initialize however many array elements it can and stops when it (and all other threads) fill the entire array. The main thread has to wait until all the work is done before accessing any of the results. This cannot be done with just the atomic index since it is incremented when a thread starts working on a particular array element, not when that thread is done with the work. We have to use some other synchronization mechanism to make the main thread wait until all the work is done, such as a latch or, in a simple case, joining the producer threads:
+每个线程可以初始化任意多个数组元素，当它（和所有其他线程）填满整个数组时停止。主线程必须等到所有工作完成后才能访问任何结果。这不能仅仅用原子索引来完成，因为当线程开始处理特定数组元素时索引被递增，而不是当该线程完成工作时。我们必须使用其他一些同步机制来使主线程等待直到所有工作完成，例如闩锁或在简单情况下，连接生产者线程：
 
 \begin{code}
 // Example 16

@@ -189,31 +189,16 @@
   \fi
 }
 % \@makechapterhead 用于生成有编号章节的标题。
+\let\old@makechapterhead\@makechapterhead
 \renewcommand{\@makechapterhead}[1]{%
+  \ifx\chap@image\@empty\old@makechapterhead{#1}\else
   \begin{tikzpicture}[remember picture,overlay]
     \node at (current page.north west)
   {
     \begin{tikzpicture}[remember picture,overlay]
-      % 根据是否设置图片，决定是否绘制背景图。
-      \ifx\chap@image\@empty
-        %无背景
-      \else
         \node[on background layer,anchor=north west,inner sep=0pt,opacity=1.0] at (0,0){\includegraphics[width=\paperwidth]{\chap@image}};        
-      \fi
     \end{tikzpicture}
   };
-  % 数字色块（章号）配色：无背景时用浅底深字，有背景时用深底浅字
-  \ifx\chap@image\@empty
-    % 无背景：浅底深字，边框关闭
-    \def\chap@num@fill{white}
-    \def\chap@num@opacity{1.0}
-    \def\chap@num@textcolor{DarkGray}
-    \def\chap@num@draw{none}
-    \def\chap@num@drawopacity{1}
-    % 标题：纯文字黑色，无底
-    \def\chap@title@textcolor{black}
-    \def\chap@title@nodeopts{}
-  \else
     % 有背景：更强对比的深色主题 + 半透明黑底衬托标题
     \def\chap@num@fill{chapAccent}
     \def\chap@num@opacity{0.92}
@@ -223,7 +208,6 @@
   % 标题白字 + 半透明黑底，圆角与内边距
   \def\chap@title@textcolor{white}
   \def\chap@title@nodeopts{}%{chapTitleOnBG}%不启用默认黑底
-  \fi
   % 预计算版心左边界相对 page.north west 的水平偏移
   \chap@settextarealeft
   % 计算“紧贴”宽度：章号自然宽度 + 2*内边距
@@ -234,19 +218,15 @@
   % - 有背景图：使其位于背景图垂直中线附近（从页面北西角向下移动 backgroundHeight/2）
   % - 无背景图：沿用原先的 -3.5cm 经验位置
   \chap@calc@bgheight
-  \ifx\chap@image\@empty
-    \setlength{\chap@chapnum@yshift}{\chap@chapnum@basey}% 无图时的基准定位（可配置）
-  \else
     \setlength{\chap@bg@halfheight}{0.5\chap@bg@height}
     % 使节点中心大致对齐到图片中线，因此再上移半个章号节点高度近似
     % 为简洁起见，这里不估算节点高度，仅留给用户 \chap@chapnum@yadjust 做微调
     \setlength{\chap@chapnum@yshift}{-\chap@bg@halfheight}
-  \fi
   \addtolength{\chap@chapnum@yshift}{\chap@chapnum@yadjust}
 
   % 使用带填充、圆角的 TikZ 节点直接着色，让色块紧紧包裹文字
   \node[
-      anchor=\ifx\chap@image\@empty north west\else west\fi, % 无背景时左上角对齐，有背景时左中对齐
+      anchor=west,
       text=\chap@num@textcolor,
       align=center,
       font=\chap@numfont,
@@ -260,9 +240,7 @@
   % 标题文字颜色：无背景时用黑色，有背景时用白色
   % 修正：当有黑底（带 inner sep）时，需从锚点中减去内边距，保证“可见文字”与预期间距/左边界一致
   \setlength{\@tempdima}{\chap@title@gap}% 默认间隙
-  \ifx\chap@image\@empty\else
     \addtolength{\@tempdima}{-\chap@title@pad}% 有黑底时左移 inner sep
-  \fi
   \node[anchor=west,inner sep=0mm,outer sep=0mm,font=\chap@chapter@font,text=\chap@title@textcolor,\chap@title@nodeopts] (chapname) at ($(chapnum.east)+(\the\@tempdima,0cm)$)
 			{\begin{varwidth}{\dimexpr\textwidth-\chap@num@actualwidth-\chap@title@gap\relax}#1\end{varwidth}};
 \end{tikzpicture}
@@ -273,10 +251,6 @@
 % 按有/无背景图自适应
 % 计算背景图高度并动态决定章节标题后的垂直间距
 \chap@calc@bgheight
-\ifx\chap@image\@empty
-  % 无图：使用“无背景”的默认间距
-  \setlength{\chap@post@vsp}{\chap@vsp@without}
-\else
   % 有图：保证正文位于“背景图底部 + 安全间距”之下，且不小于无图间距
   % 估计章节头部基准参考线到页面顶部的固定偏移：当前布局中，数值近似为 3.5cm（节点 yshift），
   % 考虑标题块高度（章号块+标题行）的一致性，取一个经验补偿 1.5cm。
@@ -291,7 +265,7 @@
   \fi
 \fi
 \par\vspace*{\chap@post@vsp}
-}
+}%\@makechapterhead命令结束
 
 % \@makeschapterhead 与 \@makechapterhead 类似，但用于无编号章节。
 % 注意命令多一个's'。
@@ -364,7 +338,7 @@
   \fi
   \par\vspace*{\chap@post@vsp}
 }
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  开始添加用户定义  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \RequirePackage{enumitem}				
 \renewcommand{\labelitemi}{$\bullet$}
@@ -374,15 +348,7 @@
 \setlist[enumerate]{noitemsep}
 %\makeatother
 
-% ---- Pandoc compatibility stubs ----
-% Pandoc EPUB->LaTeX conversion may emit wrappers like \pandocbounded{...} to manage float/graphic layout.
-% Define a no-op wrapper so the included content passes through unchanged.
-% Also guard against multiple definitions if user later provides custom behavior.
-\providecommand{\pandocbounded}[1]{#1}
-% Some pandoc outputs prefix sectional anchors with \protect\phantomsection\label{...}. Both macros exist in hyperref;
-% if hyperref not loaded yet, \phantomsection is undefined -> we either load hyperref or stub it.
-% For now provide a lightweight stub; if user later loads hyperref the real definition overrides this.
-\providecommand{\phantomsection}{}
+
 
 
 %代码环境定义
@@ -452,11 +418,11 @@
     language=C++,
     breaklines,
     breakatwhitespace=false,
-    basicstyle=\ttfamily\small\color{wineRed},
+    basicstyle=\ttfamily\color{black},
     keywordstyle=\bfseries\color{blue},
-    identifierstyle=\color{wineRed},
+    identifierstyle=\color{blue},
     stringstyle=\color{wineRed},
-    commentstyle=\color{wineRed},
+    commentstyle=\color{green},
     #1
   ]{#2}%
 }
@@ -479,3 +445,37 @@
 	},
 	drop fuzzy shadow,#1
 }
+
+%%设置新字体
+%%定义带圈数字命令
+\newfontfamily{\nmfont}[Extension=.otf,Path=./fonts/]{circlenumber}%
+
+\newcommand{\quan}[1]{{\nmfont \symbol{#1}}}
+\newcommand{\kk}[1]{\quan{\numexpr32+#1}}%\kk{<参数范围1-95>}96、97、98、99分别用\quan{196} \quan{197} \quan{199} \quan{201}
+
+%脚注使用带圈数字
+\newcommand*\kkctr[1]{%
+  \protect\kk{\number\numexpr\value{#1}\relax}}
+\renewcommand*\thefootnote{\textcolor{wineRed}{\kkctr{footnote}}}
+
+%%无悬挂脚注格式
+\renewcommand\@makefntext[1]{%
+\setlength\parindent{2\ccwd}\selectfont\@thefnmark\ #1}%
+
+%修改\part，使其不分页
+\def\@endpart{%
+	\thispagestyle{empty}
+  \vskip40\p@%
+  \@afterheading
+ }
+ 
+ 
+ % ---- Pandoc compatibility stubs ----
+ % Pandoc EPUB->LaTeX conversion may emit wrappers like \pandocbounded{...} to manage float/graphic layout.
+ % Define a no-op wrapper so the included content passes through unchanged.
+ % Also guard against multiple definitions if user later provides custom behavior.
+ \providecommand{\pandocbounded}[1]{#1}
+ % Some pandoc outputs prefix sectional anchors with \protect\phantomsection\label{...}. Both macros exist in hyperref;
+ % if hyperref not loaded yet, \phantomsection is undefined -> we either load hyperref or stub it.
+ % For now provide a lightweight stub; if user later loads hyperref the real definition overrides this.
+ \providecommand{\phantomsection}{}

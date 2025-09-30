@@ -1,33 +1,51 @@
-﻿\chapter{Memory and Ownership}
+% \chapter{Memory and Ownership}
+\chapter{内存与所有权}
 
-Memory mismanagement is one of the most common problems in C++ programs. Many of these problems boil down to incorrect assumptions about which part of the code or which entity owns a particular memory. Then, we get memory leaks, accessing unallocated memory, excessive memory use, and other problems that are difficult to debug. Modern C++ has a set of memory ownership idioms that, taken together, allow the programmer to clearly express their design intent when it comes to memory ownership. This, in turn, makes it much easier to write code that correctly allocates, accesses, and deallocates memory.
+% Memory mismanagement is one of the most common problems in C++ programs. Many of these problems boil down to incorrect assumptions about which part of the code or which entity owns a particular memory. Then, we get memory leaks, accessing unallocated memory, excessive memory use, and other problems that are difficult to debug. Modern C++ has a set of memory ownership idioms that, taken together, allow the programmer to clearly express their design intent when it comes to memory ownership. This, in turn, makes it much easier to write code that correctly allocates, accesses, and deallocates memory.
+内存管理错误是C++程序中最常见的问题之一。这些问题大多归结于对代码的哪个部分或哪个实体拥有特定内存的错误假设。然后，我们会遇到内存泄漏、访问未分配的内存、过度使用内存以及其他难以调试的问题。现代C++有一套内存所有权惯用法，这些惯用法结合在一起，允许程序员在内存所有权方面清楚地表达他们的设计意图。这反过来使编写正确分配、访问和释放内存的代码变得更加容易。
 
-The following topics are covered in this chapter:
+% The following topics are covered in this chapter:
+本章涵盖以下主题：
 
 \begin{itemize}
+% \item
+%   What is memory ownership and resource ownership?
 \item
-  What is memory ownership and resource ownership?
+  什么是内存所有权和资源所有权？
+% \item
+%   What are the characteristics of well-designed resource ownership? When and how should we be agnostic about resource ownership? How do we express exclusive memory ownership in C++?
 \item
-  What are the characteristics of well-designed resource ownership? When and how should we be agnostic about resource ownership? How do we express exclusive memory ownership in C++?
+  设计良好的资源所有权有什么特征？我们何时以及如何应该对资源所有权保持不可知？如何在C++中表达独占内存所有权？
+% \item
+%   How do we express shared memory ownership in C++?
 \item
-  How do we express shared memory ownership in C++?
+  如何在C++中表达共享内存所有权？
+% \item
+%   What is the cost of different memory ownership language constructs?
 \item
-  What is the cost of different memory ownership language constructs?
+  不同内存所有权语言构造的成本是什么？
 \end{itemize}
 
-\section{Technical requirements}
+% \section{Technical requirements}
+\section{技术要求}
 
-You can find the C++ Core Guidelines at https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md.
+% You can find the C++ Core Guidelines at \url{https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md}.
+您可以在 \url{https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md} 找到C++核心指南。
 
-You can find the C++ \textbf{Guidelines Support Library} (\textbf{GSL}) at https://github.com/Microsoft/GSL. Examples are available at https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter03.
+% You can find the C++ \textbf{Guidelines Support Library} (\textbf{GSL}) at \url{https://github.com/Microsoft/GSL}. Examples are available at \url{https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter03}.
+您可以在 \url{https://github.com/Microsoft/GSL} 找到C++ \textbf{指南支持库 (GSL)}。示例可在 \url{https://github.com/PacktPublishing/Hands-On-Design-Patterns-with-CPP-Second-Edition/tree/master/Chapter03} 获取。
 
-\section{What is memory ownership?}
+% \section{What is memory ownership?}
+\section{什么是内存所有权？}
 
-In C++, the term \emph{memory ownership} refers to the entity that is responsible for enforcing the lifetime of a particular memory allocation. In reality, we rarely talk about the ownership of raw memory. Usually, we manage the ownership and the lifetime of the objects that reside in said memory and memory ownership is really just shorthand for \emph{object ownership}. The concept of memory ownership is closely tied to that of \emph{resource ownership}. First of all, memory is a resource. It is not the only resource a program can manage, but it is by far the most commonly used one. Second, the C++ way of managing resources is to have objects own them. Thus, the problem of managing resources is reduced to the problem of managing the owning objects, which, as we just learned, is what we really mean when we talk about memory ownership. In this context, memory ownership is about owning more than memory, and mismanaged ownership can leak, miscount, or lose track of any resource that can be controlled by the program---memory, mutexes, files, database handles, cat videos, airline seat reservations, or nuclear warheads.
+% In C++, the term \emph{memory ownership} refers to the entity that is responsible for enforcing the lifetime of a particular memory allocation. In reality, we rarely talk about the ownership of raw memory. Usually, we manage the ownership and the lifetime of the objects that reside in said memory and memory ownership is really just shorthand for \emph{object ownership}. The concept of memory ownership is closely tied to that of \emph{resource ownership}. First of all, memory is a resource. It is not the only resource a program can manage, but it is by far the most commonly used one. Second, the C++ way of managing resources is to have objects own them. Thus, the problem of managing resources is reduced to the problem of managing the owning objects, which, as we just learned, is what we really mean when we talk about memory ownership. In this context, memory ownership is about owning more than memory, and mismanaged ownership can leak, miscount, or lose track of any resource that can be controlled by the program---memory, mutexes, files, database handles, cat videos, airline seat reservations, or nuclear warheads.
+在C++中，术语\textbf{内存所有权}指的是负责强制执行特定内存分配生命周期的实体。实际上，我们很少谈论原始内存的所有权。通常，我们管理驻留在该内存中对象的所有权和生命周期，内存所有权实际上只是\emph{对象所有权}的简写。内存所有权的概念与\emph{资源所有权}的概念密切相关。首先，内存是一种资源。它不是程序可以管理的唯一资源，但它是迄今为止最常用的资源。其次，C++管理资源的方式是让对象拥有它们。因此，管理资源的问题被简化为管理拥有对象的问题，正如我们刚刚了解到的，这就是我们在谈论内存所有权时真正的意思。在这种情况下，内存所有权不仅仅是拥有内存，管理不当的所有权可能会泄漏、错误计数或失去对程序可以控制的任何资源的跟踪——内存、互斥锁、文件、数据库句柄、猫咒视频、航空座位预订或核弹头。
 
-\subsection{Well-designed memory ownership}
+% \subsection{Well-designed memory ownership}
+\subsection{设计良好的内存所有权}
 
-What does well-designed memory ownership look like? The naive answer that first comes up is that, at every point in the program, it is clear who owns which object. This, however, is overly constraining---most of the program does not deal with ownership of resources, including memory. These parts of the program merely use resources. When writing such code, it is sufficient to know that a particular function or class does not own the memory. It is completely irrelevant to know who does what:
+% What does well-designed memory ownership look like? The naive answer that first comes up is that, at every point in the program, it is clear who owns which object. This, however, is overly constraining---most of the program does not deal with ownership of resources, including memory. These parts of the program merely use resources. When writing such code, it is sufficient to know that a particular function or class does not own the memory. It is completely irrelevant to know who does what:
+设计良好的内存所有权是什么样的？首先想到的朴素答案是：在程序的每个点上，都清楚谁拥有哪个对象。然而，这过于限制——程序的大部分并不处理资源（包括内存）的所有权。程序的这些部分仅仅使用资源。在编写这样的代码时，知道特定函数或类不拥有内存就足够了。知道谁做什么是完全无关的：
 
 \begin{code}
 struct MyValues { long a, b, c, d; }
@@ -37,7 +55,8 @@ void Reset(MyValues* v) {
 }
 \end{code}
 
-How about this, then---at every point in the program, is it clear who owns that object, or is it clear that the owner is not changing? This is better since most of the code will fall under the second part of our answer. However, it's still too constraining---when taking ownership of an object, it is usually not important to know who it is taken from:
+% How about this, then---at every point in the program, is it clear who owns that object, or is it clear that the owner is not changing? This is better since most of the code will fall under the second part of our answer. However, it's still too constraining---when taking ownership of an object, it is usually not important to know who it is taken from:
+那么这样如何——在程序的每个点上，是否清楚谁拥有该对象，或者是否清楚拥有者没有变化？这更好，因为大部分代码都属于我们答案的第二部分。然而，这仍然过于限制——在获取对象所有权时，通常不重要的是知道从谁那里获取：
 
 \begin{code}
 class A {
@@ -49,7 +68,8 @@ class A {
 };
 \end{code}
 
-Similarly, the whole point of shared ownership (expressed through the reference-counted \texttt{std::shared\_ptr}) is that we don't need to know who else owns the object:
+% Similarly, the whole point of shared ownership (expressed through the reference-counted \ci{std::shared\_ptr}) is that we don't need to know who else owns the object:
+同样，共享所有权（通过引用计数的\ci{std::shared\_ptr}表达）的全部要点是我们不需要知道还有谁拥有该对象：
 
 \begin{code}
 class A {
@@ -62,44 +82,59 @@ class A {
 };
 \end{code}
 
-A more accurate description of well-designed memory ownership takes more than one quoted sentence. Generally, the following are the attributes of good memory ownership practices:
+% A more accurate description of well-designed memory ownership takes more than one quoted sentence. Generally, the following are the attributes of good memory ownership practices:
+对设计良好的内存所有权的更准确描述需要不止一句引用的话。一般来说，以下是良好的内存所有权实践的属性：
 
 \begin{itemize}
+% \item
+%   If a function or a class does not alter memory ownership in any way, this should be clear to every client of this function or class, as well as the implementer.
 \item
-  If a function or a class does not alter memory ownership in any way, this should be clear to every client of this function or class, as well as the implementer.
+  如果一个函数或类不以任何方式改变内存所有权，这应该对该函数或类的每个客户端以及实现者都是清楚的。
+% \item
+%   If a function or a class takes exclusive ownership of some of the objects passed to it, this should be clear to the client (we assume that the implementer knows this already since they have to write the code).
 \item
-  If a function or a class takes exclusive ownership of some of the objects passed to it, this should be clear to the client (we assume that the implementer knows this already since they have to write the code).
+  如果一个函数或类获取了传递给它的一些对象的独占所有权，这应该对客户端是清楚的（我们假设实现者已经知道这一点，因为他们必须编写代码）。
+% \item
+%   If a function or a class shares ownership of an object passed to it, this should be clear to the client (or anyone who reads the client code, for that matter).
 \item
-  If a function or a class shares ownership of an object passed to it, this should be clear to the client (or anyone who reads the client code, for that matter).
+  如果一个函数或类共享传递给它的对象的所有权，这应该对客户端是清楚的（或者对任何阅读客户端代码的人来说）。
+% \item
+%   For every object that is created, for every unit of code where it's used, it is clear whether this code is expected to delete the object or not.
 \item
-  For every object that is created, for every unit of code where it's used, it is clear whether this code is expected to delete the object or not.
+  对于创建的每个对象，对于使用它的每个代码单元，应该清楚该代码是否预期删除该对象。
 \end{itemize}
 
-\subsection{Poorly designed memory ownership}
+% \subsection{Poorly designed memory ownership}
+\subsection{糟糕设计的内存所有权}
 
-Just as good memory ownership defies a simple description and instead is characterized by a set of criteria it satisfies, so can bad memory ownership practices be recognized by their common manifestations. In general, where a good design makes it clear whether a particular piece of code owns a resource or not, a bad design requires additional knowledge that cannot be deduced from the context. For example, who owns the object returned by the following \texttt{MakeWidget()} function?
+% Just as good memory ownership defies a simple description and instead is characterized by a set of criteria it satisfies, so can bad memory ownership practices be recognized by their common manifestations. In general, where a good design makes it clear whether a particular piece of code owns a resource or not, a bad design requires additional knowledge that cannot be deduced from the context. For example, who owns the object returned by the following \ci{MakeWidget()} function?
+正如良好的内存所有权难以简单描述，而是通过它满足的一系列标准来表征一样，糟糕的内存所有权实践也可以通过它们常见的表现来识别。一般来说，在良好设计明确表示特定代码片段是否拥有资源的地方，糟糕设计需要额外的知识，这些知识无法从上下文中推导出来。例如，以下\ci{MakeWidget()}函数返回的对象由谁拥有？
 
 \begin{code}
 Widget* w = MakeWidget();
 \end{code}
 
-Is the client expected to delete the widget when it's no longer needed? If yes, how should it be deleted? If we decide to delete the widget and do it in the wrong way, for example, by calling \texttt{operator\ delete} on a widget that was not, in fact, allocated by \texttt{operator\ new}, memory corruption will certainly result. In the best-case scenario, the program will just crash:
+% Is the client expected to delete the widget when it's no longer needed? If yes, how should it be deleted? If we decide to delete the widget and do it in the wrong way, for example, by calling \ci{operator\ delete} on a widget that was not, in fact, allocated by \ci{operator\ new}, memory corruption will certainly result. In the best-case scenario, the program will just crash:
+客户端是否需要在不再需要widget时删除它？如果是，应该如何删除？如果我们决定删除widget并以错误的方式进行，例如，在一个实际上不是由\ci{operator\ new}分配的widget上调用\ci{operator\ delete}，那么必然会导致内存损坏。在最好的情况下，程序只会崩溃：
 
 \begin{code}
 WidgetFactory WF;
 Widget* w = WF.MakeAnother();
 \end{code}
 
-Does the Factory own the widgets it created? Will it delete them when the Factory object is deleted? Alternatively, is the client expected to do that? If we decide that the Factory probably knows what it created and will delete all such objects in due time, we may end up with a memory leak (or worse, if the objects owned some other resources):
+% Does the Factory own the widgets it created? Will it delete them when the Factory object is deleted? Alternatively, is the client expected to do that? If we decide that the Factory probably knows what it created and will delete all such objects in due time, we may end up with a memory leak (or worse, if the objects owned some other resources):
+Factory是否拥有它创建的widget？当Factory对象被删除时，它会删除它们吗？或者，客户端是否需要这样做？如果我们决定Factory可能知道它创建了什么，并会在适当的时候删除所有这样的对象，我们最终可能会遇到内存泄漏（或更糟，如果对象拥有一些其他资源）：
 
 \begin{code}
 Widget* w = MakeWidget();
 Widget* w1 = Transmogrify(w);
 \end{code}
 
-Does \texttt{Transmogrify()} take ownership of the widget? Is the \texttt{w} widget still around after \texttt{Transmogrify()} is done with it? If the widget is deleted to construct a new, transmogrified, \texttt{w1} widget, we now have a dangling pointer. If the widget is not deleted, but we assume it might be, we have a memory leak.
+% Does \ci{Transmogrify()} take ownership of the widget? Is the \ci{w} widget still around after \ci{Transmogrify()} is done with it? If the widget is deleted to construct a new, transmogrified, \ci{w1} widget, we now have a dangling pointer. If the widget is not deleted, but we assume it might be, we have a memory leak.
+\ci{Transmogrify()}是否获取了widget的所有权？\ci{Transmogrify()}完成后，\ci{w} widget是否仍然存在？如果为了构造一个新的、变形的\ci{w1} widget而删除了widget，我们现在有一个悬空指针。如果widget没有被删除，但我们假设它可能被删除，我们就有了内存泄漏。
 
-Lest you think that all bad memory management practices can be recognized by the presence of raw pointers somewhere, here is an example of a rather poor approach to memory management that often arises as a knee-jerk response to the problems caused by the use of raw pointers:
+% Lest you think that all bad memory management practices can be recognized by the presence of raw pointers somewhere, here is an example of a rather poor approach to memory management that often arises as a knee-jerk response to the problems caused by the use of raw pointers:
+为了防止您认为所有糟糕的内存管理实践都可以通过在某处存在原始指针来识别，这里是一个相当糟糕的内存管理方法的示例，这种方法通常是对由使用原始指针引起的问题的膝反应：
 
 \begin{code}
 void Double(std::shared_ptr<std::vector<int>> v) {
@@ -113,19 +148,26 @@ Double(v);
 ...
 \end{code}
 
-The \texttt{Double()} function is claiming in its interface that it takes shared ownership of the vector. However, that ownership is entirely gratuitous---there is no reason for \texttt{Double()} to own its argument---it does not attempt to extend its lifetime and, it does not transfer ownership to anyone else; it merely modifies a vector passed in by the caller. We can reasonably expect that the caller owns the vector (or that somebody else even higher in the call stack does), and that the vector will still be around when \texttt{Double()} returns control to the caller---after all, the caller wanted us to double the elements, presumably so that they can do something else with them.
+% The \ci{Double()} function is claiming in its interface that it takes shared ownership of the vector. However, that ownership is entirely gratuitous---there is no reason for \ci{Double()} to own its argument---it does not attempt to extend its lifetime and, it does not transfer ownership to anyone else; it merely modifies a vector passed in by the caller. We can reasonably expect that the caller owns the vector (or that somebody else even higher in the call stack does), and that the vector will still be around when \ci{Double()} returns control to the caller---after all, the caller wanted us to double the elements, presumably so that they can do something else with them.
+\ci{Double()}函数在其接口中声称它获取了vector的共享所有权。然而，这种所有权完全是无由的——\ci{Double()}没有理由拥有它的参数——它不试图延长其生命周期，也不会将所有权转移给其他人；它仅仅修改调用者传入的vector。我们可以合理期望调用者拥有vector（或者调用堆栈中更高层的某人拥有），并且当\ci{Double()}将控制权返回给调用者时，vector仍然存在——毕竟，调用者希望我们将元素加倍，显然是为了能对它们做其他事情。
 
-While this list is hardly complete, it serves to demonstrate the spectrum of problems that can be caused by a slap-dash approach to memory ownership. In the next section, we review the patterns and guidelines developed by the C++ community to help to avoid these problems and express the programmer's intent clearly.
+% While this list is hardly complete, it serves to demonstrate the spectrum of problems that can be caused by a slap-dash approach to memory ownership. In the next section, we review the patterns and guidelines developed by the C++ community to help to avoid these problems and express the programmer's intent clearly.
+虽然这个列表并不完整，但它证明了随意对待内存所有权可能引起的问题范围。在下一节中，我们将审查C++社区开发的模式和指南，以帮助避免这些问题并清楚地表达程序员的意图。
 
-\section{Expressing memory ownership in C++}
+% \section{Expressing memory ownership in C++}
+\section{在C++中表达内存所有权}
 
-Throughout its history, the C++ language has evolved in its approach to expressing memory ownership. The same syntactic constructs have been, at times, imbued with different assumed semantics. This evolution was partially driven by new features added to the language (it's hard to talk about shared memory ownership if you don't have any shared pointers). On the other hand, most of the memory management tools added in C++ 11 and later were not new ideas or new concepts. The notion of a shared pointer has been around for a long time. This language support makes it easier to implement one (and having a shared pointer in the standard library makes most custom implementations unnecessary), but shared pointers were used in C++ long before C++ 11 added them to the standard. The more important change that has occurred was the evolution of the understanding of the C++ community and the emergence of common practices and idioms. It is in this sense, as a set of conventions and semantics commonly associated with different syntactic features, that we can talk about the set of memory management practices as a design pattern of the C++ language. Let's now learn the different ways that we can express different types of memory ownership.
+% Throughout its history, the C++ language has evolved in its approach to expressing memory ownership. The same syntactic constructs have been, at times, imbued with different assumed semantics. This evolution was partially driven by new features added to the language (it's hard to talk about shared memory ownership if you don't have any shared pointers). On the other hand, most of the memory management tools added in C++ 11 and later were not new ideas or new concepts. The notion of a shared pointer has been around for a long time. This language support makes it easier to implement one (and having a shared pointer in the standard library makes most custom implementations unnecessary), but shared pointers were used in C++ long before C++ 11 added them to the standard. The more important change that has occurred was the evolution of the understanding of the C++ community and the emergence of common practices and idioms. It is in this sense, as a set of conventions and semantics commonly associated with different syntactic features, that we can talk about the set of memory management practices as a design pattern of the C++ language. Let's now learn the different ways that we can express different types of memory ownership.
+在其历史中，C++语言在表达内存所有权的方法上不断演进。相同的语法结构在不同时期被赋予了不同的假定语义。这种演进部分由语言新增的特性驱动（如果你没有任何共享指针，就很难谈论共享内存所有权）。另一方面，C++11及以后增加的大部分内存管理工具并不是新的思想或新的概念。共享指针的概念已经存在很久了。这种语言支持使实现变得更容易（并且在标准库中有共享指针使大多数自定义实现变得不必要），但在C++11将它们添加到标准之前，共享指针在C++中使用已久。发生的更重要的变化是C++社区理解的演进以及共同实践和惯用法的出现。正是在这种意义上，作为与不同语法特性通常相关的一系列约定和语义，我们可以将这一系列内存管理实践讨论为C++语言的设计模式。现在让我们学习我们可以表达不同类型内存所有权的不同方式。
 
-\subsection{Expressing non-ownership}
+% \subsection{Expressing non-ownership}
+\subsection{表达非所有权}
 
-Let's start with the most common kind of memory ownership. Most code does not allocate, deallocate, construct, or delete. It just does its work on objects that were created by someone else earlier and will be deleted by someone else later. How do you express the notion that a function is going to operate on an object but will not attempt to delete it or, conversely, extend its lifetime past the completion of the function itself?
+% Let's start with the most common kind of memory ownership. Most code does not allocate, deallocate, construct, or delete. It just does its work on objects that were created by someone else earlier and will be deleted by someone else later. How do you express the notion that a function is going to operate on an object but will not attempt to delete it or, conversely, extend its lifetime past the completion of the function itself?
+让我们从最常见的内存所有权类型开始。大多数代码不进行分配、释放、构造或删除。它只是在早前由其他人创建、将来由其他人删除的对象上做它的工作。您如何表达一个函数将在对象上操作但不会试图删除它的概念，或者相反，将其生命周期延长到函数本身完成之后？
 
-Very easily, in fact, and every C++ programmer has done it many times:
+% Very easily, in fact, and every C++ programmer has done it many times:
+实际上很容易，每个C++程序员都做过很多次：
 
 \begin{code}
 // Example 01
@@ -137,7 +179,8 @@ void MustTransmogrify(Widget& w) {   // Neither will I
 }
 \end{code}
 
-In a well-written program, a function with a raw pointer parameter signals that it is not involved with the ownership of the corresponding object in any way; the same goes for references. Similarly, a class that contains a member function pointer refers to an object but expects someone else to own it and manage its lifetime. Note that the destructor of the \texttt{WidgetProcessor} class in the next example does not delete the object the class points to -- this is a sure sign that we refuse ownership of that object:
+% In a well-written program, a function with a raw pointer parameter signals that it is not involved with the ownership of the corresponding object in any way; the same goes for references. Similarly, a class that contains a member function pointer refers to an object but expects someone else to own it and manage its lifetime. Note that the destructor of the \ci{WidgetProcessor} class in the next example does not delete the object the class points to -- this is a sure sign that we refuse ownership of that object:
+在一个编写良好的程序中，具有原始指针参数的函数表示它不以任何方式涉及相应对象的所有权；引用也是如此。类似地，包含成员函数指针的类引用一个对象，但期望其他人拥有它并管理其生命周期。请注意，下一个例子中\ci{WidgetProcessor}类的析构函数不会删除该类所指向的对象——这是我们拒绝该对象所有权的明确标志：
 
 \begin{code}
 // Example 02
@@ -151,15 +194,20 @@ class WidgetProcessor {
 };
 \end{code}
 
-Non-owning access to an object should be granted by using raw pointers or references. Yes---even in C++ 14, with all its smart pointers, there is a place for raw pointers. Not only that but in the bulk of the code, the majority of pointers will be raw pointers---all the non-owning ones (as we will see in the next section, C++17 and C++20 take this point much further).
+% Non-owning access to an object should be granted by using raw pointers or references. Yes---even in C++ 14, with all its smart pointers, there is a place for raw pointers. Not only that but in the bulk of the code, the majority of pointers will be raw pointers---all the non-owning ones (as we will see in the next section, C++17 and \cpp[20]  take this point much further).
+对对象的非拥有访问应该通过使用原始指针或引用来授予。是的——即使在拥有所有智能指针的C++14中，原始指针仍有其位置。不仅如此，在大部分代码中，大多数指针将是原始指针——所有非拥有的指针（正如我们在下一节中将看到的，C++17和\cpp[20] 将这一点推得更远）。
 
-You might reasonably point out at this time that the preceding example of recommended practices for granting non-owning access looks exactly like one of the examples of bad practices shown earlier. The distinction is in the context---in a well-designed program, only non-owning access is granted through raw pointers and references. Actual ownership is always expressed in some other way. Thus, it is clear that when a raw pointer is encountered, the function or class is not going to mess with the ownership of the object in any way. This, of course, creates some confusion when it comes to converting old legacy code, with raw pointers everywhere, to modern practices. As a matter of clarity, it is recommended to convert such code one part at a time, with clearly indicated transitions between code that follows the modern guidelines and code that does not.
+% You might reasonably point out at this time that the preceding example of recommended practices for granting non-owning access looks exactly like one of the examples of bad practices shown earlier. The distinction is in the context---in a well-designed program, only non-owning access is granted through raw pointers and references. Actual ownership is always expressed in some other way. Thus, it is clear that when a raw pointer is encountered, the function or class is not going to mess with the ownership of the object in any way. This, of course, creates some confusion when it comes to converting old legacy code, with raw pointers everywhere, to modern practices. As a matter of clarity, it is recommended to convert such code one part at a time, with clearly indicated transitions between code that follows the modern guidelines and code that does not.
+您可能合理地指出，前面关于授予非拥有访问的推荐做法示例看起来与之前显示的一个糟糕做法示例完全一样。区别在于上下文——在设计良好的程序中，只有非拥有访问才通过原始指针和引用授予。实际所有权总是以其他方式表达。因此，当遇到原始指针时，函数或类不会以任何方式干扰对象的所有权，这一点很明确。当然，在将带有原始指针的旧的避代码转换为现代做法时，这会产生一些混乱。为了明确起见，建议一次转换一部分这样的代码，在遵循现代指南的代码和不遵循的代码之间有明确标示的过渡。
 
-Another issue to discuss here is the use of pointers versus references. As a matter of syntax, the reference is basically a pointer that is never null and cannot be left uninitialized. It is tempting to adopt a convention that any pointer passed to a function may be null and must, therefore, be checked, and any function that cannot accept a null pointer must instead take a reference. It is a good convention and widely used, but not widely enough to be considered an accepted design pattern. Perhaps in recognition of this, the C++ Core Guidelines library offers an alternative for expressing non-null pointers---\texttt{not\_null\textless{}T*\textgreater{}}. Note that this is not a part of the language itself, but can be implemented in standard C++ without any language extension.
+% Another issue to discuss here is the use of pointers versus references. As a matter of syntax, the reference is basically a pointer that is never null and cannot be left uninitialized. It is tempting to adopt a convention that any pointer passed to a function may be null and must, therefore, be checked, and any function that cannot accept a null pointer must instead take a reference. It is a good convention and widely used, but not widely enough to be considered an accepted design pattern. Perhaps in recognition of this, the C++ Core Guidelines library offers an alternative for expressing non-null pointers---\ci{not\_null<T*>}. Note that this is not a part of the language itself, but can be implemented in standard C++ without any language extension.
+这里要讨论的另一个问题是指针与引用的使用。从语法上讲，引用基本上是一个永远不为null且不能未初始化的指针。采用这样的约定很有诱惑力：传递给函数的任何指针都可能为null，因此必须进行检查，而任何不能接受null指针的函数必须改为接受引用。这是一个很好的约定，被广泛使用，但还不够广泛，不能被认为是公认的设计模式。也许是认识到了这一点，C++ Core Guidelines库提供了一个表达非null指针的替代方案——\ci{not\_null<T*>}。请注意，这不是语言本身的一部分，但可以在标准C++中实现，无需任何语言扩展。
 
-\subsection{Expressing exclusive ownership}
+% \subsection{Expressing exclusive ownership}
+\subsection{表达独占所有权}
 
-The second most common type of ownership is exclusive ownership---the code creates an object and will delete it later. The task of deletion will not be delegated to someone else, and no extension of the lifetime of the object is permitted. This type of memory ownership is so common that we do it all the time without even thinking about it:
+% The second most common type of ownership is exclusive ownership---the code creates an object and will delete it later. The task of deletion will not be delegated to someone else, and no extension of the lifetime of the object is permitted. This type of memory ownership is so common that we do it all the time without even thinking about it:
+第二种最常见的所有权类型是独占所有权——代码创建一个对象并稍后删除它。删除任务不会委托给其他人，也不允许延长对象的生命周期。这种类型的内存所有权非常常见，我们一直在不自觉地使用它：
 
 \begin{code}
 void Work() {
@@ -169,9 +217,11 @@ void Work() {
 }
 \end{code}
 
-All local (stack) variables express unique memory ownership! Note that ownership in this context does not mean that someone else will not modify the object. It merely means that when the creator of the \texttt{w} widget---the \texttt{DoWork()} function, in our case---decides to delete it; the deletion will succeed (nobody has deleted it already) and the object will actually be deleted (nobody attempted to keep the object alive after the end of its scope).
+% All local (stack) variables express unique memory ownership! Note that ownership in this context does not mean that someone else will not modify the object. It merely means that when the creator of the \ci{w} widget---the \ci{DoWork()} function, in our case---decides to delete it; the deletion will succeed (nobody has deleted it already) and the object will actually be deleted (nobody attempted to keep the object alive after the end of its scope).
+所有本地（栈）变量都表达唯一内存所有权！请注意，这里的所有权并不意味着其他人不会修改对象。它仅仅意味着当\ci{w} widget的创建者——在我们的例子中是\ci{DoWork()}函数——决定删除它时；删除将成功（没有人已经删除它）并且对象将实际被删除（没有人试图在其作用域结束后保持对象活着）。
 
-This is the oldest way to construct an object in C++, and it's still the best one. If a stack variable does what you need, use it. C++ 11 provides another way to express unique ownership, and it is mainly used in cases where an object cannot be created on the stack but must be allocated on the heap. Heap allocation often happens when ownership is shared or transferred---after all, the stack-allocated object will be deleted at the end of the containing scope; there is no way around it. If we need to keep the object alive for longer, it has to be allocated somewhere else. The other reason to create objects on the heap is that the size or type of the object may not be known at compile time. This usually happens when the object is polymorphic---a derived object is created, but the base class pointer is used. Whatever the reason for not allocating objects on the stack, we have a way of expressing the exclusive ownership of such objects using \texttt{std::unique\_ptr}:
+% This is the oldest way to construct an object in C++, and it's still the best one. If a stack variable does what you need, use it. C++ 11 provides another way to express unique ownership, and it is mainly used in cases where an object cannot be created on the stack but must be allocated on the heap. Heap allocation often happens when ownership is shared or transferred---after all, the stack-allocated object will be deleted at the end of the containing scope; there is no way around it. If we need to keep the object alive for longer, it has to be allocated somewhere else. The other reason to create objects on the heap is that the size or type of the object may not be known at compile time. This usually happens when the object is polymorphic---a derived object is created, but the base class pointer is used. Whatever the reason for not allocating objects on the stack, we have a way of expressing the exclusive ownership of such objects using \ci{std::unique\_ptr}:
+这是C++中构造对象的最古老方式，也仍然是最好的方式。如果栈变量能做您需要的事，就使用它。C++11提供了另一种表达唯一所有权的方式，它主要用于不能在栈上创建对象但必须在堆上分配的情况。堆分配通常发生在所有权被共享或转移时——毕竟，栈分配的对象将在包含作用域结束时被删除；没有办法绕过它。如果我们需要让对象活得更久，它必须分配在其他地方。在堆上创建对象的另一个原因是对象的大小或类型在编译时可能未知。这通常发生在对象是多态的时候——创建了派生对象，但使用的是基类指针。无论不在栈上分配对象的原因为何，我们都有一种使用\ci{std::unique\_ptr}表达这类对象的独占所有权的方式：
 
 \begin{code}
 // Example 03
@@ -179,21 +229,27 @@ class FancyWidget : public Widget { ... };
 std::unique_ptr<Widget> w(new FancyWidget);
 \end{code}
 
-There is also a technical reason why you may have to construct objects on the heap even when a stack-allocated object seems sufficient: the stack size is quite limited, usually anywhere between 2 MB and 10 MB. That is the space for all stack allocations in one thread, and when it is exceeded, the program crashes. A large enough object can exhaust the stack space or push it too close to the limit for subsequent allocations. Such objects must be created on the heap and owned by stack-allocated unique pointers or other resource-owning objects.
+% There is also a technical reason why you may have to construct objects on the heap even when a stack-allocated object seems sufficient: the stack size is quite limited, usually anywhere between 2 MB and 10 MB. That is the space for all stack allocations in one thread, and when it is exceeded, the program crashes. A large enough object can exhaust the stack space or push it too close to the limit for subsequent allocations. Such objects must be created on the heap and owned by stack-allocated unique pointers or other resource-owning objects.
+还有一个技术原因，即使栈分配的对象似乎足够了，您也可能必须在堆上构造对象：栈大小是相当有限的，通常在2MB加10MB之间的任何位置。这是一个线程中所有栈分配的空间，当超过时，程序崩溃。足够大的对象可以耗尽栈空间或将其推送得太接近限制，以至于后续分配无法进行。这样的对象必须在堆上创建，并由栈分配的唯一指针或其他资源拥有对象拥有。
 
-What if the way to create an object is more complex than just \texttt{operator\ new}, and we need a Factory function? That is the type of ownership we will consider next.
+% What if the way to create an object is more complex than just \ci{operator\ new}, and we need a Factory function? That is the type of ownership we will consider next.
+如果创建对象的方式比仅仅\ci{operator\ new}更复杂，并且我们需要一个工厂函数怎么办？这是我们接下来将考虑的所有权类型。
 
-\subsection{Expressing transfer of exclusive ownership}
+% \subsection{Expressing transfer of exclusive ownership}
+\subsection{表达独占所有权的转移}
 
-In the preceding example, a new object was created and immediately bound to a unique pointer, \texttt{std::unique\_ptr}, which guarantees exclusive ownership. The client code looks exactly the same if the object is created by a Factory:
+% In the preceding example, a new object was created and immediately bound to a unique pointer, \ci{std::unique\_ptr}, which guarantees exclusive ownership. The client code looks exactly the same if the object is created by a Factory:
+在前面的例子中，创建了一个新对象并立即绑定到保证独占所有权的唯一指针\ci{std::unique\_ptr}上。如果对象由工厂创建，客户端代码看起来完全一样：
 
 \begin{code}
 std::unique_ptr<Widget> w(WidgetFactory());
 \end{code}
 
-But what should the Factory function return? It could certainly return a raw pointer, \texttt{Widget*}. After all, that is what \texttt{new} returns. But this opens the way to incorrect use of \texttt{WidgetFactory}---for example, instead of capturing the returned raw pointer in a unique pointer, we could pass it to a function such as \texttt{Transmogrify} that takes a raw pointer because it does not deal with the ownership. Now, nobody owns the widget, and it ends up as a memory leak. Ideally, \texttt{WidgetFactory} would be written in a way that would force the caller to take ownership of the returned object.
+% But what should the Factory function return? It could certainly return a raw pointer, \ci{Widget*}. After all, that is what \ci{new} returns. But this opens the way to incorrect use of \ci{WidgetFactory}---for example, instead of capturing the returned raw pointer in a unique pointer, we could pass it to a function such as \ci{Transmogrify} that takes a raw pointer because it does not deal with the ownership. Now, nobody owns the widget, and it ends up as a memory leak. Ideally, \ci{WidgetFactory} would be written in a way that would force the caller to take ownership of the returned object.
+但是工厂函数应该返回什么呢？它当然可以返回一个原始指针\ci{Widget*}。毕竟，这就是\ci{new}返回的。但这为错误使用\ci{WidgetFactory}开辟了道路——例如，我们可以将返回的原始指针传递给\ci{Transmogrify}这样的函数，该函数接受原始指针，因为它不处理所有权，而不是将其捕获在唯一指针中。现在，没有人拥有widget，它最终成为内存泄漏。理想情况下，\ci{WidgetFactory}应该以一种强制调用者接受返回对象所有权的方式编写。
 
-What we need here is an ownership transfer---\texttt{WidgetFactory} is certainly an exclusive owner of the object it constructs, but at some point, it needs to hand off that ownership to a new, also exclusive, owner. The code to do so is very simple:
+% What we need here is an ownership transfer---\ci{WidgetFactory} is certainly an exclusive owner of the object it constructs, but at some point, it needs to hand off that ownership to a new, also exclusive, owner. The code to do so is very simple:
+我们这里需要的是所有权转移——\ci{WidgetFactory}当然是它构造对象的独占所有者，但在某些时候，它需要将该所有权交给一个新的、同样也是独占的所有者。要做到这一点的代码非常简单：
 
 \begin{code}
 // Example 04
@@ -205,14 +261,16 @@ std::unique_ptr<Widget> WidgetFactory() {
 std::unique_ptr<Widget> w(WidgetFactory());
 \end{code}
 
-This works exactly the way we want it to, but why? Doesn't the unique pointer provide exclusive ownership? The answer is, it does, but it is also a movable object (it has a move constructor). Moving the content of a unique pointer into another one transfers the ownership of the object; the original pointer is left in the moved-from state (its destruction will not delete any objects). What is so good about this idiom? It clearly expresses, and forces at compile time, that the Factory expects the caller to take exclusive (or shared) ownership of the object. For example, the following code, which would have left the new widget with no owner, does not compile:
+% This works exactly the way we want it to, but why? Doesn't the unique pointer provide exclusive ownership? The answer is, it does, but it is also a movable object (it has a move constructor). Moving the content of a unique pointer into another one transfers the ownership of the object; the original pointer is left in the moved-from state (its destruction will not delete any objects). What is so good about this idiom? It clearly expresses, and forces at compile time, that the Factory expects the caller to take exclusive (or shared) ownership of the object. For example, the following code, which would have left the new widget with no owner, does not compile:
+这完全按照我们希望的方式工作，但为什么呢？唯一指针不是提供独占所有权吗？答案是，它确实如此，但它也是一个可移动的对象（它有一个移动构造函数）。将唯一指针的内容移动到另一个指针中会转移对象的所有权；原始指针留在被移动状态（其析构不会删除任何对象）。这个习语有什么好处？它清晰地表达并在编译时强制工厂期望调用者接受对象的独占（或共享）所有权。例如，下面的代码本来会让新的widget没有所有者，但它不会编译：
 
 \begin{code}
 void Transmogrify(Widget* w);
 Transmogrify(WidgetFactory());
 \end{code}
 
-So, how do we call \texttt{Transmogrify()} on a widget after we properly assumed ownership? This is still done with a raw pointer:
+% So, how do we call \ci{Transmogrify()} on a widget after we properly assumed ownership? This is still done with a raw pointer:
+那么，在我们正确地接受所有权后，我们如何在widget上调用\ci{Transmogrify()}呢？这仍然是用原始指针完成的：
 
 \begin{code}
 std::unique_ptr<Widget> w(WidgetFactory());
@@ -220,7 +278,8 @@ Transmogrify(w.get());
 Transmogrify(&*w);     // same as above if w is not null
 \end{code}
 
-But what about the stack variables? Can exclusive ownership be transferred to someone else before the variable is destroyed? This is going to be slightly more complicated---the memory for the object is allocated on the stack and is going away, so some amount of copying is involved. Exactly how much copying depends on whether the object is movable. Moving, in general, transfers the ownership from the moved-from object to the moved-to one. This can be used for return values but is more often used for passing arguments to functions that take exclusive ownership. Such functions must be declared to take the parameters by the \texttt{rvalue} reference \texttt{T\&\&}:
+% But what about the stack variables? Can exclusive ownership be transferred to someone else before the variable is destroyed? This is going to be slightly more complicated---the memory for the object is allocated on the stack and is going away, so some amount of copying is involved. Exactly how much copying depends on whether the object is movable. Moving, in general, transfers the ownership from the moved-from object to the moved-to one. This can be used for return values but is more often used for passing arguments to functions that take exclusive ownership. Such functions must be declared to take the parameters by the \ci{rvalue} reference \ci{T\&\&}:
+但是栈变量怎么办？在变量被销毁之前，独占所有权可以转移给其他人吗？这将略微复杂一些——对象的内存分配在栈上并且即将消失，因此涉及一些复制。具体复制多少取决于对象是否可移动。一般来说，移动将所有权从被移动对象转移到移动目标对象。这可以用于返回值，但更常用于将参数传递给接受独占所有权的函数。这样的函数必须声明为通过\ci{rvalue}引用\ci{T\&\&}接受参数：
 
 \begin{code}
 // Example 05
@@ -234,15 +293,20 @@ Consume(std::move(w));    // No more w
 Consume(w1);    // Does not compile - must consent to move
 \end{code}
 
-Note that the caller must explicitly give up ownership by wrapping the argument in \texttt{std::move}. This is one of the advantages of this idiom; without it, an ownership-transferring call would look exactly the same as a regular call.
+% Note that the caller must explicitly give up ownership by wrapping the argument in \ci{std::move}. This is one of the advantages of this idiom; without it, an ownership-transferring call would look exactly the same as a regular call.
+请注意，调用者必须通过将参数包装在\ci{std::move}中来显式放弃所有权。这是这个习语的优点之一；如果没有它，所有权转移调用看起来与常规调用完全一样。
 
-\subsection{Expressing shared ownership}
+% \subsection{Expressing shared ownership}
+\subsection{表达共享所有权}
 
-The last type of ownership we need to cover is shared ownership, where multiple entities own the object equally. First, a word of caution---shared ownership is often misused, or over-used. Consider the preceding example, where a function was passed a shared pointer to an object it did not need to own. It is tempting to let the reference counting deal with the ownership of objects and \emph{not worry about deletion}. However, this is often a sign of poor design. In most systems, at some level, there is clear ownership of resources, and this should be reflected in the chosen design of resource management. The \emph{not worry about deletion} concern remains valid; explicit deletion of objects should be rare, but automatic deletion does not require shared ownership, merely a clearly expressed one (unique pointers, data members, and containers provide automatic deletion just as well).
+% The last type of ownership we need to cover is shared ownership, where multiple entities own the object equally. First, a word of caution---shared ownership is often misused, or over-used. Consider the preceding example, where a function was passed a shared pointer to an object it did not need to own. It is tempting to let the reference counting deal with the ownership of objects and \emph{not worry about deletion}. However, this is often a sign of poor design. In most systems, at some level, there is clear ownership of resources, and this should be reflected in the chosen design of resource management. The \emph{not worry about deletion} concern remains valid; explicit deletion of objects should be rare, but automatic deletion does not require shared ownership, merely a clearly expressed one (unique pointers, data members, and containers provide automatic deletion just as well).
+我们需要涵盖的最后一种所有权类型是共享所有权，即多个实体平等地拥有对象。首先，一个警告——共享所有权经常被误用或过度使用。考虑前面的例子，其中函数被传递了一个指向它不需要拥有的对象的共享指针。让引用计数处理对象的所有权并\emph{不担心删除}是有诱惑力的。然而，这经常是设计不良的迊象。在大多数系统中，在某个层面上，资源有明确的所有权，这应该反映在所选的资源管理设计中。\emph{不担心删除}的问题仍然有效；显式删除对象应该很少见，但自动删除不需要共享所有权，仅仅需要一个清晰表达的所有权（唯一指针、数据成员和容器也能提供自动删除）。
 
-That being said, there are definite cases for shared ownership. The most common valid applications of shared ownership are at a low level, inside data structures such as lists, trees, and more. A data element may be owned by other nodes of the same data structure, by any number of iterators currently pointing to it, and, possibly by some temporary variables inside data structure member functions that operate on the entire structure or a part of it (such as rebalancing a tree). The ownership of the entire data structure is usually clear in a well-thought-out design. But the ownership of each node, or data element, may be truly shared in the sense that any owner is equal to any other; none is privileged or primary.
+% That being said, there are definite cases for shared ownership. The most common valid applications of shared ownership are at a low level, inside data structures such as lists, trees, and more. A data element may be owned by other nodes of the same data structure, by any number of iterators currently pointing to it, and, possibly by some temporary variables inside data structure member functions that operate on the entire structure or a part of it (such as rebalancing a tree). The ownership of the entire data structure is usually clear in a well-thought-out design. But the ownership of each node, or data element, may be truly shared in the sense that any owner is equal to any other; none is privileged or primary.
+话说回来，共享所有权确实有明确的用例。共享所有权最常见的有效应用是在低层次，在数据结构内部，如链表、树等。数据元素可能被同一数据结构的其他节点拥有，被当前指向它的任意数量的迭代器拥有，并且可能被数据结构成员函数内部的一些临时变量拥有，这些函数在整个结构或其一部分上操作（如重新平衡树）。整个数据结构的所有权在精心设计的设计中通常是明确的。但是每个节点或数据元素的所有权可能真正地是共享的，意思是任何所有者都与任何其他所有者平等；没有一个是特权的或主要的。
 
-In C++, the notion of shared ownership is expressed through a shared pointer, \texttt{std::shared\_ptr}:
+% In C++, the notion of shared ownership is expressed through a shared pointer, \ci{std::shared\_ptr}:
+在C++中，共享所有权的概念通过共享指针\ci{std::shared\_ptr}表达：
 
 \begin{code}
 // Example 06
@@ -260,51 +324,66 @@ class List {
 };
 \end{code}
 
-The advantage of this design is that a list element that was unlinked from the list remains alive for as long as there is a way to access it through an iterator. This is not the way \texttt{std::list} is done, and it does not provide such guarantees (deleting a \texttt{std::list} object invalidates all iterators). Note that the doubly linked list of shared pointers makes it so any two consecutive nodes in the list own each other and neither is deleted even when the list head is deleted; this leaks the owned objects. For this reason, a real design would likely use \texttt{std::weak\_pointer} for one of \texttt{next} or \texttt{prev}.
+% The advantage of this design is that a list element that was unlinked from the list remains alive for as long as there is a way to access it through an iterator. This is not the way \ci{std::list} is done, and it does not provide such guarantees (deleting a \ci{std::list} object invalidates all iterators). Note that the doubly linked list of shared pointers makes it so any two consecutive nodes in the list own each other and neither is deleted even when the list head is deleted; this leaks the owned objects. For this reason, a real design would likely use \ci{std::weak\_pointer} for one of \ci{next} or \ci{prev}.
+这种设计的优点是，从链表中取消链接的链表元素在有办法通过迭代器访问它的情况下仍然保持活着。这不是\ci{std::list}的做法，它不提供这样的保证（删除\ci{std::list}对象会使所有迭代器无效）。请注意，共享指针的双向链表使得链表中任何两个连续节点都相互拥有，即使删除链表头时，两者都不会被删除；这会泄漏拥有的对象。出于这个原因，真正的设计可能会为\ci{next}或\ci{prev}中的一个使用\ci{std::weak\_pointer}。
 
-Such complications aside, this may be a valid design for certain applications where the iterators need to own the data they refer to even after the list is deleted or some elements are erased from the list. One example is a thread-safe list, where it is very difficult to guarantee that one thread does not erase a list element while another still has an iterator pointing to it. Note that this particular application would also require atomic shared pointers, which are only available in C++ 20 (or you can write your own using C++ 11).
+% Such complications aside, this may be a valid design for certain applications where the iterators need to own the data they refer to even after the list is deleted or some elements are erased from the list. One example is a thread-safe list, where it is very difficult to guarantee that one thread does not erase a list element while another still has an iterator pointing to it. Note that this particular application would also require atomic shared pointers, which are only available in C++ 20 (or you can write your own using C++ 11).
+抛开这些复杂性，对于某些应用程序，这可能是一个有效的设计，在这些应用程序中，即使在链表被删除或从链表中擦除某些元素之后，迭代器也需要拥有它们所引用的数据。一个例子是线程安全链表，在这种情况下很难保证一个线程不会在另一个线程仍然有迭代器指向某个链表元素时擦除该元素。请注意，这个特定的应用程序还需要原子共享指针，它们只在\cpp[20] 中可用（或者您可以使用C++11编写自己的）。
 
-Now, what about functions taking shared pointers as parameters? In a program that follows good memory ownership practices, such a function conveys to the caller that it intends to take partial ownership that lasts longer than the function call itself---a copy of the shared pointer will be created. In the concurrent context, it may also indicate that the function needs to protect the object from deletion by another thread for at least as long as it's executing.
+% Now, what about functions taking shared pointers as parameters? In a program that follows good memory ownership practices, such a function conveys to the caller that it intends to take partial ownership that lasts longer than the function call itself---a copy of the shared pointer will be created. In the concurrent context, it may also indicate that the function needs to protect the object from deletion by another thread for at least as long as it's executing.
+现在，接受共享指针作为参数的函数怎么样？在遵循良好内存所有权实践的程序中，这样的函数向调用者传达的是它打算获取持续时间比函数调用本身更长的部分所有权——将创建共享指针的副本。在并发上下文中，它也可能表示函数需要在至少在其执行期间保护对象不被另一个线程删除。
 
-There are several disadvantages to shared ownership that you must keep in mind. The best-known one is the bane of shared pointers, that is, the circular dependency. If two objects with shared pointers point to each other, the entire pair remains \emph{in use} indefinitely. C++ offers a solution to that in the form of \texttt{std::weak\_ptr}, a counterpart to the shared pointer that provides a safe pointer to an object that may have already been deleted. If the previously mentioned pair of objects uses one shared and one weak pointer, the circular dependency is broken.
+% There are several disadvantages to shared ownership that you must keep in mind. The best-known one is the bane of shared pointers, that is, the circular dependency. If two objects with shared pointers point to each other, the entire pair remains \emph{in use} indefinitely. C++ offers a solution to that in the form of \ci{std::weak\_ptr}, a counterpart to the shared pointer that provides a safe pointer to an object that may have already been deleted. If the previously mentioned pair of objects uses one shared and one weak pointer, the circular dependency is broken.
+您必须记住共享所有权的几个缺点。最为人所知的是共享指针的危害，即循环依赖。如果两个带有共享指针的对象相互指向，整个对将无限期地保持\emph{使用中}。C++以\ci{std::weak\_ptr}的形式提供了解决方案，它是共享指针的对应物，提供了指向可能已经被删除的对象的安全指针。如果前面提到的一对对象使用一个共享指针和一个弱指针，循环依赖就被打破了。
 
-The circular dependency problem is real, but it happens more often in designs where shared ownership is used to conceal the larger problem of unclear resource ownership. However, there are other downsides to shared ownership. The performance of a shared pointer is always going to be lower than that of a raw pointer. On the other hand, a unique pointer can be just as efficient as a raw pointer (and in fact, \texttt{std::unique\_ptr} is). When the shared pointer is first created, an additional memory allocation for the reference count must take place.
+% The circular dependency problem is real, but it happens more often in designs where shared ownership is used to conceal the larger problem of unclear resource ownership. However, there are other downsides to shared ownership. The performance of a shared pointer is always going to be lower than that of a raw pointer. On the other hand, a unique pointer can be just as efficient as a raw pointer (and in fact, \ci{std::unique\_ptr} is). When the shared pointer is first created, an additional memory allocation for the reference count must take place.
+循环依赖问题是真实的，但它更多地发生在使用共享所有权来隐藏资源所有权不清晰这一更大问题的设计中。然而，共享所有权还有其他缺点。共享指针的性能总是会低于原始指针。另一方面，唯一指针可以像原始指针一样高效（实际上，\ci{std::unique\_ptr}就是这样）。当首次创建共享指针时，必须为引用计数进行额外的内存分配。
 
-In C++ 11, \texttt{std::make\_shared} can be used to combine the allocations for the object itself and the reference counter, but this implies that the object is created with the intent to share (often, the object Factory returns unique pointers, some of which are later converted to shared pointers). Copying or deleting a shared pointer must also increment or decrement the reference counter. Shared pointers are often attractive in concurrent data structures, where, at least at the low level, the notion of ownership may indeed be fuzzy, with several accesses to the same object happening at the same time. However, designing a shared pointer to be thread-safe in all contexts is not easy and carries additional runtime overhead.
+% In \cpp[11], \cii{std::make_shared} can be used to combine the allocations for the object itself and the reference counter, but this implies that the object is created with the intent to share (often, the object Factory returns unique pointers, some of which are later converted to shared pointers). Copying or deleting a shared pointer must also increment or decrement the reference counter. Shared pointers are often attractive in concurrent data structures, where, at least at the low level, the notion of ownership may indeed be fuzzy, with several accesses to the same object happening at the same time. However, designing a shared pointer to be thread-safe in all contexts is not easy and carries additional runtime overhead.
+在\cpp[11]中，\cii{std::make_shared}可以用来合并对象本身和引用计数器的分配，但这意味着对象是以共享的意图创建的（通常，对象工厂返回唯一指针，其中一些后来转换为共享指针）。复制或删除共享指针还必须增加或减少引用计数器。共享指针在并发数据结构中通常很有吸引力，在这些结构中，至少在低层次上，所有权的概念可能确实是模糊的，对同一对象的多个访问同时发生。然而，设计一个在所有上下文中都线程安全的共享指针并不容易，并且会带来额外的运行时开销。
 
-So far, we have mostly restricted ourselves to pointers as means of owning objects (and their memory and other resources). Non-ownership has been similarly expressed through raw pointers and references or simple non-owning pointers. However, this is not the only way to own resources (and we did mention that the most common form of exclusive ownership is a stack variable). We are now going to see how resource-owning objects can be used directly to express both ownership and non-ownership.
+% So far, we have mostly restricted ourselves to pointers as means of owning objects (and their memory and other resources). Non-ownership has been similarly expressed through raw pointers and references or simple non-owning pointers. However, this is not the only way to own resources (and we did mention that the most common form of exclusive ownership is a stack variable). We are now going to see how resource-owning objects can be used directly to express both ownership and non-ownership.
+到目前为止，我们主要将自己限制在使用指针作为拥有对象（及其内存和其他资源）的手段。非所有权同样通过原始指针和引用或简单的非拥有指针来表达。然而，这不是拥有资源的唯一方式（我们确实提到了独占所有权的最常见形式是栈变量）。我们现在将看到资源拥有对象如何直接用于表达所有权和非所有权。
 
-\section{Owning objects and views}
+% \section{Owning objects and views}
+\section{拥有对象和视图}
 
-C++ has not been limited to owning pointers since its creation: any object can own resources, and we already mentioned that the simplest way to express exclusive ownership is to create a local variable on the stack. Of course, any of such objects can also be owned by a pointer (unique or shared) and when non-owning access is desired, these objects are commonly accessed through raw pointers or references. However, in C++17 and C++20 a different pattern has emerged, and it is worth exploring.
+% C++ has not been limited to owning pointers since its creation: any object can own resources, and we already mentioned that the simplest way to express exclusive ownership is to create a local variable on the stack. Of course, any of such objects can also be owned by a pointer (unique or shared) and when non-owning access is desired, these objects are commonly accessed through raw pointers or references. However, in C++17 and \cpp[20]  a different pattern has emerged, and it is worth exploring.
+C++自创建以来就没有仅限于拥有指针：任何对象都可以拥有资源，我们已经提到表达独占所有权的最简单方式是在栈上创建局部变量。当然，任何这样的对象也可以被指针（唯一或共享）拥有，当需要非拥有访问时，这些对象通常通过原始指针或引用访问。然而，在C++17和\cpp[20] 中出现了一种不同的模式，值得探索。
 
-\subsection{Resource-owning objects}
+% \subsection{Resource-owning objects}
+\subsection{资源拥有对象}
 
-Every C++ programmer is familiar with resource-owning objects; perhaps the most common one is \texttt{std::string} -- an object that owns a character string. Of course, it also has a lot of specialized member functions for operating on strings, but from the point of view of memory ownership, \texttt{std::string} is essentially an owning \texttt{char*} pointer. Similarly, \texttt{std::vector} is an owning object for an array of objects of arbitrary type.
+% Every C++ programmer is familiar with resource-owning objects; perhaps the most common one is \ci{std::string} -- an object that owns a character string. Of course, it also has a lot of specialized member functions for operating on strings, but from the point of view of memory ownership, \ci{std::string} is essentially an owning \ci{char*} pointer. Similarly, \ci{std::vector} is an owning object for an array of objects of arbitrary type.
+每个C++程序员都熟悉资源拥有对象；也许最常见的是\ci{std::string}——一个拥有字符串的对象。当然，它也有很多用于对字符串进行操作的专门成员函数，但从内存所有权的视角来看，\ci{std::string}本质上是一个拥有\ci{char*}指针。类似地，\ci{std::vector}是任意类型对象数组的拥有对象。
 
-The most common way to construct such objects is either as local variables or as data members of a class. In the latter case, the issue of who owns the entire class is managed elsewhere, but, within the class, all data members are owned exclusively by the object itself. Consider this simple example:
+% The most common way to construct such objects is either as local variables or as data members of a class. In the latter case, the issue of who owns the entire class is managed elsewhere, but, within the class, all data members are owned exclusively by the object itself. Consider this simple example:
+构造这类对象的最常见方式是作为局部变量或作为类的数据成员。在后者情况下，谁拥有整个类的问题在其他地方管理，但在类内部，所有数据成员都由对象本身独占拥有。考虑这个简单的例子：
 
 \begin{code}
 class C {
   std::string s_;
 };
- 鈥?
-std::vector<int> v = 鈥?;    // v owns the array of int
+ …
+std::vector<int> v = … ;    // v owns the array of int
 C c;                       // c owns the string s
 \end{code}
 
-So far, we have not said anything new compared to the section on exclusive ownership just a few pages earlier in this chapter. However, we have subtly changed the focus from owning pointers to owning objects. As long as we focus on the ownership aspect, these objects are essentially specialized owning (unique) pointers. There is an important difference, however: most such objects convey additional information, such as the length of the string for \texttt{std::string} or the size of the array for \texttt{std::vector}. Keep this in mind: it is going to come up again when we get to the changes brought by C++17/20.
+% So far, we have not said anything new compared to the section on exclusive ownership just a few pages earlier in this chapter. However, we have subtly changed the focus from owning pointers to owning objects. As long as we focus on the ownership aspect, these objects are essentially specialized owning (unique) pointers. There is an important difference, however: most such objects convey additional information, such as the length of the string for \ci{std::string} or the size of the array for \ci{std::vector}. Keep this in mind: it is going to come up again when we get to the changes brought by C++17/20.
+到目前为止，与本章前几页关于独占所有权的部分相比，我们没有说任何新的东西。然而，我们已经微妙地将焦点从拥有指针转变为拥有对象。只要我们专注于所有权方面，这些对象本质上是专门的拥有（唯一）指针。然而，有一个重要的区别：大多数这样的对象传达额外的信息，如\ci{std::string}的字符串长度或\ci{std::vector}的数组大小。请记住这一点：当我们进入C++17/20带来的变化时，这将再次出现。
 
-While resource-owning objects have been around since the beginning of C++, they themselves have been often owned through pointers. There are, perhaps, two main reasons for this; both have been rendered obsolete by C++ advances. The first reason to own, for example, a string via an owning pointer is the need to transfer ownership. A stack object is destroyed at the end of the scope. A class data member is destroyed when the object is destroyed. In either case, there is no way to transfer the ownership of the object itself, such as \texttt{std::string}, to someone else. However, if we focus on the ownership aspect, then the string object itself is just a (decorated) owning pointer, and the goal is to transfer the ownership of the underlying resource (the character string for \texttt{std::string}) to another owner. When we put it this way, the answer is obvious: since C++11, the string has move semantics, and moving a string is barely more expensive than moving a pointer (remember, the string is an owning pointer that also knows the length, so that has to be moved too).
+% While resource-owning objects have been around since the beginning of C++, they themselves have been often owned through pointers. There are, perhaps, two main reasons for this; both have been rendered obsolete by C++ advances. The first reason to own, for example, a string via an owning pointer is the need to transfer ownership. A stack object is destroyed at the end of the scope. A class data member is destroyed when the object is destroyed. In either case, there is no way to transfer the ownership of the object itself, such as \ci{std::string}, to someone else. However, if we focus on the ownership aspect, then the string object itself is just a (decorated) owning pointer, and the goal is to transfer the ownership of the underlying resource (the character string for \ci{std::string}) to another owner. When we put it this way, the answer is obvious: since C++11, the string has move semantics, and moving a string is barely more expensive than moving a pointer (remember, the string is an owning pointer that also knows the length, so that has to be moved too).
+虽然资源拥有对象从C++开始就存在，但它们本身经常通过指针被拥有。这有两个主要原因；两者都已经被c++的进步渲染为过时的。例如，通过拥有指针拥有字符串的第一个原因是需要转移所有权。栈对象在作用域结束时被销毁。类数据成员在对象被销毁时被销毁。在任一种情况下，都没有办法将对象本身（如\ci{std::string}）的所有权转移给其他人。然而，如果我们专注于所有权方面，那么字符串对象本身只是一个（装饰的）拥有指针，目标是将底层资源（\ci{std::string}的字符串）的所有权转移给另一个所有者。当我们这样表达时，答案很明显：自C++11以来，字符串具有移动语义，移动字符串的成本并不比移动指针高多少（记住，字符串是一个也知道长度的拥有指针，所以这也必须被移动）。
 
-We can say, more generally, that there is no reason to own a cheap-to-move owning object via a pointer if the only reason is ownership transfer. For example, consider this string builder class:
+% We can say, more generally, that there is no reason to own a cheap-to-move owning object via a pointer if the only reason is ownership transfer. For example, consider this string builder class:
+我们可以更一般地说，如果唯一的原因是所有权转移，那么没有理由通过指针拥有一个移动成本低廉的拥有对象。例如，考虑这个字符串构建器类：
 
 \begin{code}
 class Builder {
   std::string* str_;
   public:
-  Builder(鈥? : str_(new std::string){
-    鈥?construct string str_ 鈥?
+  Builder(…) : str_(new std::string){
+    … construct string str_ …
   }
   std::string* get(){
     std::string* tmp = str_;
@@ -314,216 +393,258 @@ class Builder {
 };
 \end{code}
 
-While it gets the job done, a much better way to write the same class is to simply move the string:
+% While it gets the job done, a much better way to write the same class is to simply move the string:
+虽然它能完成任务，但编写同一类的更好方法是简单地移动字符串：
 
 \begin{code}
 // Example 07
 class Builder {
   std::string str_;
   public:
-  Builder(鈥?{ 鈥?construct string str_ 鈥?}
+  Builder(…){ … construct string str_ … }
   std::string get(){ return std::move(str_); }
 };
-std::string my_string = Builder(鈥?.get();
+std::string my_string = Builder(…).get();
 \end{code}
 
-The same is true for factories that construct owning cheap-to-move objects. Instead of returning them via \texttt{std::unique\_ptr}, the factory can return the object itself:
+% The same is true for factories that construct owning cheap-to-move objects. Instead of returning them via \ci{std::unique\_ptr}, the factory can return the object itself:
+对于构造拥有移动成本低廉对象的工厂来说也是如此。工厂可以返回对象本身，而不是通过\cii{std::unique_ptr}返回它们：
 
 \begin{code}
-std::string MakeString(鈥? {
+std::string MakeString(…) {
   std::string str;
-  鈥?construct the string 鈥?
+  … construct the string …
   return str;
 }
-std::string my_string = MakeString(鈥?;
+std::string my_string = MakeString(…);
 \end{code}
 
-The return value may benefit from the return-value optimization (the compiler constructs the return value directly in the memory allocated for the final object, \texttt{my\_string}). But even without this optimization, we have a guarantee that there is no copying of the string here, only moving (if this move is optimized away, the optimization is sometimes called \textbf{move elision}, similar to the better-known \textbf{copy elision}, which optimizes away copy constructors).
+% The return value may benefit from the return-value optimization (the compiler constructs the return value directly in the memory allocated for the final object, \ci{my\_string}). But even without this optimization, we have a guarantee that there is no copying of the string here, only moving (if this move is optimized away, the optimization is sometimes called \textbf{move elision}, similar to the better-known \textbf{copy elision}, which optimizes away copy constructors).
+返回值可能受益于返回值优化（编译器直接在为最终对象\ci{my\_string}分配的内存中构造返回值）。但即使没有这种优化，我们也有保证这里不会复制字符串，只会移动（如果这个移动被优化掉，这种优化有时被称为\textbf{移动省略}，类似于更为人所知的\textbf{复制省略}，后者优化掉复制构造函数）。
 
-The second reason to use owning pointers for resource-owning objects is that the object's existence itself may be conditional:
+% The second reason to use owning pointers for resource-owning objects is that the object's existence itself may be conditional:
+使用拥有指针来处理资源拥有对象的第二个原因是对象的存在本身可能是有条件的：
 
 \begin{code}
 std::unique_ptr<std::string*> str;
-if (need_string) str.reset(new std::string(鈥rgs鈥?);
+if (need_string) str.reset(new std::string(…args…));
 \end{code}
 
-In many cases, an ``\emph{empty}'' object can be used instead, such as a zero-length string. Again, for many owning objects, and certainly for all cheap-to-move STL containers, the cost of constructing such an object is trivial. But there could be a meaningful difference between the empty string and no string at all (that is, an empty string could be a valid result, and an absence of any string signifies something to the rest of the program). In C++17, we have a straightforward way to express this behavior using \texttt{std::optional}:
+% In many cases, an ``\emph{empty}'' object can be used instead, such as a zero-length string. Again, for many owning objects, and certainly for all cheap-to-move STL containers, the cost of constructing such an object is trivial. But there could be a meaningful difference between the empty string and no string at all (that is, an empty string could be a valid result, and an absence of any string signifies something to the rest of the program). In C++17, we have a straightforward way to express this behavior using \ci{std::optional}:
+在许多情况下，可以使用“\emph{空}”对象代替，如零长度字符串。再次强调，对于许多拥有对象，当然也包括所有移动成本低廉的STL容器，构造这样对象的成本是微不足道的。但是空字符串和没有字符串之间可能有有意义的区别（即，空字符串可能是有效结果，而缺少任何字符串对程序的其余部分有特定意义）。在C++17中，我们有一种直接的方式使用\ci{std::optional}来表达这种行为：
 
 \begin{code}
 std::optional<std::string> str;
-if (need_string) str.emplace(鈥rgs鈥?;
+if (need_string) str.emplace(…args…);
 \end{code}
 
-The object of the \texttt{std::optional\textless{}std::string\textgreater{}} type may contain a string or be empty. The non-empty \texttt{std::optional} owns the object it contains (deleting the \texttt{std::optional} will also delete the string). Unlike \texttt{std::unique\_pointer}, there are no heap memory allocations here: the \texttt{std::optional} object contains enough space within it to store a \texttt{std::string} object. \texttt{std::optional} is also movable, just like the string itself, so this pattern can be combined with the previous one. In general, we can say that in modern C++ there is no reason to own lightweight owning objects such as \texttt{std::string} indirectly. However, expressing the non-ownership of such objects has not received as much attention until recently.
+% The object of the \ci{std::optional<std::string>} type may contain a string or be empty. The non-empty \ci{std::optional} owns the object it contains (deleting the \ci{std::optional} will also delete the string). Unlike \ci{std::unique\_pointer}, there are no heap memory allocations here: the \ci{std::optional} object contains enough space within it to store a \ci{std::string} object. \ci{std::optional} is also movable, just like the string itself, so this pattern can be combined with the previous one. In general, we can say that in modern C++ there is no reason to own lightweight owning objects such as \ci{std::string} indirectly. However, expressing the non-ownership of such objects has not received as much attention until recently.
+\ci{std::optional<std::string>}类型的对象可能包含一个字符串或为空。非空的\cii{std::optional}拥有它所包含的对象（删除\cii{std::optional}也会删除字符串）。与\cii{std::unique_pointer}不同，这里没有堆内存分配：\cii{std::optional}对象在其内部包含足够的空间来存储\cii{std::string}对象。\cii{std::optional}也是可移动的，就像字符串本身一样，所以这种模式可以与前一种模式结合。总的来说，我们可以说在现代C++中没有理由间接拥有轻量级拥有对象（如\cii{std::string}）。然而，表达此类对象的非所有权直到最近才得到如此多的关注。
 
-\subsection{Non-owning access to resource-owning objects}
+% \subsection{Non-owning access to resource-owning objects}
+\subsection{对资源拥有对象的非拥有访问}
 
-We have seen how a \texttt{std::string} object can, for most purposes, replace an owning pointer to \texttt{char*} (or to \texttt{std::string}). How do we, then, express non-owning access? Let us say that we need to pass a string to a function that operates on the string but does not take ownership of it (does not destroy it). This is a trivial exercise:
+% We have seen how a \ci{std::string} object can, for most purposes, replace an owning pointer to \ci{char*} (or to \ci{std::string}). How do we, then, express non-owning access? Let us say that we need to pass a string to a function that operates on the string but does not take ownership of it (does not destroy it). This is a trivial exercise:
+我们已经看到\ci{std::string}对象在大多数情况下如何可以替代指向\ci{char*}（或指向\ci{std::string}）的拥有指针。那么，我们如何表达非拥有访问呢？比如说我们需要将字符串传递给一个在字符串上操作但不获取其所有权（不销毁它）的函数。这是一个微不足道的练习：
 
 \begin{code}
 void work_on_string(const std::string& str);
-std::string my_string = 鈥?
+std::string my_string = …;
 work_on_string(my_string);
 \end{code}
 
-This is what we have been doing since C++ was created. But this simplicity hides a profound distinction: remember that, as long as we don't care about all the extra methods and the features they provide, \texttt{std::string} is just an owning pointer to a character string that also knows its length. So, how would we handle the same situation if we used an owning pointer instead of a string? The corresponding pointer is \texttt{std::unique\_ptr\textless{}char{[}{]}\textgreater{}}, so we would write something like this:
+% This is what we have been doing since C++ was created. But this simplicity hides a profound distinction: remember that, as long as we don't care about all the extra methods and the features they provide, \ci{std::string} is just an owning pointer to a character string that also knows its length. So, how would we handle the same situation if we used an owning pointer instead of a string? The corresponding pointer is \ci{std::unique\_ptr<char{[}{]}>}, so we would write something like this:
+这是我们自C++创建以来一直在做的。但这种简单性隐藏了一个深刻的区别：记住，只要我们不关心所有额外的方法和它们提供的功能，\ci{std::string}就只是一个指向也知道其长度的字符串的拥有指针。那么，如果我们使用拥有指针而不是字符串，我们如何处理同样的情况呢？相应的指针是\ci{std::unique\_ptr<char{[}{]}>}，所以我们会写类似这样的东西：
 
 \begin{code}
 void work_on_string(const char* str);
-std::unique_ptr<char[]> my_string(new char[鈥ength鈥);
-鈥?initialize the string 鈥?
+std::unique_ptr<char[]> my_string(new char[…length…]);
+… initialize the string …
 work_on_string(my_string.get());
 \end{code}
 
-Following the earlier guidelines, we passed a non-owning raw pointer to the function. We definitely would not write this declaration:
+% Following the earlier guidelines, we passed a non-owning raw pointer to the function. We definitely would not write this declaration:
+遵循早前的指导原则，我们将非拥有的原始指针传递给函数。我们绝对不会写这样的声明：
 
 \begin{code}
 void work_on_string(const std::unique_ptr<char[]>& str);
 \end{code}
 
-Yet we do this without a second thought when the same character array is owned by a \texttt{std::string} object. Why do we approach these very similar problems so differently? This is the time to remember why a string is not just an owning pointer restricted to character arrays; it contains more information than just the pointer: it also knows the length of the string. There was no good way in C++ to grant non-owning access to such ``\emph{rich}'' owning pointers, short of passing the entire pointer object by reference. By contrast, a unique pointer (or any other owning pointer) contains the same information as a basic pointer, so when ownership is not required, the owning pointer naturally reduces to a raw pointer without any information loss.
+% Yet we do this without a second thought when the same character array is owned by a \ci{std::string} object. Why do we approach these very similar problems so differently? This is the time to remember why a string is not just an owning pointer restricted to character arrays; it contains more information than just the pointer: it also knows the length of the string. There was no good way in C++ to grant non-owning access to such ``\emph{rich}'' owning pointers, short of passing the entire pointer object by reference. By contrast, a unique pointer (or any other owning pointer) contains the same information as a basic pointer, so when ownership is not required, the owning pointer naturally reduces to a raw pointer without any information loss.
+然而，当同一个字符数组由\ci{std::string}对象拥有时，我们不假思索地这样做。为什么我们对这些非常相似的问题采取如此不同的方法？这是记住为什么字符串不仅仅是限制于字符数组的拥有指针的时候；它包含比指针更多的信息：它也知道字符串的长度。在C++中没有好的方式来授予对这样的“\emph{丰富}”拥有指针的非拥有访问，除了通过引用传递整个指针对象。相比之下，唯一指针（或任何其他拥有指针）包含与基本指针相同的信息，所以当不需要所有权时，拥有指针自然地简化为原始指针而不损失任何信息。
 
-The difference is about more than just symmetry. Consider that passing a string by a \texttt{const} reference prevents the function \texttt{work\_on\_string} from changing the content of the string. On the other hand, a non-\texttt{const} reference allows the function to clear the string (release the memory it owns), which is an ownership aspect. We are forced to muddle the clarity of intent by mixing together two unrelated types of access we can grant to a function: the ability to change the content of the data and the ownership of the data.
+% The difference is about more than just symmetry. Consider that passing a string by a \ci{const} reference prevents the function \ci{work\_on\_string} from changing the content of the string. On the other hand, a non-\ci{const} reference allows the function to clear the string (release the memory it owns), which is an ownership aspect. We are forced to muddle the clarity of intent by mixing together two unrelated types of access we can grant to a function: the ability to change the content of the data and the ownership of the data.
+差异不仅仅是对称性。考虑通过\cii{const}引用传递字符串会阻止函数\ci{work\_on\_string}更改字符串的内容。另一方面，非\cii{const}引用允许函数清空字符串（释放它拥有的内存），这是一个所有权方面。我们被迫通过将我们可以授予函数的两种不相关的访问类型混合在一起来混淆意图的清晰性：更改数据内容的能力和数据的所有权。
 
-C++17 addressed this problem in a very limited context: specifically for strings, it introduced a new type \texttt{std::string\_view}. A string view is a (\texttt{const}) non-owning pointer to a string that also stores the length of the string. In other words, it is a perfect non-owning equivalent to \texttt{std::string}: a string view to a string is exactly what a \texttt{const} raw pointer is to a unique pointer. Now, to grant non-owning access to a \texttt{std::string} object, we write:
+% C++17 addressed this problem in a very limited context: specifically for strings, it introduced a new type \ci{std::string\_view}. A string view is a (\ci{const}) non-owning pointer to a string that also stores the length of the string. In other words, it is a perfect non-owning equivalent to \ci{std::string}: a string view to a string is exactly what a \ci{const} raw pointer is to a unique pointer. Now, to grant non-owning access to a \ci{std::string} object, we write:
+\cpp[17]在非常有限的\emph{上下文}（\emph{context}）中解决了这个问题：专门针对字符串，引入了一个新类型 \cii{std::string_view}。字符串视图是一个（\ci{const}）指向字符串的非拥有指针，它也存储字符串的长度。换句话说，它是 \cii{std::string} 的完美非拥有等价物：字符串的字符串视图正好是\cii{const}原始指针对于唯一指针的作用。现在，要授予对\cii{std::string}对象的非拥有访问，我们写：
 
 \begin{code}
 // Example 09
 void work_on_string(std::string_view str);
-std::string my_string = 鈥?
+std::string my_string = …;
 work_on_string(my_string);
 \end{code}
 
-In contrast, a function that takes ownership of a \texttt{std::string} object must still take it by reference. Specifically, use an rvalue reference to transfer the ownership:
+% In contrast, a function that takes ownership of a \ci{std::string} object must still take it by reference. Specifically, use an rvalue reference to transfer the ownership:
+相比之下，获取\ci{std::string}对象所有权的函数仍然必须通过引用接受它。具体来说，使用rvalue引用来转移所有权：
 
 \begin{code}
 // Example 09
 void consume_string(std::string&& str);
-std::string my_string = 鈥?
+std::string my_string = …;
 consume_string(std::move(my_string));
 // Do not use my_string anymore!
 \end{code}
 
-Use a non-\texttt{const} lvalue reference only to allow the function to change the string; in C++17, there is no good \emph{rich pointer} equivalent to a non-\texttt{const} raw pointer. There is probably no need to use \texttt{const\ std::string\&} except when the existing interfaces require it since \texttt{std::string\_view} offers equivalent functionality.
+% Use a non-\ci{const} lvalue reference only to allow the function to change the string; in C++17, there is no good \emph{rich pointer} equivalent to a non-\ci{const} raw pointer. There is probably no need to use \ci{const\ std::string\&} except when the existing interfaces require it since \ci{std::string\_view} offers equivalent functionality.
+仅在允许函数更改字符串时使用非\ci{const} lvalue引用；在C++17中，没有好的\emph{丰富指针}等价于非\ci{const}原始指针。除了现有接口需要时，可能没有必要使用\ci{const\ std::string\&}，因为\ci{std::string\_view}提供了等价功能。
 
-There are other benefits and advantages of using \texttt{std::string\_view} (in particular, it greatly simplifies writing common code for processing C and C++ strings), but in this chapter, we focus on the ownership aspect. Also, remember that the string view is limited to character strings. We could have the exact same discussion about another owning class, for example, \texttt{std::vector\textless{}int\textgreater{}}.
+% There are other benefits and advantages of using \ci{std::string\_view} (in particular, it greatly simplifies writing common code for processing C and C++ strings), but in this chapter, we focus on the ownership aspect. Also, remember that the string view is limited to character strings. We could have the exact same discussion about another owning class, for example, \ci{std::vector<int>}.
+使用\ci{std::string\_view}还有其他益处和优点（特别是，它大大简化了编写处理C和C++字符串的通用代码），但在本章中，我们专注于所有权方面。同时，记住字符串视图仅限于字符串。我们可以对另一个拥有类进行完全相同的讨论，例如\ci{std::vector<int>}。
 
-We now see a new pattern emerge: for a ``\emph{rich}'' owning pointer that, in addition to owning memory, contains some information about the data it owns, the corresponding non-owning object (the equivalent of a raw pointer) should be a view object that contains the same information but does not own the resource. We find this view object in C++20 as \texttt{std::span}. Until then, the only good way to grant non-owning access to a vector of integers was to pass it by reference:
+% We now see a new pattern emerge: for a ``\emph{rich}'' owning pointer that, in addition to owning memory, contains some information about the data it owns, the corresponding non-owning object (the equivalent of a raw pointer) should be a view object that contains the same information but does not own the resource. We find this view object in \cpp[20]  as \ci{std::span}. Until then, the only good way to grant non-owning access to a vector of integers was to pass it by reference:
+我们现在看到一个新模式的出现：对于一个“\emph{丰富}”的拥有指针，它除了拥有内存外，还包含关于它拥有的数据的一些信息，相应的非拥有对象（原始指针的等价物）应该是一个视图对象，它包含相同的信息但不拥有资源。我们在\cpp[20] 中找到这个视图对象作为\ci{std::span}。在那之前，授予对整数vector的非拥有访问的唯一好方法是通过引用传递它：
 
 \begin{code}
 void work_on_data(std::vector<int>& data);
-std::vector<int> my_data = 鈥?
+std::vector<int> my_data = …;
 work_on_data(my_data);
 \end{code}
 
-In C++20, we can use the span to clearly differentiate the non-owning view (raw pointer equivalent) from the owning object (unique pointer equivalent):
+% In \cpp[20] , we can use the span to clearly differentiate the non-owning view (raw pointer equivalent) from the owning object (unique pointer equivalent):
+在\cpp[20] 中，我们可以使用span清晰地区分非拥有视图（原始指针等价物）和拥有对象（唯一指针等价物）：
 
 \begin{code}
 // Example 10
 void ModifyData(std::span<int> data);
-std::vector<int> my_data = 鈥?
+std::vector<int> my_data = …;
 ModifyData(my_data); // Can change my_data
 \end{code}
 
-Thus, \texttt{std::span\textless{}int\textgreater{}} is a \emph{rich pointer} equivalent to \texttt{int*}---it contains a non-\texttt{const} pointer and the size is cheap to copy and does not own the resource it points to. Unlike \texttt{std::string\_view}, we can modify the object accessed through a span. But if we want the equivalent to a \texttt{const} pointer, we can use \texttt{std::span\textless{}const\ int\textgreater{}}:
+% Thus, \ci{std::span<int>} is a \emph{rich pointer} equivalent to \ci{int*}---it contains a non-\ci{const} pointer and the size is cheap to copy and does not own the resource it points to. Unlike \ci{std::string\_view}, we can modify the object accessed through a span. But if we want the equivalent to a \ci{const} pointer, we can use \ci{std::span<const\ int>}:
+因此，\ci{std::span<int>}是一个\emph{丰富指针}，等价于\ci{int*}——它包含一个非\ci{const}指针和大小，复制成本低廉，不拥有它所指向的资源。与\ci{std::string\_view}不同，我们可以修改通过span访问的对象。但如果我们想要\ci{const}指针的等价物，我们可以使用\ci{std::span<const\ int>}：
 
 \begin{code}
 // Example 10
 void UseData(std::span<const int> data);
-std::vector<int> my_data = 鈥?
+std::vector<int> my_data = …;
 UseData(my_data); // Cannot change my_data
 \end{code}
 
-Since \texttt{std::string} contains a contiguous array of characters, it too can be used with a span, in this case, \texttt{std::span\textless{}char\textgreater{}} or \texttt{std::span\textless{}const\ char\textgreater{}}. The latter is essentially the same as \texttt{std::string\_view}, including the option to construct them from string literals. The former is the equivalent of a non-\texttt{const} pointer to \texttt{char}.
+% Since \ci{std::string} contains a contiguous array of characters, it too can be used with a span, in this case, \ci{std::span<char>} or \ci{std::span<const\ char>}. The latter is essentially the same as \ci{std::string\_view}, including the option to construct them from string literals. The former is the equivalent of a non-\ci{const} pointer to \ci{char}.
+由于\ci{std::string}包含连续的字符数组，它也可以与span一起使用，在这种情况下是\ci{std::span<char>} 或 \ci{std::span<const\ char>}。后者本质上与\ci{std::string\_view}相同，包括从字符串字面量构造它们的选项。前者是指向\ci{char}的非\ci{const}指针的等价物。
 
-The span pairs well with a vector or a string because they offer a non-owning view of an array. But it does not work for other STL containers since they all allocate memory in multiple non-contiguous allocations. For that, we need to use the C++20 ranges library. For example, the generalization of the preceding non-owning vector access to an arbitrary container can be written like this:
+% The span pairs well with a vector or a string because they offer a non-owning view of an array. But it does not work for other STL containers since they all allocate memory in multiple non-contiguous allocations. For that, we need to use the \cpp[20]  ranges library. For example, the generalization of the preceding non-owning vector access to an arbitrary container can be written like this:
+span与vector或string配合得很好，因为它们提供了数组的非拥有视图。但它不适用于其他STL容器，因为它们都在多个非连续分配中分配内存。为此，我们需要使用\cpp[20]  \ci{ranges} 库。例如，将前面的非拥有vector访问泛化到任意容器可以这样写：
 
 \begin{code}
 // Example 11
-void ModifyData(std::ranges::view auto data) { 鈥?}
-std::list<int> my_data = 鈥?
+void ModifyData(std::ranges::view auto data) { … }
+std::list<int> my_data = …;
 ModifyData(std::views::all(my_data));
 \end{code}
 
-If you have never seen a C++20 template, this takes some getting used to. The first line is a template function: \texttt{auto} parameters make ``\emph{ordinary}'' functions into templates even without the \texttt{template} keyword. The incantation \texttt{std::ranges::view} before \texttt{auto} restricts the template parameters to those that satisfy the view concept. A view is a container-like object that has \texttt{begin()} and \texttt{end()} member functions and, in addition, must be cheap to move and either cheap to copy or non-copyable (this is, of course, a loose paraphrasing of the exact requirements enumerated by the standard). We could have written the same function with the \texttt{template} and \texttt{requires} keywords, but this compact syntax is idiomatic in C++20.
+% If you have never seen a \cpp[20]  template, this takes some getting used to. The first line is a template function: \ci{auto} parameters make ``\emph{ordinary}'' functions into templates even without the \ci{template} keyword. The incantation \ci{std::ranges::view} before \ci{auto} restricts the template parameters to those that satisfy the view concept. A view is a container-like object that has \ci{begin()} and \ci{end()} member functions and, in addition, must be cheap to move and either cheap to copy or non-copyable (this is, of course, a loose paraphrasing of the exact requirements enumerated by the standard). We could have written the same function with the \ci{template} and \ci{requires} keywords, but this compact syntax is idiomatic in \cpp[20] .
+如果您从未见过\cpp[20] 模板，这需要一些适应。第一行是一个模板函数：\ci{auto}参数使“\emph{普通}”函数成为模板，甚至不需要\ci{template}关键字。\ci{auto}之前的咒语\ci{std::ranges::view}将模板参数限制为满足view概念的参数。view是类似容器的对象，它有\ci{begin()}和\ci{end()}成员函数，另外，必须移动成本低廉，复制成本低廉或不可复制（当然，这是对标准枚举的确切要求的宽松释义）。我们可以用\ci{template}和\ci{requires}关键字编写相同的函数，但这种紧凑的语法在\cpp[20] 中是习惯的。
 
-Note that, in this concept-based coding style, the restrictions on the function arguments are specified by the concept requirements. We could have written the same template function to require ranges instead of views:
+% Note that, in this concept-based coding style, the restrictions on the function arguments are specified by the concept requirements. We could have written the same template function to require ranges instead of views:
+请注意，在这种基于概念的编码风格中，函数参数的限制由概念要求指定。我们可以编写相同的模板函数来要求range而不是view：
 
 \begin{code}
-void ModifyData(std::ranges::range auto data) { 鈥?}
-std::list<int> my_data = 鈥?
+void ModifyData(std::ranges::range auto data) { … }
+std::list<int> my_data = …;
 ModifyData(my_data);
 \end{code}
 
-Ranges are essentially arbitrary objects with \texttt{begin()} and \texttt{end()}, so \texttt{std::list} is a range (but not a view, it can be copied but not cheaply). Note that, as written, the function takes the argument by value, so a copy is made. Unless that was the intent (and in this case, it is not), the correct way to write this function is like this:
+% Ranges are essentially arbitrary objects with \ci{begin()} and \ci{end()}, so \ci{std::list} is a range (but not a view, it can be copied but not cheaply). Note that, as written, the function takes the argument by value, so a copy is made. Unless that was the intent (and in this case, it is not), the correct way to write this function is like this:
+Range本质上是带有\ci{begin()}和\ci{end()}的任意对象，所以\ci{std::list}是一个range（但不是一个view，它可以被复制但不是低成本的）。请注意，按写的方式，函数通过值接受参数，所以会进行复制。除非这是意图（在这种情况下不是），否则编写这个函数的正确方法是这样的：
 
 \begin{code}
-void ModifyData(std::ranges::range auto&& data) { 鈥?}
+void ModifyData(std::ranges::range auto&& data) { … }
 \end{code}
 
-A \texttt{const} reference would also work if we wanted to express non-modifying access. But the important point to note is that we did not have to do the same for views: by restricting the \texttt{work\_on\_data} function to accept only views, we have limited it to cheap-to-copy types similar to \texttt{std::string\_view} (or a raw pointer, for that matter). Indeed, passing a range by reference is exactly like passing a string or a vector itself: this gives the callee access to the ownership. If we want to write a function that explicitly does not take ownership of a range, the view is the right way to express this.
+% A \ci{const} reference would also work if we wanted to express non-modifying access. But the important point to note is that we did not have to do the same for views: by restricting the \ci{work\_on\_data} function to accept only views, we have limited it to cheap-to-copy types similar to \ci{std::string\_view} (or a raw pointer, for that matter). Indeed, passing a range by reference is exactly like passing a string or a vector itself: this gives the callee access to the ownership. If we want to write a function that explicitly does not take ownership of a range, the view is the right way to express this.
+如果我们想表达非修改访问，\ci{const}引用也可以工作。但需要注意的重要一点是，我们不必对view做同样的事情：通过限制\ci{work\_on\_data}函数只接受view，我们将它限制为类似于\ci{std::string\_view}（或原始指针）的复制成本低廉的类型。实际上，通过引用传递range完全就像传递字符串或vector本身：这给了被调用者访问所有权的机会。如果我们想编写一个明确不获取range所有权的函数，view是表达这一点的正确方式。
 
-It is still too early to talk about patterns for C++20 ranges: they have not been around long enough to establish commonly recognized and accepted use practices (a necessary requirement for a pattern) and the library is still incomplete. C++23 is expected to contain several significant enhancements (in particular, there is no good equivalent to \texttt{std::span\textless{}const\ char\textgreater{}} in C++20 ranges -- it is going to be added in C++23).
+% It is still too early to talk about patterns for \cpp[20]  ranges: they have not been around long enough to establish commonly recognized and accepted use practices (a necessary requirement for a pattern) and the library is still incomplete. C++23 is expected to contain several significant enhancements (in particular, there is no good equivalent to \ci{std::span<const\ char>} in \cpp[20]  ranges -- it is going to be added in C++23).
+谈论\cpp[20]  ranges的模式还为时过早：它们存在的时间还不够长，无法建立公认和接受的使用实践（这是模式的必要要求），并且库仍然不完整。预期C++23将包含几个重要的增强（特别是，在\cpp[20]  ranges中没有好的\ci{std::span<const\ char>}等价物——它将在C++23中添加）。
 
-However, we can confidently talk about the more general pattern becoming established in C++: resource ownership, including memory, should be handled by owning objects, while non-owning access should be granted through views. The owning objects can be smart pointers or more complex and specialized container objects. These containers, in addition to managing the memory in more complex ways, embed more information about the data they contain. In general, for each container, there should be a corresponding view that grants non-owning access while preserving all the additional information. For smart pointers, this view is a raw pointer or a reference. For \texttt{std::string}, this view is \texttt{std::string\_view}. For \texttt{std::vector}, arrays, and any other containers that own contiguous memory, you will want \texttt{std::span}. For arbitrary containers, the corresponding views may be found in the C++20 ranges library; for a custom container, you may have to write your own view objects as well (just make sure they satisfy the relevant view concepts).
+% However, we can confidently talk about the more general pattern becoming established in C++: resource ownership, including memory, should be handled by owning objects, while non-owning access should be granted through views. The owning objects can be smart pointers or more complex and specialized container objects. These containers, in addition to managing the memory in more complex ways, embed more information about the data they contain. In general, for each container, there should be a corresponding view that grants non-owning access while preserving all the additional information. For smart pointers, this view is a raw pointer or a reference. For \ci{std::string}, this view is \ci{std::string\_view}. For \ci{std::vector}, arrays, and any other containers that own contiguous memory, you will want \ci{std::span}. For arbitrary containers, the corresponding views may be found in the \cpp[20]  ranges library; for a custom container, you may have to write your own view objects as well (just make sure they satisfy the relevant view concepts).
+然而，我们可以自信地谈论在C++中正在建立的更一般的模式：资源所有权（包括内存）应该由拥有对象处理，而非拥有访问应该通过视图授予。拥有对象可以是智能指针或更复杂和专门的容器对象。这些容器除了以更复杂的方式管理内存外，还嵌入了关于它们包含的数据的更多信息。一般来说，对于每个容器，都应该有一个相应的视图，在保留所有附加信息的同时授予非拥有访问。对于智能指针，这个视图是原始指针或引用。对于\ci{std::string}，这个视图是\ci{std::string\_view}。对于\ci{std::vector}、数组和任何其他拥有连续内存的容器，您将需要\ci{std::span}。对于任意容器，相应的视图可以在\cpp[20]  ranges库中找到；对于自定义容器，您可能也必须编写自己的视图对象（只要确保它们满足相关的视图概念）。
 
-\section{Summary}
+% \section{Summary}
+\section{总结}
 
-In C++, memory ownership is really just shorthand for object ownership, which, in turn, is the way to manage arbitrary resources, their ownership, and access. We have reviewed the contemporary idioms that the C++ community has developed to express different types of memory ownership. C++ allows the programmer to express exclusive or shared memory ownership. Just as important is expressing \emph{non-ownership} in programs that are agnostic about the ownership of resources. We have also learned about the practices and attributes of resource ownership in a well-designed program.
+% In C++, memory ownership is really just shorthand for object ownership, which, in turn, is the way to manage arbitrary resources, their ownership, and access. We have reviewed the contemporary idioms that the C++ community has developed to express different types of memory ownership. C++ allows the programmer to express exclusive or shared memory ownership. Just as important is expressing \emph{non-ownership} in programs that are agnostic about the ownership of resources. We have also learned about the practices and attributes of resource ownership in a well-designed program.
+在C++中，内存所有权实际上只是对象所有权的简写，而后者反过来是管理任意资源、它们的所有权和访问的方式。我们已经审查了C++社区为表达不同类型的内存所有权而开发的当代习语。C++允许程序员表达独占或共享内存所有权。同样重要的是在不知道资源所有权的程序中表达\emph{非所有权}。我们还学习了在设计良好的程序中资源所有权的实践和属性。
 
-We now have the idiomatic language to clearly express which entity in the program owns each object or resource, and when non-owning access is granted. The next chapter covers the idiom for the simplest operation on resources: the exchange, or swap.
+% We now have the idiomatic language to clearly express which entity in the program owns each object or resource, and when non-owning access is granted. The next chapter covers the idiom for the simplest operation on resources: the exchange, or swap.
+我们现在有了习语语言来清晰地表达程序中的哪个实体拥有每个对象或资源，以及何时授予非拥有访问。下一章涵盖了资源上最简单操作的习语：交换或交换。
 
-\section{Questions}
+% \section{Questions}
+\section{问题}
 
+% \begin{enumerate}
+% \item
+%   Why is it important to clearly express memory ownership in a program?
+% \item
+%   What are the common problems that arise from unclear memory ownership?
+% \item
+%   What types of memory ownership can be expressed in C++?
+% \item
+%   How do you write non-memory-owning functions and classes?
+% \item
+%   Why should exclusive memory ownership be preferred to a shared one?
+% \item
+%   How do you express exclusive memory ownership in C++?
+% \item
+%   How do you express shared memory ownership in C++?
+% \item
+%   What are the potential downsides of shared memory ownership?
+% \item
+%   What are views? How is a string view better than passing a string by reference?
+% \end{enumerate}
 \begin{enumerate}
 \item
-  Why is it important to clearly express memory ownership in a program?
+  % Why is it important to clearly express memory ownership in a program?
+  为什么在程序中清晰地表达内存所有权很重要？
 \item
-  What are the common problems that arise from unclear memory ownership?
+  % What are the common problems that arise from unclear memory ownership?
+  从不清晰的内存所有权中产生的常见问题是什么？
 \item
-  What types of memory ownership can be expressed in C++?
+  % What types of memory ownership can be expressed in C++?
+  在C++中可以表达哪些类型的内存所有权？
 \item
-  How do you write non-memory-owning functions and classes?
+  % How do you write non-memory-owning functions and classes?
+  如何编写非内存拥有函数和类？
 \item
-  Why should exclusive memory ownership be preferred to a shared one?
+  % Why should exclusive memory ownership be preferred to a shared one?
+  为什么独占内存所有权应该优于共享所有权？
 \item
-  How do you express exclusive memory ownership in C++?
+  % How do you express exclusive memory ownership in C++?
+  在C++中如何表达独占内存所有权？
 \item
-  How do you express shared memory ownership in C++?
+  % How do you express shared memory ownership in C++?
+  在C++中如何表达共享内存所有权？
 \item
-  What are the potential downsides of shared memory ownership?
+  % What are the potential downsides of shared memory ownership?
+  共享内存所有权的潜在缺点是什么？
 \item
-  What are views? How is a string view better than passing a string by reference?
+  % What are views? How is a string view better than passing a string by reference?
+  什么是视图？字符串视图如何比通过引用传递字符串更好？
 \end{enumerate}
 
-\section{Further reading}
+% \section{Further reading}
+\section{进一步阅读}
 
 \begin{itemize}
 \item
-  \emph{C++20 STL Cookbook} by \emph{Bill} \emph{Weinman}: https://www.packtpub.com/product/c20-stl-cookbook/9781803248714
+  \emph{\cpp[20]  STL Cookbook} by \emph{Bill Weinman}: \url{https://www.packtpub.com/product/c20-stl-cookbook/9781803248714}
 \item
-  \emph{Template Metaprogramming with C++} by \emph{Marius} \emph{Bancila}: https://www.packtpub.com/product/template-metaprogramming-with-c/9781803243450
+  \emph{Template Metaprogramming with C++} by \emph{Marius Bancila}: \url{https://www.packtpub.com/product/template-metaprogramming-with-c/9781803243450}
 \item
-  \emph{C++ Data Structures and Algorithms} by \emph{Wisnu} \emph{Anggoro}: https://www.packtpub.com/application-development/c-data-structures-and-algorithms
+  \emph{C++ Data Structures and Algorithms} by \emph{Wisnu Anggoro}: \url{https://www.packtpub.com/application-development/c-data-structures-and-algorithms}
 \item
-  \emph{Expert C++ Programming} by \emph{Jeganathan Swaminathan, Maya Posch}, and \emph{Jacek} \emph{Galowicz}: https://www.packtpub.com/application-development/expert-c-programming
+  \emph{Expert C++ Programming} by \emph{Jeganathan Swaminathan, Maya Posch}, and \emph{Jacek Galowicz}: \url{https://www.packtpub.com/application-development/expert-c-programming}
 \end{itemize}
-
-
-\part{Common C++ Idioms}
-
-This part describes some of the more common C++ idioms: established, universally recognized ways to express a specific idea or implement a frequently needed task. The boundary between ``patterns'' and ``idioms'' is fuzzy at best. In this book, we consider more complete design solutions to be patterns, while simpler techniques are idioms. In other words, choosing a pattern may influence the design of your entire application or its major component, while using an idiom is more of an implementation decision that has been learned from someone else's mistakes.
-
-This part has the following chapters:
-
-\begin{itemize}
-\item
-  \emph{Chapter 4, Swap - From Simple to Subtle}
-\item
-  \emph{Chapter 5, A Comprehensive Look at RAII}
-\item
-  \emph{Chapter 6, Understanding Type Erasure}
-\item
-  \emph{Chapter 7, SFINAE, Concepts, and Overload Resolution Management}
-\end{itemize}
-
